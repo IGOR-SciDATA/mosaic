@@ -1,8 +1,9 @@
 from collections.abc import Iterable
 
+from app.context.manager import build_context
 from app.models.conversation_repository import get_conversation
 from app.models.message import Message
-from app.models.message_repository import create_message, list_messages
+from app.models.message_repository import create_message
 from app.models.repository import get_model
 from app.providers.ollama import OllamaProvider
 
@@ -11,14 +12,6 @@ def _get_provider(provider_name: str):
     if provider_name == "ollama":
         return OllamaProvider()
     raise ValueError(f"Unsupported model provider: {provider_name}")
-
-
-def _conversation_context(conversation_id: int) -> list[dict[str, str]]:
-    return [
-        {"role": message.role, "content": message.content}
-        for message in list_messages(conversation_id)
-        if message.role in {"user", "assistant", "system"}
-    ]
 
 
 def chat(conversation_id: int, content: str) -> Message:
@@ -30,8 +23,8 @@ def chat(conversation_id: int, content: str) -> Message:
     if model is None:
         raise ValueError("Model not found")
 
-    user_message = create_message(conversation_id, "user", content)
-    messages = _conversation_context(conversation_id)
+    create_message(conversation_id, "user", content)
+    messages = build_context(conversation_id)
 
     provider = _get_provider(model.provider)
     response = provider.generate(
@@ -52,8 +45,8 @@ def stream_chat(conversation_id: int, content: str) -> Iterable[str]:
     if model is None:
         raise ValueError("Model not found")
 
-    user_message = create_message(conversation_id, "user", content)
-    messages = _conversation_context(conversation_id)
+    create_message(conversation_id, "user", content)
+    messages = build_context(conversation_id)
     provider = _get_provider(model.provider)
 
     chunks: list[str] = []
