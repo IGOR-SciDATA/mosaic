@@ -3,6 +3,7 @@ import sqlite3
 import pytest
 
 from app.db.database import get_connection, init_db
+from app.models.project_repository import create_project
 from app.models.task_repository import (
     create_task,
     delete_task,
@@ -103,7 +104,8 @@ def test_task_rejects_invalid_lifecycle_values() -> None:
 
 
 def test_task_update_and_delete() -> None:
-    task = create_task(type="document", mode="create", project_id=1)
+    project = create_project("Mosaic", "/tmp/mosaic")
+    task = create_task(type="document", mode="create", project_id=project.id)
 
     updated = update_task(
         task.id,
