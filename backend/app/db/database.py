@@ -134,4 +134,38 @@ def init_db() -> None:
             ON tasks(status)
         """)
 
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                target TEXT NULL,
+                payload TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (
+                    status IN (
+                        'pending',
+                        'approved',
+                        'executing',
+                        'completed',
+                        'rejected',
+                        'failed',
+                        'cancelled'
+                    )
+                ),
+                result TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_actions_task_id
+            ON actions(task_id)
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_actions_status
+            ON actions(status)
+        """)
+
         connection.commit()
