@@ -13,11 +13,8 @@ def get_connection() -> sqlite3.Connection:
 
 def init_db() -> None:
     with get_connection() as connection:
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS _mosaic_meta (key TEXT PRIMARY KEY, value TEXT)"
-        )
-        connection.execute(
-            """
+        connection.execute("CREATE TABLE IF NOT EXISTS _mosaic_meta (key TEXT PRIMARY KEY, value TEXT)")
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS models (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -26,33 +23,20 @@ def init_db() -> None:
                 configuration TEXT NOT NULL DEFAULT '{}',
                 enabled INTEGER NOT NULL DEFAULT 1
             )
-            """
-        )
+        """)
 
-        columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(models)").fetchall()
-        }
-
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(models)").fetchall()}
         if "configuration" not in columns:
-            connection.execute(
-                "ALTER TABLE models ADD COLUMN configuration TEXT NOT NULL DEFAULT '{}'"
-            )
-
+            connection.execute("ALTER TABLE models ADD COLUMN configuration TEXT NOT NULL DEFAULT '{}'")
         if "enabled" not in columns:
-            connection.execute(
-                "ALTER TABLE models ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1"
-            )
+            connection.execute("ALTER TABLE models ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
 
-        connection.execute(
-            """
+        connection.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS uq_models_provider_model_name
             ON models (provider, model_name)
-            """
-        )
+        """)
 
-        connection.execute(
-            """
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS projects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -63,11 +47,9 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
-            """
-        )
+        """)
 
-        connection.execute(
-            """
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
@@ -76,16 +58,21 @@ def init_db() -> None:
                 project_id INTEGER NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-
-                FOREIGN KEY (model_id)
-                    REFERENCES models(id)
-                    ON DELETE RESTRICT,
-
-                FOREIGN KEY (project_id)
-                    REFERENCES projects(id)
-                    ON DELETE SET NULL
+                FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE RESTRICT,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
             )
-            """
-        )
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}',
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+            )
+        """)
 
         connection.commit()
