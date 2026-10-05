@@ -21,8 +21,32 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 provider TEXT NOT NULL,
-                model_name TEXT NOT NULL
+                model_name TEXT NOT NULL,
+                configuration TEXT NOT NULL DEFAULT '{}',
+                enabled INTEGER NOT NULL DEFAULT 1
             )
+            """
+        )
+
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(models)").fetchall()
+        }
+
+        if "configuration" not in columns:
+            connection.execute(
+                "ALTER TABLE models ADD COLUMN configuration TEXT NOT NULL DEFAULT '{}'"
+            )
+
+        if "enabled" not in columns:
+            connection.execute(
+                "ALTER TABLE models ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1"
+            )
+
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_models_provider_model_name
+            ON models (provider, model_name)
             """
         )
         connection.commit()
