@@ -1,7 +1,8 @@
 import pytest
 
 from app.context.manager import build_context
-from app.db.database import init_db
+from app.db.database import get_connection, init_db
+from app.memory.manager import remember
 from app.models.conversation_repository import create_conversation
 from app.models.message_repository import create_message
 from app.models.repository import create_model
@@ -13,19 +14,30 @@ def test_database(monkeypatch, tmp_path):
     init_db()
 
 
-def test_context_builds_deterministic_conversation_history() -> None:
-    model = create_model("Qwen 3B", "ollama", "qwen3:3b")
-    conversation = create_conversation("Context test", model.id)
+def test_context_includes_project_memory_before_history() -> None:
+    with get_connection() as connection:
+        connection.execute(
+            "INSERT INTO projects (name, workspace, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            ("Mosaic", "/tmp/mosaic", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+        )
+        connection.commit()
 
-    create_message(conversation.id, "system", "Voce e o Mosaic.")
-    create_message(conversation.id, "user", "Primeira")
-    create_message(conversation.id, "assistant", "Resposta")
-    create_message(conversation.id, "tool", "resultado interno")
-    create_message(conversation.id, "user", "Segunda")
+    model = create_model("Qwen 3B", "ollama", "qwen3:3b")
+    conversation = create_conversation("Context test", model.id, project_id=1)
+
+    remember(
+        type="project_state",
+        key="status",
+        value="Memory implementation started",
+        source="conversation",
+        project_id=1,
+    )
+    create_message(conversation.id, "user", "Onde paramos?")
 
     assert build_context(conversation.id) == [
-        {"role": "system", "content": "Voce e o Mosaic."},
-        {"role": "user", "content": "Primeira"},
-        {"role": "assistant", "content": "Resposta"},
-        {"role": "user", "content": "Segunda"},
+        {
+            "role": "system",
+            "content": "Mosaic memory:\n- [project_state] status: Memory implementation started",
+        },
+        {"role": "user", "content": "Onde paramos?"},
     ]
