@@ -14,11 +14,17 @@ def test_database(monkeypatch, tmp_path):
     init_db()
 
 
-def test_context_includes_project_memory_before_history() -> None:
+def test_context_includes_project_state_memory_before_history() -> None:
     with get_connection() as connection:
         connection.execute(
-            "INSERT INTO projects (name, workspace, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            ("Mosaic", "/tmp/mosaic", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+            "INSERT INTO projects (name, workspace, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (
+                "Mosaic",
+                "/tmp/mosaic",
+                '{"phase":"project"}',
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+            ),
         )
         connection.commit()
 
@@ -34,10 +40,14 @@ def test_context_includes_project_memory_before_history() -> None:
     )
     create_message(conversation.id, "user", "Onde paramos?")
 
-    assert build_context(conversation.id) == [
-        {
-            "role": "system",
-            "content": "Mosaic memory:\n- [project_state] status: Memory implementation started",
-        },
-        {"role": "user", "content": "Onde paramos?"},
-    ]
+    context = build_context(conversation.id)
+
+    assert context[0] == {
+        "role": "system",
+        "content": "Mosaic project state:\\n{'phase': 'project'}",
+    }
+    assert context[1] == {
+        "role": "system",
+        "content": "Mosaic memory:\n- [project_state] status: Memory implementation started",
+    }
+    assert context[2] == {"role": "user", "content": "Onde paramos?"}
