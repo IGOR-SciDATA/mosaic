@@ -11,6 +11,16 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
 
     context: list[dict[str, str]] = []
 
+    if conversation.project_id is not None:
+        from app.models.project_repository import get_project
+
+        project = get_project(conversation.project_id)
+        if project is not None and project.state:
+            context.append({
+                "role": "system",
+                "content": "Mosaic project state:\\n" + str(project.state),
+            })
+
     memories = get_project_memories(conversation.project_id)
     if memories:
         memory_lines = [
