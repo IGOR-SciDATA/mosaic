@@ -50,6 +50,21 @@ def init_db() -> None:
         """)
 
         connection.execute("""
+            CREATE TABLE IF NOT EXISTS memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NULL,
+                type TEXT NOT NULL CHECK (type IN ('user_fact', 'user_preference', 'user_claim', 'project_state', 'instruction')),
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                source TEXT NOT NULL,
+                confidence REAL NULL CHECK (confidence IS NULL OR (confidence >= 0.0 AND confidence <= 1.0)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+            )
+        """)
+
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
