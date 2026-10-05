@@ -15,4 +15,14 @@ def init_db() -> None:
         connection.execute(
             "CREATE TABLE IF NOT EXISTS _mosaic_meta (key TEXT PRIMARY KEY, value TEXT)"
         )
-        connection.execute(\n            """\n            CREATE TABLE IF NOT EXISTS models (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                name TEXT NOT NULL,\n                provider TEXT NOT NULL,\n                model_name TEXT NOT NULL\n            )\n            """\n        )\n        connection.commit()
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS models (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model_name TEXT NOT NULL
+            )
+            """
+        )
+        connection.commit()
