@@ -7,6 +7,7 @@ from app.api.conversations import router as conversations_router
 from app.api.messages import router as messages_router
 from app.api.projects import router as projects_router
 from app.api.memories import router as memories_router
+from app.api.tasks import router as tasks_router
 from app.db.database import init_db
 
 
@@ -22,6 +23,7 @@ app.include_router(conversations_router)
 app.include_router(messages_router)
 app.include_router(projects_router)
 app.include_router(memories_router)
+app.include_router(tasks_router)
 app.include_router(chat_router)
 
 
