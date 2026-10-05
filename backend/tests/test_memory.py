@@ -1,6 +1,6 @@
 import pytest
 
-from app.db.database import init_db
+from app.db.database import get_connection, init_db
 from app.models.memory_repository import create_memory, get_memory, list_memories
 
 
@@ -25,6 +25,13 @@ def test_memory_creation_and_retrieval() -> None:
 
 
 def test_memory_can_be_project_scoped() -> None:
+    with get_connection() as connection:
+        connection.execute(
+            "INSERT INTO projects (name, workspace, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            ("Test Project", "/tmp/test-project", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+        )
+        connection.commit()
+
     memory = create_memory(
         type="project_state",
         key="status",
