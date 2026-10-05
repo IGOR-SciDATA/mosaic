@@ -168,4 +168,59 @@ def init_db() -> None:
             ON actions(status)
         """)
 
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS tool_calls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                task_id INTEGER NULL,
+                tool_name TEXT NOT NULL,
+                arguments TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (
+                    status IN (
+                        'pending',
+                        'approved',
+                        'executing',
+                        'completed',
+                        'failed',
+                        'rejected',
+                        'cancelled'
+                    )
+                ),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tool_calls_conversation_id
+            ON tool_calls(conversation_id)
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tool_calls_task_id
+            ON tool_calls(task_id)
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tool_calls_status
+            ON tool_calls(status)
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS tool_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tool_call_id INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
+                data TEXT NULL,
+                error TEXT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tool_call_id) REFERENCES tool_calls(id) ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tool_results_tool_call_id
+            ON tool_results(tool_call_id)
+        """)
+
         connection.commit()
