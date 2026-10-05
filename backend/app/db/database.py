@@ -7,6 +7,7 @@ def get_connection() -> sqlite3.Connection:
     DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DATABASE_PATH)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
@@ -49,4 +50,42 @@ def init_db() -> None:
             ON models (provider, model_name)
             """
         )
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT NULL,
+                workspace TEXT NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}',
+                state TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                mode TEXT NOT NULL DEFAULT 'chat',
+                model_id INTEGER NOT NULL,
+                project_id INTEGER NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+
+                FOREIGN KEY (model_id)
+                    REFERENCES models(id)
+                    ON DELETE RESTRICT,
+
+                FOREIGN KEY (project_id)
+                    REFERENCES projects(id)
+                    ON DELETE SET NULL
+            )
+            """
+        )
+
         connection.commit()
