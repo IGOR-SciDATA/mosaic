@@ -90,4 +90,48 @@ def init_db() -> None:
             )
         """)
 
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NULL,
+                project_id INTEGER NULL,
+                type TEXT NOT NULL CHECK (
+                    type IN ('code_project', 'document', 'analysis', 'report', 'generic')
+                ),
+                mode TEXT NOT NULL CHECK (mode IN ('create', 'agent')),
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (
+                    status IN (
+                        'pending',
+                        'planning',
+                        'awaiting_approval',
+                        'executing',
+                        'validating',
+                        'completed',
+                        'failed',
+                        'cancelled'
+                    )
+                ),
+                plan TEXT NULL,
+                result TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                CHECK (conversation_id IS NOT NULL OR project_id IS NOT NULL),
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tasks_conversation_id
+            ON tasks(conversation_id)
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tasks_project_id
+            ON tasks(project_id)
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tasks_status
+            ON tasks(status)
+        """)
+
         connection.commit()
