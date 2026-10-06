@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI\nfrom fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.actions import router as actions_router
 from app.api.chat import router as chat_router
@@ -18,7 +19,15 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Mosaic API", version="0.1.0", lifespan=lifespan)\n\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],\n    allow_credentials=True,\n    allow_methods=["*"],\n    allow_headers=["*"],\n)
+app = FastAPI(title="Mosaic API", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(conversations_router)
 app.include_router(messages_router)
