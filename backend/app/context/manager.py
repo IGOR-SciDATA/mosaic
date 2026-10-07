@@ -97,10 +97,20 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
                 "content": "Mosaic memory:\n" + "\n".join(memory_lines),
             })
 
+    current_user = next(
+        (
+            message
+            for message in reversed(all_messages)
+            if message.role == "user"
+        ),
+        None,
+    )
+
     history = [
         {"role": message.role, "content": message.content}
         for message in all_messages
         if message.role in {"user", "assistant", "tool"}
+        and (current_user is None or message.id != current_user.id)
     ]
     context.extend(history[-RECENT_HISTORY_LIMIT:])
 
@@ -115,5 +125,11 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
         })
 
     context.extend(_tool_result_messages(conversation_id))
+
+    if current_user is not None:
+        context.append({
+            "role": "user",
+            "content": current_user.content,
+        })
 
     return context
