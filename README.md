@@ -756,6 +756,394 @@ A interface existe para testar o conceito.
 
 O Core não deve depender dela.
 
+
+---
+
+# 🚀 Instalação e execução
+
+Esta seção apresenta o caminho completo para executar o Mosaic localmente.
+
+## 📋 Pré-requisitos
+
+Instale:
+
+- [Git](https://git-scm.com/)
+- [Python](https://www.python.org/)
+- [Node.js](https://nodejs.org/)
+- [Ollama](https://ollama.com/)
+
+O MVP utiliza:
+
+```text
+Frontend  → React + Vite
+Backend   → FastAPI
+Database  → SQLite
+Provider  → Ollama
+Streaming → SSE
+```
+
+Não é necessário instalar infraestrutura adicional como:
+
+```text
+Redis
+Kafka
+Kubernetes
+PostgreSQL
+Vector Database
+```
+
+## 📥 1. Clonar o projeto
+
+```bash
+git clone https://github.com/IGOR-SciDATA/mosaic.git
+cd mosaic
+```
+
+## 🐍 2. Configurar o Backend
+
+Entre na pasta:
+
+```bash
+cd backend
+```
+
+Crie o ambiente virtual:
+
+### Windows
+
+```bash
+python -m venv .venv
+.venv\\Scripts\\activate
+```
+
+### Linux/macOS
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Instale as dependências:
+
+```bash
+pip install -r requirements.txt
+```
+
+Inicie o servidor:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+O backend ficará disponível em:
+
+```text
+http://127.0.0.1:8000
+```
+
+A documentação automática da API fica disponível em:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## 🖥️ 3. Configurar o Frontend
+
+Abra outro terminal e entre na pasta do frontend:
+
+```bash
+cd mosaic/frontend
+```
+
+Instale as dependências:
+
+```bash
+npm install
+```
+
+Inicie o Vite:
+
+```bash
+npm run dev
+```
+
+O frontend ficará disponível no endereço mostrado pelo Vite, normalmente:
+
+```text
+http://localhost:5173
+```
+
+## 🧠 4. Instalar o Ollama
+
+O Mosaic utiliza o Ollama como provider local para os modelos.
+
+Baixe pelo site oficial:
+
+[Ollama](https://ollama.com/download)
+
+Depois da instalação, confirme:
+
+```bash
+ollama --version
+```
+
+## 🤖 5. Instalar o modelo Qwen
+
+### ⚠️ Ressalva importante
+
+O contrato inicial do MVP utiliza **Qwen 3B** como modelo de referência.
+
+Porém, o catálogo atual do Ollama não possui o identificador:
+
+```text
+qwen3:3b
+```
+
+Para a execução atual do Mosaic, utilize:
+
+```text
+qwen3:4b
+```
+
+Isso não altera a arquitetura do Mosaic. O Core continua independente do modelo e utiliza:
+
+```text
+provider
++
+model_name
+```
+
+Para baixar o modelo:
+
+```bash
+ollama pull qwen3:4b
+```
+
+Confira a instalação:
+
+```bash
+ollama list
+```
+
+## ▶️ 6. Testar o Qwen
+
+Execute:
+
+```bash
+ollama run qwen3:4b
+```
+
+Digite uma mensagem simples, por exemplo:
+
+```text
+Olá, quem é você?
+```
+
+Se o modelo responder, o Ollama está funcionando.
+
+Para sair:
+
+```text
+/bye
+```
+
+Também é possível verificar os modelos atualmente carregados:
+
+```bash
+ollama ps
+```
+
+## 🧩 7. Cadastrar o modelo no Mosaic
+
+Com o Mosaic aberto, acesse:
+
+```text
+Configurações
+→ Modelos
+```
+
+Cadastre:
+
+| Campo | Valor |
+|---|---|
+| Nome | `Qwen 3 4B` |
+| Provider | `ollama` |
+| Model name | `qwen3:4b` |
+
+Uma configuração inicial recomendada é:
+
+```text
+Temperature: 0.7
+Top P:        0.9
+Top K:        40
+Context:      4096
+Prediction:   512–1024
+```
+
+Esses valores podem ser ajustados posteriormente conforme o hardware e o comportamento desejado.
+
+## 🚀 8. Iniciar o Mosaic
+
+Com o ambiente configurado, mantenha o backend em um terminal:
+
+```bash
+cd mosaic/backend
+.venv\\Scripts\\activate
+uvicorn app.main:app --reload
+```
+
+Em outro terminal, execute o frontend:
+
+```bash
+cd mosaic/frontend
+npm run dev
+```
+
+O Ollama deve estar instalado e disponível localmente.
+
+Depois abra:
+
+```text
+http://localhost:5173
+```
+
+## 💬 9. Primeiro uso
+
+O fluxo básico é:
+
+```text
+Criar projeto
+     ↓
+Criar conversa
+     ↓
+Selecionar modelo
+     ↓
+Enviar mensagem
+     ↓
+Receber resposta
+```
+
+Por exemplo:
+
+```text
+Projeto:
+Guitar Livre
+
+Modelo:
+Qwen 3 4B
+
+Mensagem:
+Olá Mosaic, explique o objetivo deste projeto.
+```
+
+A conversa é persistida e pode continuar posteriormente.
+
+## 🧠 10. Contexto e memória
+
+O contexto é responsabilidade do Mosaic, não do modelo.
+
+O Core pode montar o contexto utilizando:
+
+```text
+SYSTEM / CORE INSTRUCTIONS
++
+PROJECT STATE
++
+RELEVANT MEMORY
++
+RECENT HISTORY
++
+RELEVANT HISTORY
++
+RELEVANT FILES
++
+CURRENT TASK
++
+TOOL RESULTS
++
+CURRENT USER MESSAGE
+```
+
+Memórias são persistidas fora do modelo e podem ser associadas aos projetos.
+
+Um princípio importante é:
+
+```text
+MEMORY ≠ TRUTH
+```
+
+Uma informação armazenada como `user_claim`, por exemplo, continua sendo uma afirmação do usuário e não é automaticamente promovida a fato objetivo.
+
+## 🔀 11. Troca de modelos
+
+O modelo de uma conversa é definido por:
+
+```text
+Conversation
+      ↓
+model_id
+      ↓
+Model
+      ↓
+provider + model_name
+```
+
+Por isso, o Mosaic pode utilizar diferentes modelos através do mesmo provider quando eles estiverem disponíveis no ambiente.
+
+Exemplo:
+
+```text
+Qwen
+provider = ollama
+model_name = qwen3:4b
+```
+
+A troca do modelo não deve apagar memória, estado ou histórico.
+
+## 🧩 12. Fluxo completo
+
+Depois da instalação, o fluxo principal é:
+
+```text
+Usuário
+   ↓
+Mosaic
+   ↓
+Projeto
+   ↓
+Conversa
+   ↓
+Modelo selecionado
+   ↓
+Context Manager
+   ↓
+Ollama
+   ↓
+Modelo local
+   ↓
+Resposta
+   ↓
+Persistência
+```
+
+O objetivo do MVP é unir:
+
+```text
+IDENTIDADE
+     +
+PROJETO
+     +
+CONVERSA
+     +
+CONTEXTO
+     +
+MEMÓRIA
+     +
+MODELO LOCAL
+```
+
+em um único ambiente persistente.
+
 ---
 
 # 📁 Estrutura do projeto
