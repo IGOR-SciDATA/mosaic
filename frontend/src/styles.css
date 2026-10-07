@@ -884,3 +884,11 @@ button {
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:3px}.modal-actions>button{min-height:35px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:rgba(255,255,255,.03);color:#bbb;font-size:11px}
 .modal-actions .primary-action{border-color:var(--red);background:rgba(239,48,43,.14);color:#fff}
 button:disabled,textarea:disabled,input:disabled{cursor:not-allowed;opacity:.48}
+
+.model-picker{display:flex;align-items:center;gap:7px;min-width:120px}
+.model-select{appearance:none;max-width:170px;border:0;outline:0;background:transparent;color:#d8d9dc;font:inherit;font-size:11px;font-weight:500;padding:5px 20px 5px 2px;cursor:pointer}
+.model-select:disabled{cursor:not-allowed;opacity:.55}
+.model-select option{background:#121415;color:#eee}
+.model-provider{font-size:9px;color:#6e7277;white-space:nowrap}
+.modal-form select{width:100%;border:1px solid var(--border);border-radius:7px;outline:0;padding:10px;background:#0a0b0c;color:#eee;font-size:12px}
+.modal-form select:focus{border-color:rgba(239,48,43,.55)}
