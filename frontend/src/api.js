@@ -21,6 +21,11 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  models: {
+    list: () => request("/models"),
+    get: (id) => request(`/models/${id}`),
+    create: (payload) => request("/models", { method: "POST", body: JSON.stringify(payload) }),
+  },
   projects: {
     list: () => request("/projects"),
     get: (id) => request(`/projects/${id}`),
