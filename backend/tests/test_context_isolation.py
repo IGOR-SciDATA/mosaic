@@ -38,19 +38,11 @@ def test_context_proof_keeps_project_state_memory_and_history_isolated(
 
     guitar_conversation = client.post(
         "/conversations",
-        json={
-            "title": "Guitar context",
-            "model_id": model.id,
-            "project_id": guitar.id,
-        },
+        json={"title": "Guitar context", "model_id": model.id, "project_id": guitar.id},
     ).json()
     tennis_conversation = client.post(
         "/conversations",
-        json={
-            "title": "Tennis context",
-            "model_id": model.id,
-            "project_id": tennis.id,
-        },
+        json={"title": "Tennis context", "model_id": model.id, "project_id": tennis.id},
     ).json()
 
     remember(
@@ -68,10 +60,10 @@ def test_context_proof_keeps_project_state_memory_and_history_isolated(
         project_id=tennis.id,
     )
 
-    captured = {}
+    captured = []
 
     def fake_generate(self, messages, model_name, configuration):
-        captured[model_name] = messages
+        captured.append(messages)
         return "Contexto recebido"
 
     monkeypatch.setattr("app.services.chat.OllamaProvider.generate", fake_generate)
@@ -87,18 +79,16 @@ def test_context_proof_keeps_project_state_memory_and_history_isolated(
 
     assert guitar_response.status_code == 200
     assert tennis_response.status_code == 200
+    assert len(captured) == 2
 
-    guitar_context = str(captured["local:test"])
+    guitar_context = str(captured[0])
+    tennis_context = str(captured[1])
+
     assert "guitar" in guitar_context
     assert "gerar charts para guitarra" in guitar_context
     assert "tennis" not in guitar_context
     assert "rastrear movimento da raquete" not in guitar_context
 
-    # The second call replaces the capture, so rebuild the tennis conversation
-    # context directly and prove the inverse isolation.
-    from app.context.manager import build_context
-
-    tennis_context = str(build_context(tennis_conversation["id"]))
     assert "tennis" in tennis_context
     assert "rastrear movimento da raquete" in tennis_context
     assert "guitar" not in tennis_context
