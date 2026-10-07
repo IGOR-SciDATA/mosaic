@@ -901,3 +901,7 @@ button:disabled,textarea:disabled,input:disabled{cursor:not-allowed;opacity:.48}
 .memory-item{display:flex;flex-direction:column;gap:3px;padding:10px;border:1px solid var(--border);border-radius:7px;background:rgba(255,255,255,.015)}
 .memory-item strong{font-size:11px;color:#d9dbde}
 .memory-item span{font-size:10px;line-height:1.45;color:#85898e}
+
+.memory-item-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.memory-type{font-size:8px;text-transform:uppercase;letter-spacing:.05em;color:#73777c}
+.memory-item small{font-size:9px;color:#666a6f}
