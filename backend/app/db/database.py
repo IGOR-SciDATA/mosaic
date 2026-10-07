@@ -21,7 +21,7 @@ def init_db() -> None:
                 provider TEXT NOT NULL,
                 model_name TEXT NOT NULL,
                 configuration TEXT NOT NULL DEFAULT '{}',
-                enabled INTEGER NOT NULL DEFAULT 1
+                enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1))
             )
         """)
 
