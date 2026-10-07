@@ -67,7 +67,7 @@ def test_context_limits_history_and_keeps_current_user_message_last() -> None:
 
     user_messages = [item["content"] for item in context if item["role"] == "user"]
     assert len(user_messages) == 21
-    assert user_messages[:-1] == [f"history-{index}" for index in range(5, 25)]
+    assert user_messages[:-1] == [f"history-{index}" for index in range(4, 24)]
     assert user_messages[-1] == "history-24"
     assert context[-1] == {"role": "user", "content": "history-24"}
 
