@@ -97,6 +97,9 @@ export const api = {
     chat: (id, content) => request(`/conversations/${id}/chat`, { method: "POST", body: JSON.stringify({ content }) }),
     stream: (id, content, onChunk) => streamRequest(`/conversations/${id}/chat/stream`, { content }, onChunk),
   },
+  memories: {
+    list: (projectId) => request(`/memories?project_id=${projectId}`),
+  },
 };
 
 export { API_BASE_URL };
