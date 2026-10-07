@@ -35,6 +35,14 @@ def create_message(
             """,
             (conversation_id, role, content, created_at, json.dumps(message_metadata)),
         )
+        connection.execute(
+            """
+            UPDATE conversations
+            SET updated_at = ?
+            WHERE id = ?
+            """,
+            (created_at, conversation_id),
+        )
         connection.commit()
 
         return Message(
