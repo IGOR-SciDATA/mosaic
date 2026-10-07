@@ -113,7 +113,18 @@ function ContextPanel({tab,setTab,project,conversation,model,memoryCount,message
   </aside>;
 }
 
-function Modal({title,onClose,children}){\n  if(typeof document === "undefined") return null;\n  return createPortal(\n    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>\n      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e=>e.stopPropagation()}>\n        <div className="modal-header"><strong>{title}</strong><button type="button" onClick={onClose} aria-label="Fechar">×</button></div>\n        {children}\n      </div>\n    </div>,\n    document.body\n  );\n}
+function Modal({title,onClose,children}){
+  if(typeof document === "undefined") return null;
+  return createPortal(
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e=>e.stopPropagation()}>
+        <div className="modal-header"><strong>{title}</strong><button type="button" onClick={onClose} aria-label="Fechar">×</button></div>
+        {children}
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 
 export default function App(){
