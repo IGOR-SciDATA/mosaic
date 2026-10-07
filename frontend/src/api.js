@@ -99,6 +99,9 @@ export const api = {
   },
   memories: {
     list: (projectId) => request(`/memories?project_id=${projectId}`),
+    create: (payload) => request("/memories", { method: "POST", body: JSON.stringify(payload) }),
+    update: (id, payload) => request(`/memories/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+    remove: (id) => request(`/memories/${id}`, { method: "DELETE" }),
   },
 };
 
