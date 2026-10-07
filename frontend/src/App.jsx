@@ -68,6 +68,25 @@ function ProjectHeader({ project, tab, setTab }) {
   return <section className="project-header"><div className="project-identity"><MosaicMark compact/><div><h1>{project?.name || "Mosaic"}</h1><p>{project?.description || "Workspace de desenvolvimento do Mosaic."}</p></div></div><nav className="project-tabs">{tabs.map(([i,l])=><button key={l} className={tab===l?"active":""} onClick={()=>setTab(l)}><Icon name={i} size={16}/><span>{l}</span></button>)}</nav></section>;
 }
 
+function MessageList({ messages, streaming }) {
+  if (!messages.length && !streaming) {
+    return <div className="conversation-empty"><MosaicMark compact/><h2>Conversa pronta</h2><p>Envie uma mensagem para começar a conversar com o modelo selecionado.</p></div>;
+  }
+
+  return <div className="chat-content">
+    {messages.map(message => message.role === "user"
+      ? <div className="message user-message" key={message.id || message.localId}>
+          <div className="message-bubble"><p>{message.content}</p><time>{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time></div>
+          <div className="message-avatar user">JD</div>
+        </div>
+      : <div className="message assistant-message" key={message.id || message.localId}>
+          <div className="message-avatar mosaic"><MosaicMark compact/></div>
+          <div className="assistant-copy"><p>{message.content || (streaming ? "..." : "")}</p>{message.content&&<time className="message-time">{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time>}</div>
+        </div>
+    )}
+  </div>;
+}
+
 function Composer({ disabled, onSubmit }) {
   const [text,setText]=useState("");
   const submit=e=>{e.preventDefault();if(!text.trim()||disabled)return;onSubmit(text.trim());setText("");};
@@ -93,14 +112,32 @@ function ContextPanel({tab,setTab,project,conversation,model,count}) {
 function Modal({title,onClose,children}){return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-header"><strong>{title}</strong><button onClick={onClose}>×</button></div>{children}</div></div>;}
 
 export default function App(){
-  const [projects,setProjects]=useState([]),[conversations,setConversations]=useState([]),[models,setModels]=useState([]),[projectId,setProjectId]=useState(null),[conversationId,setConversationId]=useState(null);
-  const [mobile,setMobile]=useState(false),[contextTab,setContextTab]=useState("Contexto"),[projectTab,setProjectTab]=useState("Conversa"),[loading,setLoading]=useState(true),[error,setError]=useState(""),[modal,setModal]=useState(null),[saving,setSaving]=useState(false);
+  const [projects,setProjects]=useState([]),[conversations,setConversations]=useState([]),[models,setModels]=useState([]),[projectId,setProjectId]=useState(null),[conversationId,setConversationId]=useState(null),[messages,setMessages]=useState([]);
+  const [mobile,setMobile]=useState(false),[contextTab,setContextTab]=useState("Contexto"),[projectTab,setProjectTab]=useState("Conversa"),[loading,setLoading]=useState(true),[messagesLoading,setMessagesLoading]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(""),[modal,setModal]=useState(null),[saving,setSaving]=useState(false);
   const project=projects.find(p=>p.id===projectId)||null,conversation=conversations.find(c=>c.id===conversationId)||null,model=models.find(m=>m.id===conversation?.model_id)||null,projectConversations=conversations.filter(c=>c.project_id===projectId);
 
   async function load(){setLoading(true);setError("");try{const [ps,cs,ms]=await Promise.all([api.projects.list(),api.conversations.list(),api.models.list()]);setProjects(ps);setConversations(cs);setModels(ms);const savedP=Number(localStorage.getItem("mosaic.activeProjectId"));const p=ps.find(x=>x.id===savedP)||ps[0];const savedC=Number(localStorage.getItem("mosaic.activeConversationId"));const c=cs.find(x=>x.id===savedC)||cs.find(x=>x.project_id===p?.id);setProjectId(p?.id??null);setConversationId(c?.id??null);}catch(e){setError("Não foi possível conectar ao Mosaic Core: "+e.message);}finally{setLoading(false);}}
   useEffect(()=>{load();},[]);
   useEffect(()=>{if(projectId)localStorage.setItem("mosaic.activeProjectId",String(projectId));},[projectId]);
   useEffect(()=>{if(conversationId)localStorage.setItem("mosaic.activeConversationId",String(conversationId));},[conversationId]);
+  useEffect(()=>{
+    let cancelled=false;
+    async function loadMessages(){
+      if(!conversationId){setMessages([]);return;}
+      setMessagesLoading(true);
+      try{
+        const data=await api.conversations.messages(conversationId);
+        if(!cancelled)setMessages(data);
+      }catch(err){
+        if(!cancelled)setError("Não foi possível recuperar o histórico: "+err.message);
+      }finally{
+        if(!cancelled)setMessagesLoading(false);
+      }
+    }
+    loadMessages();
+    return ()=>{cancelled=true;};
+  },[conversationId]);
+
 
   function selectProject(id){setProjectId(id);setConversationId(conversations.find(c=>c.project_id===id)?.id??null);setProjectTab("Conversa");setMobile(false);}
   function selectConversation(id){const c=conversations.find(x=>x.id===id);setConversationId(id);if(c?.project_id)setProjectId(c.project_id);setMobile(false);}
@@ -108,10 +145,34 @@ export default function App(){
   async function createProject(e){e.preventDefault();setSaving(true);const f=new FormData(e.currentTarget);const name=String(f.get("name")||"").trim();const description=String(f.get("description")||"").trim();try{const p=await api.projects.create({name,description:description||null,workspace:"./workspaces/"+slugify(name),metadata:{},state:{}});setProjects(x=>[...x,p]);setProjectId(p.id);setConversationId(null);setModal(null);}catch(err){setError(err.message);}finally{setSaving(false);}}
   async function createConversation(e){e.preventDefault();setSaving(true);const f=new FormData(e.currentTarget);const title=String(f.get("title")||"Nova conversa").trim()||"Nova conversa";const modelId=Number(f.get("model_id"))||models.find(m=>m.enabled)?.id;if(!modelId){setError("Nenhum modelo habilitado está registrado no Mosaic.");setSaving(false);return;}try{const c=await api.conversations.create({title,model_id:modelId,project_id:projectId});setConversations(x=>[c,...x]);setConversationId(c.id);setModal(null);}catch(err){setError(err.message);}finally{setSaving(false);}}
 
+  async function sendMessage(content){
+    if(!conversation||sending)return;
+    setError("");
+    setSending(true);
+    const localUser={localId:`user-${Date.now()}`,role:"user",content,created_at:new Date().toISOString()};
+    const localAssistant={localId:`assistant-${Date.now()}`,role:"assistant",content:"",created_at:new Date().toISOString()};
+    setMessages(items=>[...items,localUser,localAssistant]);
+    try{
+      let streamed="";
+      await api.conversations.stream(conversation.id,content,chunk=>{
+        streamed+=chunk;
+        setMessages(items=>items.map(item=>item.localId===localAssistant.localId?{...item,content:streamed}:item));
+      });
+      const persisted=await api.conversations.messages(conversation.id);
+      setMessages(persisted);
+      setConversations(items=>items.map(item=>item.id===conversation.id?{...item,updated_at:new Date().toISOString()}:item));
+    }catch(err){
+      setMessages(items=>items.filter(item=>item.localId!==localAssistant.localId));
+      setError("Não foi possível concluir a resposta: "+err.message);
+    }finally{
+      setSending(false);
+    }
+  }
+
   async function changeConversationModel(modelId){if(!conversation)return;setError("");try{const updated=await api.conversations.update(conversation.id,{model_id:modelId});setConversations(items=>items.map(item=>item.id===updated.id?updated:item));}catch(err){setError("Não foi possível trocar o modelo: "+err.message);}}
 
   return <div className="app-shell"><Sidebar projects={projects} conversations={projectConversations} activeProjectId={projectId} activeConversationId={conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>setModal("conversation")} mobileOpen={mobile} onClose={()=>setMobile(false)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
-    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}<div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:<div className="conversation-empty"><MosaicMark compact/><h2>{conversation?.title || "Workspace pronto"}</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project}><Icon name="plus" size={16}/>Nova conversa</button>}</div>}</div><Composer disabled={!conversation} onSubmit={()=>setError("O chat real será conectado na Fase 4.")}/></main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} count={projectConversations.length}/></div></div>
+    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}<div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} onSubmit={sendMessage}/></main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} count={projectConversations.length}/></div></div>
     {modal==="project"&&<Modal title="Novo projeto" onClose={()=>!saving&&setModal(null)}><form className="modal-form" onSubmit={createProject}><label>Nome<input name="name" required autoFocus placeholder="Ex.: Guitar Livre"/></label><label>Descrição<textarea name="description" rows="3" placeholder="O que estamos construindo?"/></label><div className="modal-actions"><button type="button" onClick={()=>setModal(null)}>Cancelar</button><button className="primary-action" disabled={saving}>{saving?"Criando…":"Criar projeto"}</button></div></form></Modal>}
     {modal==="conversation"&&<Modal title="Nova conversa" onClose={()=>!saving&&setModal(null)}><form className="modal-form" onSubmit={createConversation}><p className="modal-hint">Projeto: <strong>{project?.name || "Nenhum projeto"}</strong></p><label>Título<input name="title" required autoFocus placeholder="Ex.: Arquitetura do projeto"/></label><label>Modelo<select name="model_id" defaultValue={models.find(m=>m.enabled)?.id ?? ""} required><option value="" disabled>Selecione um modelo</option>{models.filter(m=>m.enabled).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label><div className="modal-actions"><button type="button" onClick={()=>setModal(null)}>Cancelar</button><button className="primary-action" disabled={saving||!project||!models.some(m=>m.enabled)}>{saving?"Criando…":"Criar conversa"}</button></div></form></Modal>}
   </div>;
