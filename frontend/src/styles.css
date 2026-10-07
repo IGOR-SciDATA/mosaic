@@ -1053,21 +1053,40 @@ body { overflow: hidden; }
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 99999;
   width: 100vw;
   height: 100vh;
-  display: grid;
-  place-items: center;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 24px;
+  box-sizing: border-box;
   background: rgba(0,0,0,.72);
   backdrop-filter: blur(5px);
 }
 .modal {
   position: relative;
-  z-index: 10000;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
   width: min(560px, calc(100vw - 48px));
+  min-height: 120px;
   max-height: calc(100vh - 48px);
   overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 12px;
+  background: #101213;
+  color: #eee;
+  box-shadow: 0 30px 100px rgba(0,0,0,.65);
+}
+.modal > .modal-form {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 0;
+  box-sizing: border-box;
 }
 .help-block {
   display: flex;
