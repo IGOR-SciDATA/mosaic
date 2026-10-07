@@ -58,4 +58,7 @@ def stream_chat(conversation_id: int, content: str) -> Iterable[str]:
         chunks.append(chunk)
         yield chunk
 
-    create_message(conversation_id, "assistant", "".join(chunks))
+    response = "".join(chunks).strip()
+    if not response:
+        raise RuntimeError("O modelo não retornou conteúdo na resposta.")
+    create_message(conversation_id, "assistant", response)
