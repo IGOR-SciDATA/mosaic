@@ -892,3 +892,7 @@ button:disabled,textarea:disabled,input:disabled{cursor:not-allowed;opacity:.48}
 .model-provider{font-size:9px;color:#6e7277;white-space:nowrap}
 .modal-form select{width:100%;border:1px solid var(--border);border-radius:7px;outline:0;padding:10px;background:#0a0b0c;color:#eee;font-size:12px}
 .modal-form select:focus{border-color:rgba(239,48,43,.55)}
+
+.assistant-message{margin-bottom:22px}
+.message-time{display:block;margin-top:7px;color:#686b70;font-size:9px}
+.assistant-message .message-avatar{margin-top:0}
