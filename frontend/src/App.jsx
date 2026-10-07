@@ -39,19 +39,44 @@ const slugify = v => v.toLowerCase().trim().replace(/[^a-z0-9]+/gi,"-").replace(
 const groupFor = d => { const n=d ? Math.floor((Date.now()-new Date(d).getTime())/86400000) : 0; return n<1?"Hoje":n<2?"Ontem":"Últimos 7 dias"; };
 
 function Sidebar({ projects, conversations, activeProjectId, activeConversationId, onProject, onConversation, onNewProject, onNewConversation, onModelSettings, onHelp, mobileOpen, onClose }) {
-  const groups = useMemo(() => { const g={Hoje:[],Ontem:[],"Últimos 7 dias":[]}; conversations.forEach(c=>g[groupFor(c.updated_at)].push(c)); return g; },[conversations]);
+  const conversationsByProject = useMemo(() => {
+    const map = new Map();
+    conversations.forEach(c => {
+      if (!map.has(c.project_id)) map.set(c.project_id, []);
+      map.get(c.project_id).push(c);
+    });
+    return map;
+  }, [conversations]);
+
   return <aside className={mobileOpen ? "sidebar open" : "sidebar"}>
     <div className="brand-row"><MosaicMark/><span className="wordmark">MOSAIC</span><button className="mobile-close" onClick={onClose}>×</button></div>
     <button className="new-chat" onClick={onNewConversation}><Icon name="plus" size={19}/>Nova conversa</button>
-    <nav className="side-primary"><button><Icon name="home"/>Início</button>
+    <nav className="side-primary">
+      <button><Icon name="home"/>Início</button>
       <div className="section-heading"><span>Projetos</span><button className="icon-inline" onClick={onNewProject}><Icon name="plus" size={16}/></button></div>
-      {projects.map(p=><button key={p.id} onClick={()=>onProject(p.id)} className={p.id===activeProjectId?"side-project active":"side-project"}><span className="project-icon"><Icon name={iconType(p.name)} size={18}/></span><span>{p.name}</span></button>)}
+      <div className="project-tree">
+        {projects.map(p => {
+          const projectConversations = conversationsByProject.get(p.id) || [];
+          const expanded = p.id === activeProjectId;
+          return <div className={expanded ? "project-node expanded" : "project-node"} key={p.id}>
+            <button onClick={()=>onProject(p.id)} className={expanded ? "side-project active" : "side-project"}>
+              <span className="project-icon"><Icon name={iconType(p.name)} size={18}/></span>
+              <span className="project-name">{p.name}</span>
+              <span className="project-count">{projectConversations.length}</span>
+            </button>
+            {expanded && <div className="project-conversation-list">
+              {projectConversations.length
+                ? projectConversations.map(c => <button key={c.id} onClick={()=>onConversation(c.id)} className={c.id===activeConversationId ? "conversation-item selected" : "conversation-item"}>
+                    <span className="tiny-chevron">›</span>
+                    <span className="conversation-title">{c.title || "Nova conversa"}</span>
+                  </button>)
+                : <span className="sidebar-empty">Nenhuma conversa neste projeto.</span>}
+            </div>}
+          </div>;
+        })}
+      </div>
       <button className="new-project" onClick={onNewProject}><Icon name="plus" size={17}/>Novo projeto</button>
     </nav>
-    <div className="conversation-nav"><div className="section-heading"><span>Conversas</span><Icon name="search" size={17}/></div>
-      {Object.entries(groups).map(([group,items])=><div className="conversation-group" key={group}><span className="group-label">{group}</span>{items.map(c=><button key={c.id} onClick={()=>onConversation(c.id)} className={c.id===activeConversationId?"conversation-item selected":"conversation-item"}><span className="tiny-chevron">›</span><span>{c.title}</span></button>)}</div>)}
-      {!conversations.length&&<span className="sidebar-empty">Nenhuma conversa neste projeto.</span>}
-    </div>
     <div className="side-bottom"><button onClick={onModelSettings}><Icon name="settings"/>Configurações</button><button onClick={onHelp}><Icon name="help"/>Ajuda</button></div>
   </aside>;
 }
@@ -85,7 +110,10 @@ function MessageList({ messages, streaming }) {
         </div>
       : <div className="message assistant-message" key={message.id || message.localId}>
           <div className="message-avatar mosaic"><MosaicMark compact/></div>
-          <div className="assistant-copy"><p>{message.content || (streaming ? "..." : "")}</p>{message.content&&<time className="message-time">{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time>}</div>
+          <div className={message.content ? "assistant-copy" : "assistant-copy assistant-empty"}>
+            <p>{message.content || (streaming ? "Gerando resposta…" : "O Mosaic recebeu a mensagem, mas o modelo não retornou conteúdo.")}</p>
+            {message.content && <time className="message-time">{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time>}
+          </div>
         </div>
     )}
   </div>;
