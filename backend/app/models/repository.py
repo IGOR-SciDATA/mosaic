@@ -38,6 +38,29 @@ def create_model(
         )
 
 
+def list_models() -> list[Model]:
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, name, provider, model_name, configuration, enabled
+            FROM models
+            ORDER BY id
+            """
+        ).fetchall()
+
+    return [
+        Model(
+            id=row["id"],
+            name=row["name"],
+            provider=row["provider"],
+            model_name=row["model_name"],
+            configuration=json.loads(row["configuration"]),
+            enabled=bool(row["enabled"]),
+        )
+        for row in rows
+    ]
+
+
 def get_model(model_id: int) -> Model | None:
     with get_connection() as connection:
         row = connection.execute(
