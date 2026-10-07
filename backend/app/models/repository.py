@@ -83,3 +83,37 @@ def get_model(model_id: int) -> Model | None:
         configuration=json.loads(row["configuration"]),
         enabled=bool(row["enabled"]),
     )
+
+def update_model(
+    model_id: int,
+    name: str | None = None,
+    configuration: dict[str, Any] | None = None,
+    enabled: bool | None = None,
+) -> Model:
+    current = get_model(model_id)
+    if current is None:
+        raise ValueError("Model not found")
+
+    next_name = name if name is not None else current.name
+    next_configuration = configuration if configuration is not None else current.configuration
+    next_enabled = enabled if enabled is not None else current.enabled
+
+    with get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE models
+            SET name = ?, configuration = ?, enabled = ?
+            WHERE id = ?
+            """,
+            (next_name, json.dumps(next_configuration), int(next_enabled), model_id),
+        )
+        connection.commit()
+
+    return Model(
+        id=current.id,
+        name=next_name,
+        provider=current.provider,
+        model_name=current.model_name,
+        configuration=next_configuration,
+        enabled=next_enabled,
+    )
