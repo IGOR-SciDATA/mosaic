@@ -896,3 +896,8 @@ button:disabled,textarea:disabled,input:disabled{cursor:not-allowed;opacity:.48}
 .assistant-message{margin-bottom:22px}
 .message-time{display:block;margin-top:7px;color:#686b70;font-size:9px}
 .assistant-message .message-avatar{margin-top:0}
+
+.memory-list{display:flex;flex-direction:column;gap:8px;padding:12px 14px}
+.memory-item{display:flex;flex-direction:column;gap:3px;padding:10px;border:1px solid var(--border);border-radius:7px;background:rgba(255,255,255,.015)}
+.memory-item strong{font-size:11px;color:#d9dbde}
+.memory-item span{font-size:10px;line-height:1.45;color:#85898e}
