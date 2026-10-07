@@ -104,16 +104,31 @@ def get_task(task_id: int) -> Task | None:
     return _row_to_task(row) if row else None
 
 
-def list_tasks() -> list[Task]:
+def list_tasks(
+    conversation_id: int | None = None,
+    project_id: int | None = None,
+) -> list[Task]:
     with get_connection() as connection:
-        rows = connection.execute(
-            """
+        query = """
             SELECT id, conversation_id, project_id, type, mode, status,
                    plan, result, created_at, updated_at
             FROM tasks
-            ORDER BY id ASC
-            """
-        ).fetchall()
+        """
+        conditions: list[str] = []
+        parameters: list[int] = []
+
+        if conversation_id is not None:
+            conditions.append("conversation_id = ?")
+            parameters.append(conversation_id)
+        if project_id is not None:
+            conditions.append("project_id = ?")
+            parameters.append(project_id)
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        query += " ORDER BY id ASC"
+        rows = connection.execute(query, parameters).fetchall()
 
     return [_row_to_task(row) for row in rows]
 
