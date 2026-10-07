@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "./api";
 
 function Icon({ name, size = 18 }) {
@@ -112,7 +113,7 @@ function ContextPanel({tab,setTab,project,conversation,model,memoryCount,message
   </aside>;
 }
 
-function Modal({title,onClose,children}){return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><div className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e=>e.stopPropagation()}><div className="modal-header"><strong>{title}</strong><button type="button" onClick={onClose} aria-label="Fechar">×</button></div>{children}</div></div>;}
+function Modal({title,onClose,children}){\n  if(typeof document === "undefined") return null;\n  return createPortal(\n    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>\n      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e=>e.stopPropagation()}>\n        <div className="modal-header"><strong>{title}</strong><button type="button" onClick={onClose} aria-label="Fechar">×</button></div>\n        {children}\n      </div>\n    </div>,\n    document.body\n  );\n}
 
 
 export default function App(){
