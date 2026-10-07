@@ -3,7 +3,9 @@ from fastapi.testclient import TestClient
 
 from app.db.database import init_db
 from app.main import app
+from app.memory.manager import remember
 from app.models.message_repository import list_messages
+from app.models.project_repository import create_project
 from app.models.repository import create_model
 
 
@@ -108,3 +110,55 @@ def test_chat_returns_404_for_unknown_conversation(client) -> None:
     )
 
     assert response.status_code == 404
+
+
+def test_chat_passes_project_state_and_memory_to_provider(client, monkeypatch) -> None:
+    project = create_project(
+        name="Guitar Livre",
+        workspace="/tmp/guitar-livre",
+        state={"phase": "development"},
+    )
+    model = create_model("Qwen 3B", "ollama", "qwen3:3b")
+    conversation = client.post(
+        "/conversations",
+        json={
+            "title": "Context integration",
+            "model_id": model.id,
+            "project_id": project.id,
+        },
+    ).json()
+
+    remember(
+        type="project_state",
+        key="focus",
+        value="Integrar o contexto do projeto",
+        source="conversation",
+        project_id=project.id,
+    )
+
+    captured = {}
+
+    def fake_generate(self, messages, model_name, configuration):
+        captured["messages"] = messages
+        return "Contexto recebido"
+
+    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", fake_generate)
+
+    response = client.post(
+        f"/conversations/{conversation['id']}/chat",
+        json={"content": "Onde estamos?"},
+    )
+
+    assert response.status_code == 200
+    assert captured["messages"][0] == {
+        "role": "system",
+        "content": "Mosaic project state:\n{'phase': 'development'}",
+    }
+    assert captured["messages"][1] == {
+        "role": "system",
+        "content": "Mosaic memory:\n- [project_state] focus: Integrar o contexto do projeto",
+    }
+    assert captured["messages"][-1] == {
+        "role": "user",
+        "content": "Onde estamos?",
+    }
