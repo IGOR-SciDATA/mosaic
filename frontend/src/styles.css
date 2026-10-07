@@ -1071,22 +1071,71 @@ body { overflow: hidden; }
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  width: min(560px, calc(100vw - 48px));
-  min-height: 120px;
+  width: min(680px, calc(100vw - 80px));
+  min-height: 320px;
   max-height: calc(100vh - 48px);
-  overflow: auto;
+  overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid rgba(255,255,255,.14);
-  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 14px;
   background: #101213;
   color: #eee;
-  box-shadow: 0 30px 100px rgba(0,0,0,.65);
+  box-shadow: 0 30px 100px rgba(0,0,0,.7);
+}
+.modal-header {
+  flex: 0 0 64px;
+  min-height: 64px;
+  padding: 0 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header strong {
+  font-size: 18px;
+  color: #f2f2f2;
+}
+.modal-header button {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  color: #aaa;
+  font-size: 26px;
 }
 .modal > .modal-form {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-height: 0;
   box-sizing: border-box;
+  padding: 24px;
+  gap: 18px;
+  overflow: auto;
+}
+.modal-form label {
+  font-size: 13px;
+}
+.modal-form input,
+.modal-form textarea,
+.modal-form select {
+  padding: 12px;
+  font-size: 14px;
+}
+.modal-hint {
+  font-size: 13px;
+  line-height: 1.55;
+}
+.help-block {
+  padding: 18px 0;
+  gap: 7px;
+}
+.help-block strong {
+  font-size: 14px;
+}
+.help-block span {
+  font-size: 13px;
+  line-height: 1.6;
 }
 .help-block {
   display: flex;
