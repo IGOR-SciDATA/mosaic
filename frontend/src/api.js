@@ -80,6 +80,8 @@ export const api = {
     list: () => request("/models"),
     get: (id) => request(`/models/${id}`),
     create: (payload) => request("/models", { method: "POST", body: JSON.stringify(payload) }),
+    update: (id, payload) => request(`/models/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+    status: () => request("/models/status"),
   },
   projects: {
     list: () => request("/projects"),
