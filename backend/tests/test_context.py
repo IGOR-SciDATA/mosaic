@@ -6,6 +6,9 @@ from app.memory.manager import remember
 from app.models.conversation_repository import create_conversation
 from app.models.message_repository import create_message
 from app.models.repository import create_model
+from app.models.task_repository import create_task
+from app.models.tool_call_repository import create_tool_call
+from app.models.tool_result_repository import create_tool_result
 
 
 @pytest.fixture(autouse=True)
@@ -51,3 +54,58 @@ def test_context_includes_project_state_memory_before_history() -> None:
         "content": "Mosaic memory:\n- [project_state] status: Memory implementation started",
     }
     assert context[2] == {"role": "user", "content": "Onde paramos?"}
+
+
+def test_context_limits_history_and_keeps_current_user_message_last() -> None:
+    model = create_model("Qwen 3B", "ollama", "qwen3:3b")
+    conversation = create_conversation("History limit", model.id)
+
+    for index in range(25):
+        create_message(conversation.id, "user", f"history-{index}")
+
+    context = build_context(conversation.id)
+
+    user_messages = [item["content"] for item in context if item["role"] == "user"]
+    assert len(user_messages) == 21
+    assert user_messages[:-1] == [f"history-{index}" for index in range(5, 25)]
+    assert user_messages[-1] == "history-24"
+    assert context[-1] == {"role": "user", "content": "history-24"}
+
+
+def test_context_includes_current_task_and_tool_results() -> None:
+    model = create_model("Qwen 3B", "ollama", "qwen3:3b")
+    conversation = create_conversation("Task context", model.id)
+
+    create_task(
+        type="analysis",
+        mode="create",
+        conversation_id=conversation.id,
+        status="executing",
+        plan={"step": "analyze"},
+    )
+    tool_call = create_tool_call(
+        conversation_id=conversation.id,
+        tool_name="calculator",
+        arguments={"expression": "2 + 2"},
+        status="completed",
+    )
+    create_tool_result(
+        tool_call.id,
+        status="completed",
+        data={"value": 4},
+    )
+    create_message(conversation.id, "user", "Qual foi o resultado?")
+
+    context = build_context(conversation.id)
+
+    assert any(
+        item["role"] == "system" and "Mosaic current task:" in item["content"]
+        for item in context
+    )
+    assert any(
+        item["role"] == "tool"
+        and "calculator" in item["content"]
+        and '"value": 4' in item["content"]
+        for item in context
+    )
+    assert context[-1] == {"role": "user", "content": "Qual foi o resultado?"}
