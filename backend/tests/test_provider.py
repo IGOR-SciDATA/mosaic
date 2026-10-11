@@ -76,12 +76,12 @@ def test_ollama_stream_handles_empty_content_chunks(monkeypatch) -> None:
 
 
 
-def test_ollama_thinking_is_disabled_by_default_but_can_be_configured(monkeypatch) -> None:
+def test_ollama_thinking_flag_can_be_configured(monkeypatch) -> None:
     captured = {}
 
     def fake_urlopen(request):
         captured["payload"] = json.loads(request.data.decode())
-        return FakeResponse(b'{"message":{"content":"Resposta direta"},"done":true}\\n')
+        return FakeResponse(b'{"message":{"content":"Resposta direta"},"done":true}\n')
 
     monkeypatch.setattr("app.providers.ollama.request.urlopen", fake_urlopen)
 
@@ -89,7 +89,7 @@ def test_ollama_thinking_is_disabled_by_default_but_can_be_configured(monkeypatc
     list(provider.stream(
         [{"role": "user", "content": "Oi"}],
         "qwen3:4b",
-        {"think": False},
+        {"think": True},
     ))
 
-    assert captured["payload"]["think"] is False
+    assert captured["payload"]["think"] is True
