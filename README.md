@@ -61,6 +61,26 @@
 
 ---
 
+# 🇧🇷 Soberania tecnológica e inteligência estratégica nacional
+
+O Mosaic também nasce com um propósito estratégico: **fomentar a soberania de dados e de inteligência no Brasil**, contribuindo para a construção de uma indústria brasileira de inteligência artificial.
+
+Acreditamos que o país precisa ampliar sua capacidade de desenvolver, operar e controlar tecnologias fundamentais — preservando autonomia sobre dados, infraestrutura e conhecimento estratégico.
+
+Nossa visão é contribuir para um ecossistema nacional capaz de:
+
+- fortalecer o controle e a soberania sobre dados;
+- desenvolver tecnologia e conhecimento estratégico no Brasil;
+- reduzir dependências tecnológicas críticas de fornecedores externos;
+- estimular a formação de uma indústria brasileira de inteligência artificial;
+- criar bases tecnológicas que possam evoluir com as necessidades do país.
+
+O Mosaic é um projeto que busca contribuir para esse objetivo por meio de um núcleo de inteligência persistente, independente de modelos e orientado ao controle dos dados pelo usuário.
+
+> **Soberania de dados. Inteligência estratégica. Tecnologia brasileira.**
+
+---
+
 # 🌌 Visão
 
 **Mosaic** nasce de uma ideia simples:
