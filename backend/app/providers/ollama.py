@@ -114,10 +114,14 @@ class OllamaProvider(ModelProvider):
             "model": model_name,
             "messages": messages,
             "stream": stream,
-            # Thinking-capable models (e.g. Qwen3) may emit reasoning separately
-            # from message.content. Mosaic expects a user-facing answer by default.
-            "think": configuration.get("think", False),
         }
+
+        # Do not force think=False when the model has no explicit thinking
+        # preference configured. Ollama's default path can parse Qwen3 reasoning
+        # into message.thinking and keep the user-facing answer in message.content.
+        # Explicit model configuration still overrides the Ollama default.
+        if "think" in configuration:
+            payload["think"] = configuration["think"]
 
         options = {
             key: value
