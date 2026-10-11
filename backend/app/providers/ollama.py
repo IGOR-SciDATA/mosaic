@@ -72,11 +72,11 @@ class OllamaProvider(ModelProvider):
                             pending += content
                             marker_index = pending.find(self._THINKING_END)
                             if marker_index >= 0:
-                                answer = pending[marker_index + len(self._THINKING_END):]
+                                answer = pending[marker_index + len(self._THINKING_END):].lstrip()
                                 pending = ""
                                 answer_started = True
                                 if answer:
-                                    yield answer.lstrip()
+                                    yield answer
 
                     if chunk.get("done"):
                         break
@@ -95,7 +95,7 @@ class OllamaProvider(ModelProvider):
     @classmethod
     def _normalize_answer(cls, content: str, model_name: str) -> str:
         if cls._uses_inline_thinking(model_name) and cls._THINKING_END in content:
-            content = content.rsplit(cls._THINKING_END, 1)[1]
+            content = content.split(cls._THINKING_END, 1)[1]
         return content.strip()
 
     @staticmethod
