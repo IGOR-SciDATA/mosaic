@@ -7,6 +7,8 @@ from app.providers.base import ModelProvider
 
 
 class OllamaProvider(ModelProvider):
+    _THINKING_END = "</think>"
+
     def __init__(self, base_url: str = "http://localhost:11434"):
         self.base_url = base_url.rstrip("/")
 
@@ -20,9 +22,11 @@ class OllamaProvider(ModelProvider):
         response = self._post("/api/chat", payload)
 
         try:
-            return response["message"]["content"]
+            content = response["message"]["content"]
         except (KeyError, TypeError) as exc:
             raise RuntimeError("Invalid Ollama response") from exc
+
+        return self._normalize_answer(content, model_name)
 
     def stream(
         self,
@@ -38,6 +42,13 @@ class OllamaProvider(ModelProvider):
             method="POST",
         )
 
+        # Qwen3 can include its thinking text in message.content despite think=False.
+        # Buffer that model's output until its end marker so internal text is never
+        # sent to the UI. Other Ollama models retain normal token-by-token streaming.
+        inline_thinking = self._uses_inline_thinking(model_name)
+        answer_started = not inline_thinking
+        pending = ""
+
         try:
             with request.urlopen(req) as response:
                 for raw_line in response:
@@ -45,17 +56,52 @@ class OllamaProvider(ModelProvider):
                         continue
 
                     chunk = json.loads(raw_line)
-                    content = chunk.get("message", {}).get("content")
+                    message = chunk.get("message", {})
+                    content = message.get("content", "")
+
+                    # Ollama may expose thinking in a separate field; in that case,
+                    # message.content is already the user-facing answer.
+                    if message.get("thinking"):
+                        answer_started = True
+                        pending = ""
+
                     if content:
-                        yield content
+                        if answer_started:
+                            yield content
+                        else:
+                            pending += content
+                            marker_index = pending.find(self._THINKING_END)
+                            if marker_index >= 0:
+                                answer = pending[marker_index + len(self._THINKING_END):]
+                                pending = ""
+                                answer_started = True
+                                if answer:
+                                    yield answer.lstrip()
 
                     if chunk.get("done"):
                         break
+
+            # Graceful fallback for responses that do not use the inline marker.
+            # This preserves compatibility, although no provider can infer a final
+            # answer from an unknown format that never separates thinking from text.
+            if not answer_started and pending:
+                yield pending.strip()
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"Ollama request failed ({exc.code}): {detail}") from exc
         except error.URLError as exc:
             raise RuntimeError(f"Could not connect to Ollama: {exc.reason}") from exc
+
+    @classmethod
+    def _normalize_answer(cls, content: str, model_name: str) -> str:
+        if cls._uses_inline_thinking(model_name) and cls._THINKING_END in content:
+            content = content.rsplit(cls._THINKING_END, 1)[1]
+        return content.strip()
+
+    @staticmethod
+    def _uses_inline_thinking(model_name: str) -> bool:
+        # Keep model-specific output handling inside the Ollama adapter.
+        return model_name.strip().lower().split(":", 1)[0] == "qwen3"
 
     @staticmethod
     def _request_payload(
