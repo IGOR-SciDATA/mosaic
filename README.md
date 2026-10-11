@@ -26,6 +26,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.13%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Architecture](https://img.shields.io/badge/Architecture-Core%20First-8B0000?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-8B0000?style=for-the-badge)
 ![Offline](https://img.shields.io/badge/Offline-First-111111?style=for-the-badge)
 ![AI](https://img.shields.io/badge/AI-Model%20Independent-444444?style=for-the-badge)
 
