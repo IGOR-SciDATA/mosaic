@@ -39,6 +39,7 @@ const slugify = v => v.toLowerCase().trim().replace(/[^a-z0-9]+/gi,"-").replace(
 const groupFor = d => { const n=d ? Math.floor((Date.now()-new Date(d).getTime())/86400000) : 0; return n<1?"Hoje":n<2?"Ontem":"Últimos 7 dias"; };
 
 function Sidebar({ projects, conversations, activeProjectId, activeConversationId, onProject, onConversation, onNewProject, onNewConversation, onModelSettings, onHelp, mobileOpen, onClose }) {
+  const [expandedProjectIds, setExpandedProjectIds] = useState([]);
   const conversationsByProject = useMemo(() => {
     const map = new Map();
     conversations.forEach(c => {
@@ -57,13 +58,24 @@ function Sidebar({ projects, conversations, activeProjectId, activeConversationI
       <div className="project-tree">
         {projects.map(p => {
           const projectConversations = conversationsByProject.get(p.id) || [];
-          const expanded = p.id === activeProjectId;
+          const expanded = expandedProjectIds.includes(p.id);
+          const active = p.id === activeProjectId;
           return <div className={expanded ? "project-node expanded" : "project-node"} key={p.id}>
-            <button onClick={()=>onProject(p.id)} className={expanded ? "side-project active" : "side-project"}>
-              <span className="project-icon"><Icon name={iconType(p.name)} size={18}/></span>
-              <span className="project-name">{p.name}</span>
-              <span className="project-count">{projectConversations.length}</span>
-            </button>
+            <div className="project-row">
+              <button onClick={()=>onProject(p.id)} className={active ? "side-project active" : "side-project"}>
+                <span className="project-icon"><Icon name={iconType(p.name)} size={18}/></span>
+                <span className="project-name">{p.name}</span>
+                <span className="project-count">{projectConversations.length}</span>
+              </button>
+              <button
+                type="button"
+                className={expanded ? "project-expand expanded" : "project-expand"}
+                onClick={()=>setExpandedProjectIds(ids => expanded ? ids.filter(id => id !== p.id) : [...ids, p.id])}
+                aria-label={expanded ? `Recolher conversas de ${p.name}` : `Expandir conversas de ${p.name}`}
+                aria-expanded={expanded}
+                title={expanded ? "Recolher conversas" : "Expandir conversas"}
+              ><Icon name="chevron" size={15}/></button>
+            </div>
             {expanded && <div className="project-conversation-list">
               {projectConversations.length
                 ? projectConversations.map(c => <button key={c.id} onClick={()=>onConversation(c.id)} className={c.id===activeConversationId ? "conversation-item selected" : "conversation-item"}>
