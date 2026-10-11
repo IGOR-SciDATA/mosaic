@@ -1236,3 +1236,76 @@ body { overflow: hidden; }
   font-size: 12px;
   line-height: 1.5;
 }
+
+
+/* Chat readability: clearer hierarchy and comfortable reading width. */
+.chat-content {
+  width: 100%;
+  max-width: 1180px;
+  padding: 38px 44px 180px;
+}
+.message { gap: 18px; }
+.message-bubble { max-width: min(76%, 760px); padding: 16px 18px 12px; }
+.message-bubble p,
+.assistant-copy > p,
+.formatted-response {
+  font-size: 16px;
+  line-height: 1.82;
+}
+.assistant-copy { max-width: 1040px; }
+.formatted-response { color: #d8d9dc; overflow-wrap: anywhere; }
+.formatted-response > :first-child { margin-top: 0; }
+.formatted-response > :last-child { margin-bottom: 0; }
+.formatted-response p { margin: 0 0 16px; }
+.formatted-response h2,
+.formatted-response h3,
+.formatted-response h4 {
+  color: #f4f4f5;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.formatted-response h2 { margin: 25px 0 12px; font-size: 23px; }
+.formatted-response h3 { margin: 22px 0 10px; font-size: 19px; }
+.formatted-response h4 { margin: 18px 0 8px; font-size: 17px; }
+.formatted-response ul,
+.formatted-response ol { margin: 8px 0 18px; padding-left: 27px; }
+.formatted-response li { padding-left: 5px; margin: 6px 0; }
+.formatted-response li::marker { color: #ef4944; }
+.formatted-response strong { color: #fff; font-weight: 650; }
+.formatted-response em { color: #eee; }
+.formatted-response code {
+  padding: 2px 6px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 5px;
+  background: rgba(255,255,255,.065);
+  color: #ffaaa6;
+  font-size: .91em;
+}
+.formatted-response pre {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 14px 0 20px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: #080909;
+  color: #e6e7e9;
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre;
+}
+.formatted-response pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+@media (max-width: 760px) {
+  .chat-content { padding: 24px 18px 170px; }
+  .message-bubble p,
+  .assistant-copy > p,
+  .formatted-response { font-size: 15px; line-height: 1.75; }
+  .formatted-response h2 { font-size: 21px; }
+  .formatted-response h3 { font-size: 18px; }
+}
