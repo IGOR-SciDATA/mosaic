@@ -43,6 +43,7 @@ def test_ollama_generate_sends_model_messages_and_configuration(monkeypatch) -> 
     assert payload["model"] == "qwen3:3b"
     assert payload["messages"] == [{"role": "user", "content": "Olá"}]
     assert payload["stream"] is False
+    assert payload["think"] is False
     assert payload["options"] == {"temperature": 0.2}
 
 
@@ -72,3 +73,23 @@ def test_ollama_stream_handles_empty_content_chunks(monkeypatch) -> None:
 
     provider = OllamaProvider("http://ollama.test")
     assert list(provider.stream([{"role": "user", "content": "Olá"}], "qwen3:3b", {})) == ["ok"]
+
+
+
+def test_ollama_thinking_is_disabled_by_default_but_can_be_configured(monkeypatch) -> None:
+    captured = {}
+
+    def fake_urlopen(request):
+        captured["payload"] = json.loads(request.data.decode())
+        return FakeResponse(b'{"message":{"content":"Resposta direta"},"done":true}\\n')
+
+    monkeypatch.setattr("app.providers.ollama.request.urlopen", fake_urlopen)
+
+    provider = OllamaProvider("http://ollama.test")
+    list(provider.stream(
+        [{"role": "user", "content": "Oi"}],
+        "qwen3:4b",
+        {"think": False},
+    ))
+
+    assert captured["payload"]["think"] is False
