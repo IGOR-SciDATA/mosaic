@@ -116,3 +116,40 @@ def test_generate_keeps_normal_answer_without_marker():
     )
 
     assert result == "resposta normal"
+
+
+
+def test_generate_extracts_tagged_thinking_for_any_ollama_model():
+    provider = OllamaProvider()
+    provider._post = lambda path, payload: {
+        "message": {
+            "role": "assistant",
+            "content": "<think>private reasoning</think>Resposta final.",
+        }
+    }
+
+    result = provider.generate(
+        messages=[{"role": "user", "content": "Responda"}],
+        model_name="llama3.2:3b",
+        configuration={},
+    )
+
+    assert result == "Resposta final."
+
+
+def test_generate_does_not_expose_truncated_tagged_thinking():
+    provider = OllamaProvider()
+    provider._post = lambda path, payload: {
+        "message": {
+            "role": "assistant",
+            "content": "<think>private reasoning without a closing marker",
+        }
+    }
+
+    result = provider.generate(
+        messages=[{"role": "user", "content": "Responda"}],
+        model_name="llama3.2:3b",
+        configuration={},
+    )
+
+    assert result == ""
