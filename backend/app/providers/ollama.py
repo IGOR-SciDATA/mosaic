@@ -68,6 +68,9 @@ class OllamaProvider(ModelProvider):
             "model": model_name,
             "messages": messages,
             "stream": stream,
+            # Thinking-capable models (e.g. Qwen3) may emit reasoning separately
+            # from message.content. Mosaic expects a user-facing answer by default.
+            "think": configuration.get("think", False),
         }
 
         options = {
