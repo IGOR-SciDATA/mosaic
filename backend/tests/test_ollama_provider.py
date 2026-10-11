@@ -116,3 +116,25 @@ def test_generate_keeps_normal_answer_without_marker():
     )
 
     assert result == "resposta normal"
+
+
+def test_request_payload_does_not_force_thinking_mode_when_unconfigured():
+    payload = OllamaProvider._request_payload(
+        messages=[{"role": "user", "content": "Oi"}],
+        model_name="qwen3:4b",
+        configuration={},
+        stream=False,
+    )
+
+    assert "think" not in payload
+
+
+def test_request_payload_preserves_explicit_thinking_configuration():
+    payload = OllamaProvider._request_payload(
+        messages=[{"role": "user", "content": "Oi"}],
+        model_name="qwen3:4b",
+        configuration={"think": False},
+        stream=False,
+    )
+
+    assert payload["think"] is False
