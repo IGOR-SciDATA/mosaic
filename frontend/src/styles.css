@@ -1394,3 +1394,104 @@ body { overflow: hidden; }
   .project-tabs { height: 42px; min-height: 42px; padding: 0 5px; }
   .project-tabs button { height: 42px; min-width: 76px; }
 }
+
+
+/* Modal UX — responsive sizing, cleaner spacing, and visible actions */
+.modal-backdrop {
+  align-items: center;
+  justify-content: center;
+  padding: clamp(10px, 3vh, 24px) clamp(10px, 3vw, 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.modal {
+  width: min(560px, calc(100vw - 32px));
+  min-height: 0;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  flex: 0 1 auto;
+  border-radius: 12px;
+}
+.modal-header {
+  flex: 0 0 54px;
+  min-height: 54px;
+  padding: 0 18px;
+}
+.modal-header strong { font-size: 15px; }
+.modal-header button {
+  width: 32px;
+  height: 32px;
+  font-size: 23px;
+}
+.modal > .modal-form,
+.modal > form.modal-form {
+  flex: 0 1 auto;
+  min-height: 0;
+  padding: 18px;
+  gap: 13px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.modal-form label { gap: 6px; }
+.modal-form input,
+.modal-form textarea,
+.modal-form select {
+  min-height: 38px;
+  padding: 9px 11px;
+  border-radius: 7px;
+}
+.modal-form textarea { min-height: 76px; }
+.modal-actions {
+  position: sticky;
+  bottom: -18px;
+  z-index: 1;
+  margin: 2px -18px -18px;
+  padding: 12px 18px 18px;
+  background: linear-gradient(to bottom, rgba(16,18,19,.94), #101213 30%);
+}
+.modal-actions > button {
+  min-height: 36px;
+  padding: 0 14px;
+}
+.modal-form .primary-action { min-height: 36px; }
+.modal-form .modal-hint { line-height: 1.5; }
+.modal-wide { width: min(560px, calc(100vw - 32px)); }
+@media (max-height: 560px) {
+  .modal-backdrop {
+    align-items: flex-start;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .modal {
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+  .modal-header {
+    flex-basis: 46px;
+    min-height: 46px;
+  }
+  .modal > .modal-form,
+  .modal > form.modal-form {
+    padding: 12px 16px;
+    gap: 9px;
+  }
+  .modal-actions {
+    bottom: -12px;
+    margin: 2px -16px -12px;
+    padding: 9px 16px 12px;
+  }
+}
+@media (max-width: 480px) {
+  .modal-backdrop { padding: 8px; }
+  .modal,
+  .modal-wide { width: calc(100vw - 16px); }
+  .modal-header { padding: 0 14px; }
+  .modal > .modal-form,
+  .modal > form.modal-form { padding: 14px; gap: 11px; }
+  .modal-actions {
+    bottom: -14px;
+    margin: 2px -14px -14px;
+    padding: 10px 14px 14px;
+  }
+}
