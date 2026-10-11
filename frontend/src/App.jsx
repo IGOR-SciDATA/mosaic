@@ -97,6 +97,91 @@ function ProjectHeader({ project, tab, setTab }) {
   return <section className="project-header"><div className="project-identity"><MosaicMark compact/><div><h1>{project?.name || "Mosaic"}</h1><p>{project?.description || "Workspace de desenvolvimento do Mosaic."}</p></div></div><nav className="project-tabs">{tabs.map(([i,l])=><button key={l} className={tab===l?"active":""} onClick={()=>setTab(l)}><Icon name={i} size={16}/><span>{l}</span></button>)}</nav></section>;
 }
 
+function renderInline(text) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/g).filter(Boolean);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("`") && part.endsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
+    if (part.startsWith("*") && part.endsWith("*")) return <em key={index}>{part.slice(1, -1)}</em>;
+    return part;
+  });
+}
+
+function FormattedResponse({ content }) {
+  const lines = String(content || "").replace(/\r\n/g, "\n").split("\n");
+  const blocks = [];
+  let paragraph = [];
+  let list = [];
+  let listType = "";
+  let code = [];
+  let inCode = false;
+
+  const flushParagraph = () => {
+    if (paragraph.length) {
+      blocks.push(<p key={blocks.length}>{renderInline(paragraph.join(" "))}</p>);
+      paragraph = [];
+    }
+  };
+  const flushList = () => {
+    if (list.length) {
+      const Items = listType === "ordered" ? "ol" : "ul";
+      blocks.push(<Items key={blocks.length}>{list.map((item, index) => <li key={index}>{renderInline(item)}</li>)}</Items>);
+      list = [];
+      listType = "";
+    }
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      if (inCode) {
+        blocks.push(<pre key={blocks.length}><code>{code.join("\n")}</code></pre>);
+        code = [];
+      }
+      inCode = !inCode;
+      return;
+    }
+    if (inCode) {
+      code.push(line);
+      return;
+    }
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = heading[1].length;
+      const text = heading[2];
+      if (level === 1) blocks.push(<h2 key={blocks.length}>{renderInline(text)}</h2>);
+      else if (level === 2) blocks.push(<h3 key={blocks.length}>{renderInline(text)}</h3>);
+      else blocks.push(<h4 key={blocks.length}>{renderInline(text)}</h4>);
+      return;
+    }
+    const bullet = trimmed.match(/^[-*+]\s+(.+)$/);
+    const numbered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+    if (bullet || numbered) {
+      flushParagraph();
+      const nextType = numbered ? "ordered" : "unordered";
+      if (list.length && listType !== nextType) flushList();
+      listType = nextType;
+      list.push((bullet || numbered)[1]);
+      return;
+    }
+    flushList();
+    paragraph.push(trimmed);
+  });
+  flushParagraph();
+  flushList();
+  if (inCode && code.length) blocks.push(<pre key={blocks.length}><code>{code.join("\n")}</code></pre>);
+  return <div className="formatted-response">{blocks}</div>;
+}
+
 function MessageList({ messages, streaming }) {
   if (!messages.length && !streaming) {
     return <div className="conversation-empty"><MosaicMark compact/><h2>Conversa pronta</h2><p>Envie uma mensagem para começar a conversar com o modelo selecionado.</p></div>;
@@ -111,7 +196,7 @@ function MessageList({ messages, streaming }) {
       : <div className="message assistant-message" key={message.id || message.localId}>
           <div className="message-avatar mosaic"><MosaicMark compact/></div>
           <div className={message.content ? "assistant-copy" : "assistant-copy assistant-empty"}>
-            <p>{message.content || (streaming ? "Gerando resposta…" : "O Mosaic recebeu a mensagem, mas o modelo não retornou conteúdo.")}</p>
+            {message.content ? <FormattedResponse content={message.content}/> : <p>{streaming ? "Gerando resposta…" : "O Mosaic recebeu a mensagem, mas o modelo não retornou conteúdo."}</p>}
             {message.content && <time className="message-time">{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time>}
           </div>
         </div>

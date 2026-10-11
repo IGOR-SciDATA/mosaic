@@ -94,8 +94,13 @@ class OllamaProvider(ModelProvider):
 
     @classmethod
     def _normalize_answer(cls, content: str, model_name: str) -> str:
-        if cls._uses_inline_thinking(model_name) and cls._THINKING_END in content:
+        # Thinking tags are an output-format detail, not a model identity.
+        # If a provider returns tagged reasoning inline, persist only the final answer.
+        if cls._THINKING_END in content:
             content = content.split(cls._THINKING_END, 1)[1]
+        elif content.lstrip().startswith("<think>"):
+            # A truncated thinking block has no safe final answer to display.
+            return ""
         return content.strip()
 
     @staticmethod
