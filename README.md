@@ -25,15 +25,15 @@
 <br>
 
 ![Python](https://img.shields.io/badge/Python-3.13%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Architecture](https://img.shields.io/badge/Architecture-Core%20First-8B0000?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-8B0000?style=for-the-badge)
-![Offline](https://img.shields.io/badge/Offline-First-111111?style=for-the-badge)
-![AI](https://img.shields.io/badge/AI-Model%20Independent-444444?style=for-the-badge)
+![Architecture](https://img.shields.io/badge/Architecture-Core%20First-7C3AED?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-16A34A?style=for-the-badge&logo=opensourceinitiative&logoColor=white)
+![Offline](https://img.shields.io/badge/Offline-First-0F766E?style=for-the-badge)
+![AI](https://img.shields.io/badge/AI-Model%20Independent-2563EB?style=for-the-badge)
 
-![Memory](https://img.shields.io/badge/Memory-Persistent-8B0000?style=flat-square)
-![State](https://img.shields.io/badge/State-Explicit-555555?style=flat-square)
-![Models](https://img.shields.io/badge/Models-Replacable-555555?style=flat-square)
-![Version](https://img.shields.io/badge/MOSAIC-v0.1.0-8B0000?style=flat-square)
+![Memory](https://img.shields.io/badge/Memory-Persistent-DB2777?style=for-the-badge)
+![State](https://img.shields.io/badge/State-Explicit-D97706?style=for-the-badge)
+![Models](https://img.shields.io/badge/Models-Replaceable-0891B2?style=for-the-badge)
+![Version](https://img.shields.io/badge/MOSAIC-v0.1.0-DC2626?style=for-the-badge)
 
 <br>
 
