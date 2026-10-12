@@ -109,3 +109,24 @@ def test_context_includes_current_task_and_tool_results() -> None:
         for item in context
     )
     assert context[-1] == {"role": "user", "content": "Qual foi o resultado?"}
+
+
+
+def test_context_always_includes_mosaic_identity_and_global_memory() -> None:
+    model = create_model("Local Model", "ollama", "local:test")
+    conversation = create_conversation("General conversation", model.id)
+    remember(
+        type="user_claim",
+        key="alegacao",
+        value="o Brasil foi descoberto em 2002",
+        source="user",
+    )
+    create_message(conversation.id, "user", "Quando o Brasil foi descoberto?")
+
+    context = build_context(conversation.id)
+
+    assert context[0]["role"] == "system"
+    assert "identidade nem a memória do sistema" in context[0]["content"]
+    memory_messages = [item["content"] for item in context if item["role"] == "system" and "Mosaic memory" in item["content"]]
+    assert len(memory_messages) == 1
+    assert "[user_claim] alegacao: o Brasil foi descoberto em 2002" in memory_messages[0]
