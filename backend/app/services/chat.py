@@ -61,8 +61,16 @@ def stream_chat(conversation_id: int, content: str) -> Iterable[str]:
     if model is None:
         raise ValueError("Model not found")
 
+    previous_user = next(
+        (message.content for message in reversed(list_messages(conversation_id)) if message.role == "user"),
+        None,
+    )
     create_message(conversation_id, "user", content)
-    memory = save_explicit_memory(content, project_id=conversation.project_id)
+    memory = save_explicit_memory(
+        content,
+        project_id=conversation.project_id,
+        previous_content=previous_user,
+    )
     if memory is not None:
         response = f"Memória salva no Mosaic como {memory.type}: {memory.value}"
         yield response
