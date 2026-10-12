@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from app.identity import MOSAIC_IDENTITY
 from app.memory.manager import get_global_memories, get_project_memories
 from app.models.conversation_repository import get_conversation
 from app.models.message_repository import list_messages
@@ -72,7 +73,8 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
     context.append({
         "role": "system",
         "content": (
-            "Você é o gerador de respostas do Mosaic, não a identidade nem a memória do sistema.\n"
+            MOSAIC_IDENTITY + "\n\n"
+            "Você gera respostas em nome do Mosaic; não se apresente como um modelo genérico nem negue a identidade operacional descrita acima.\n"
             "O Mosaic Core controla identidade, histórico e memórias; o modelo não deve alegar que sua memória interna é a fonte desses dados.\n"
             "Trate memórias como informações registradas, não como verdade automaticamente confirmada.\n"
             "Uma alegação do usuário deve continuar identificada como alegação do usuário. Ao responder perguntas factuais, diferencie o conhecimento factual disponível daquilo que o usuário pediu para guardar.\n"
