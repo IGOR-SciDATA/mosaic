@@ -61,6 +61,24 @@
 
 ---
 
+# 🖥️ Interface Web
+
+A interface web atual do Mosaic reúne conversas, projetos, seleção de modelos e um painel lateral de contexto em um workspace único. O visual mantém a identidade do projeto: fundo escuro, detalhes em vermelho e a marca Mosaic.
+
+<div align="center">
+
+<img
+  src="assets/branding/download.png"
+  alt="Interface web atual do Mosaic, com conversa, projetos, modelo selecionado e painel de contexto"
+  width="100%"
+/>
+
+<sub>Interface web do Mosaic · Captura do ambiente de desenvolvimento</sub>
+
+</div>
+
+---
+
 # 🇧🇷 Soberania tecnológica e inteligência estratégica nacional
 
 O Mosaic também nasce com um propósito estratégico: **fomentar a soberania de dados e de inteligência no Brasil**, contribuindo para a construção de uma indústria brasileira de inteligência artificial.
