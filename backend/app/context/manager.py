@@ -68,8 +68,8 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
     all_messages = list_messages(conversation_id)
     context: list[dict[str, str]] = []
 
-    # Existing system messages are the only currently defined source of
-    # system/core instructions; no new instruction text is invented here.
+    # Identity and behavioral rules belong to Mosaic Core, not the selected model.
+    context.append({"role": "system", "content": "Você é o gerador de respostas do Mosaic, não a identidade nem a memória do sistema.\nO Mosaic Core controla identidade, histórico e memórias; o modelo não deve alegar que sua memória interna é a fonte desses dados.\nTrate memórias como informações registradas, não como verdade automaticamente confirmada.\nUma alegação do usuário deve continuar identificada como alegação do usuário. Ao responder perguntas factuais, diferencie o conhecimento factual disponível daquilo que o usuário pediu para guardar.\nQuando uma memória relevante estiver disponível no contexto, mencione-a quando pertinente sem substituir o fato por ela.\nNão diga que verificou fontes externas se nenhuma fonte ou ferramenta de verificação foi fornecida nesta solicitação.\n"})
     context.extend(
         {"role": message.role, "content": message.content}
         for message in all_messages
