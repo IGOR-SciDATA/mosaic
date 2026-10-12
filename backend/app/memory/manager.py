@@ -33,6 +33,7 @@ def remember(
 def save_explicit_memory(
     content: str,
     project_id: int | None = None,
+    previous_content: str | None = None,
 ) -> Memory | None:
     """Persist an explicit natural-language memory request without involving the model."""
     match = _SAVE_PREFIX.match(content)
