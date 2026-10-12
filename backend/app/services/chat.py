@@ -4,6 +4,7 @@ from app.context.manager import build_context
 from app.models.conversation_repository import get_conversation
 from app.models.message import Message
 from app.models.message_repository import create_message
+from app.memory.manager import save_explicit_memory
 from app.models.repository import get_model
 from app.providers.ollama import OllamaProvider
 
@@ -24,6 +25,13 @@ def chat(conversation_id: int, content: str) -> Message:
         raise ValueError("Model not found")
 
     create_message(conversation_id, "user", content)
+    memory = save_explicit_memory(content, project_id=conversation.project_id)
+    if memory is not None:
+        return create_message(
+            conversation_id,
+            "assistant",
+            f"Memória salva no Mosaic como {memory.type}: {memory.value}",
+        )
     messages = build_context(conversation_id)
 
     provider = _get_provider(model.provider)
@@ -46,6 +54,12 @@ def stream_chat(conversation_id: int, content: str) -> Iterable[str]:
         raise ValueError("Model not found")
 
     create_message(conversation_id, "user", content)
+    memory = save_explicit_memory(content, project_id=conversation.project_id)
+    if memory is not None:
+        response = f"Memória salva no Mosaic como {memory.type}: {memory.value}"
+        yield response
+        create_message(conversation_id, "assistant", response)
+        return
     messages = build_context(conversation_id)
     provider = _get_provider(model.provider)
 
