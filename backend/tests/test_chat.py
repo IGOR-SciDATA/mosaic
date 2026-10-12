@@ -34,7 +34,9 @@ def test_chat_flow_persists_user_and_assistant_messages(client, monkeypatch) -> 
     conversation_id = _conversation(client)
 
     def fake_generate(self, messages, model_name, configuration):
-        assert messages == [{"role": "user", "content": "Olá"}]
+        assert messages[-1] == {"role": "user", "content": "Olá"}
+        assert messages[0]["role"] == "system"
+        assert "identidade" in messages[0]["content"]
         assert model_name == "qwen3:3b"
         return "Olá! Como posso ajudar?"
 
@@ -70,7 +72,9 @@ def test_chat_flow_uses_previous_history(client, monkeypatch) -> None:
     client.post(f"/conversations/{conversation_id}/chat", json={"content": "Primeira"})
     client.post(f"/conversations/{conversation_id}/chat", json={"content": "Segunda"})
 
-    assert calls[1] == [
+    assert calls[1][0]["role"] == "system"
+    assert "identidade" in calls[1][0]["content"]
+    assert calls[1][-3:] == [
         {"role": "user", "content": "Primeira"},
         {"role": "assistant", "content": "Resposta"},
         {"role": "user", "content": "Segunda"},
@@ -150,14 +154,17 @@ def test_chat_passes_project_state_and_memory_to_provider(client, monkeypatch) -
     )
 
     assert response.status_code == 200
-    assert captured["messages"][0] == {
-        "role": "system",
-        "content": "Mosaic project state:\n{'phase': 'development'}",
-    }
-    assert captured["messages"][1] == {
-        "role": "system",
-        "content": "Mosaic memory:\n- [project_state] focus: Integrar o contexto do projeto",
-    }
+    assert "identidade" in captured["messages"][0]["content"]
+    assert any(
+        item["role"] == "system" and "Mosaic project state:" in item["content"]
+        and "{'phase': 'development'}" in item["content"]
+        for item in captured["messages"]
+    )
+    assert any(
+        item["role"] == "system" and "Mosaic memory" in item["content"]
+        and "[project_state] focus: Integrar o contexto do projeto" in item["content"]
+        for item in captured["messages"]
+    )
     assert captured["messages"][-1] == {
         "role": "user",
         "content": "Onde estamos?",
