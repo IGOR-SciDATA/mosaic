@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 
 from app.identity import MOSAIC_IDENTITY
@@ -17,6 +18,17 @@ ACTIVE_TASK_STATUSES = {
     "executing",
     "validating",
 }
+
+_IDENTITY_QUESTION = re.compile(
+    r"\b(?:quem\s+(?:é|e)\s+voc[eê]|quem\s+(?:é|e)\s+o\s+mosaic|"
+    r"o\s+que\s+(?:é|e)\s+voc[eê]|qual\s+(?:é|e)\s+sua\s+identidade|"
+    r"fale\s+sobre\s+voc[eê])\b",
+    re.IGNORECASE,
+)
+
+
+def _is_identity_question(content: str | None) -> bool:
+    return bool(content and _IDENTITY_QUESTION.search(content))
 
 
 def _task_context(conversation_id: int) -> dict[str, Any] | None:
@@ -69,6 +81,15 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
     all_messages = list_messages(conversation_id)
     context: list[dict[str, str]] = []
 
+    current_user = next(
+        (
+            message
+            for message in reversed(all_messages)
+            if message.role == "user"
+        ),
+        None,
+    )
+
     # Identity and behavioral rules belong to Mosaic Core, not the selected model.
     context.append({
         "role": "system",
@@ -105,8 +126,13 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
     else:
         memories = []
 
-    # Global memories are shared across conversations; project memories stay isolated.
-    memories = get_global_memories() + memories
+    # Identity questions need the canonical identity, not unrelated user/project memories.
+    # Keep memory retrieval out of this turn instead of relying only on model instructions.
+    if _is_identity_question(current_user.content if current_user else None):
+        memories = []
+    else:
+        # Global memories are shared across conversations; project memories stay isolated.
+        memories = get_global_memories() + memories
     if memories:
         memory_lines = [
             f"- [{memory.type}] {memory.key}: {memory.value}"
@@ -117,14 +143,6 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
             "content": "Mosaic memory (records, not verified facts):\n" + "\n".join(memory_lines),
         })
 
-    current_user = next(
-        (
-            message
-            for message in reversed(all_messages)
-            if message.role == "user"
-        ),
-        None,
-    )
 
     history = [
         {"role": message.role, "content": message.content}
