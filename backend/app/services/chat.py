@@ -31,7 +31,9 @@ def chat(conversation_id: int, content: str) -> Message:
     create_message(conversation_id, "user", content)
     memory = save_explicit_memory(
         content,
-        project_id=conversation.project_id,
+        # Explicit user memory is global by default, even when saved from a project chat.
+        # Project-scoped state is stored separately through project memory operations.
+        project_id=None,
         previous_content=previous_user,
     )
     if memory is not None:
@@ -68,7 +70,9 @@ def stream_chat(conversation_id: int, content: str) -> Iterable[str]:
     create_message(conversation_id, "user", content)
     memory = save_explicit_memory(
         content,
-        project_id=conversation.project_id,
+        # Explicit user memory is global by default, even when saved from a project chat.
+        # Project-scoped state is stored separately through project memory operations.
+        project_id=None,
         previous_content=previous_user,
     )
     if memory is not None:
