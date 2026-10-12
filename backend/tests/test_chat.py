@@ -162,3 +162,46 @@ def test_chat_passes_project_state_and_memory_to_provider(client, monkeypatch) -
         "role": "user",
         "content": "Onde estamos?",
     }
+
+
+
+def test_explicit_memory_request_is_saved_without_calling_model(client, monkeypatch) -> None:
+    conversation_id = _conversation(client)
+
+    def unexpected_generate(*args, **kwargs):
+        raise AssertionError("explicit memory commands should be handled by Mosaic Core")
+
+    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", unexpected_generate)
+
+    response = client.post(
+        f"/conversations/{conversation_id}/chat",
+        json={"content": "Mosaic, salve que o Brasil foi descoberto em 2002"},
+    )
+
+    assert response.status_code == 200
+    assert "Memória salva no Mosaic como user_claim" in response.json()["content"]
+
+    memories_response = client.get("/memories")
+    assert memories_response.status_code == 200
+    saved = [item for item in memories_response.json() if item["value"] == "o Brasil foi descoberto em 2002"]
+    assert len(saved) == 1
+    assert saved[0]["type"] == "user_claim"
+    assert saved[0]["source"] == "user"
+
+
+def test_explicit_preference_memory_is_classified(client) -> None:
+    conversation_id = _conversation(client)
+
+    response = client.post(
+        f"/conversations/{conversation_id}/chat",
+        json={"content": "Mosaic, salve que eu gosto de música house"},
+    )
+
+    assert response.status_code == 200
+    assert "user_preference" in response.json()["content"]
+
+    memories = client.get("/memories").json()
+    assert any(
+        item["type"] == "user_preference" and item["value"] == "eu gosto de música house"
+        for item in memories
+    )
