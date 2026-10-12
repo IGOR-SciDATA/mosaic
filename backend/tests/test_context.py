@@ -132,7 +132,35 @@ def test_context_always_includes_mosaic_identity_and_global_memory() -> None:
     context = build_context(conversation.id)
 
     assert context[0]["role"] == "system"
+    assert "Sou o Mosaic, um assistente de inteligência artificial" in context[0]["content"]
+    assert "O modelo de IA selecionado é responsável por gerar minhas respostas" in context[0]["content"]
+    assert "não se apresente como um modelo genérico" in context[0]["content"]
+    assert "não introduza alegações anteriores em respostas sem relação com elas" in context[0]["content"]
+    assert "não mencione memórias do usuário, fatos históricos ou assuntos anteriores" in context[0]["content"]
+    assert "Não invente datas de criação, lançamento ou disponibilidade do Mosaic" in context[0]["content"]
     assert "identidade nem a memória do sistema" in context[0]["content"]
     memory_messages = [item["content"] for item in context if item["role"] == "system" and "Mosaic memory" in item["content"]]
     assert len(memory_messages) == 1
     assert "[user_claim] alegacao: o Brasil foi descoberto em 2002" in memory_messages[0]
+
+
+def test_identity_question_does_not_receive_unrelated_memories() -> None:
+    model = create_model("Local Model", "ollama", "local:test")
+    conversation = create_conversation("Identity question", model.id)
+    remember(
+        type="user_claim",
+        key="alegacao",
+        value="o Brasil foi descoberto em 2002",
+        source="user",
+    )
+    create_message(conversation.id, "user", "Oi, quem é você?")
+
+    context = build_context(conversation.id)
+
+    assert "Sou o Mosaic, um assistente de inteligência artificial" in context[0]["content"]
+    assert not any(
+        item["role"] == "system" and "Mosaic memory" in item["content"]
+        for item in context
+    )
+    assert not any("Brasil foi descoberto em 2002" in item["content"] for item in context)
+    assert context[-1] == {"role": "user", "content": "Oi, quem é você?"}

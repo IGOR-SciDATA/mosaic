@@ -56,7 +56,10 @@ def get_memory_endpoint(memory_id: int) -> Memory:
 @router.patch("/{memory_id}", response_model=Memory)
 def update_memory_endpoint(memory_id: int, payload: MemoryUpdate) -> Memory:
     try:
-        memory = update_memory(memory_id, **payload.model_dump(exclude_unset=True))
+        update_fields = payload.model_dump(exclude_unset=True)
+        if "project_id" in update_fields and update_fields["project_id"] is None:
+            update_fields["clear_project_id"] = True
+        memory = update_memory(memory_id, **update_fields)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -1,6 +1,8 @@
 import json
+import re
 from typing import Any
 
+from app.identity import MOSAIC_IDENTITY
 from app.memory.manager import get_global_memories, get_project_memories
 from app.models.conversation_repository import get_conversation
 from app.models.message_repository import list_messages
@@ -16,6 +18,17 @@ ACTIVE_TASK_STATUSES = {
     "executing",
     "validating",
 }
+
+_IDENTITY_QUESTION = re.compile(
+    r"\b(?:quem\s+(?:é|e)\s+voc[eê]|quem\s+(?:é|e)\s+o\s+mosaic|"
+    r"o\s+que\s+(?:é|e)\s+voc[eê]|qual\s+(?:é|e)\s+sua\s+identidade|"
+    r"fale\s+sobre\s+voc[eê])\b",
+    re.IGNORECASE,
+)
+
+
+def _is_identity_question(content: str | None) -> bool:
+    return bool(content and _IDENTITY_QUESTION.search(content))
 
 
 def _task_context(conversation_id: int) -> dict[str, Any] | None:
@@ -68,14 +81,27 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
     all_messages = list_messages(conversation_id)
     context: list[dict[str, str]] = []
 
+    current_user = next(
+        (
+            message
+            for message in reversed(all_messages)
+            if message.role == "user"
+        ),
+        None,
+    )
+
     # Identity and behavioral rules belong to Mosaic Core, not the selected model.
     context.append({
         "role": "system",
         "content": (
-            "Você é o gerador de respostas do Mosaic, não a identidade nem a memória do sistema.\n"
+            MOSAIC_IDENTITY + "\n\n"
+            "Você gera respostas em nome do Mosaic; não se apresente como um modelo genérico nem negue a identidade operacional descrita acima.\n"
             "O Mosaic Core controla identidade, histórico e memórias; o modelo não deve alegar que sua memória interna é a fonte desses dados.\n"
             "Trate memórias como informações registradas, não como verdade automaticamente confirmada.\n"
             "Uma alegação do usuário deve continuar identificada como alegação do usuário. Ao responder perguntas factuais, diferencie o conhecimento factual disponível daquilo que o usuário pediu para guardar.\n"
+            "Use memórias somente quando forem relevantes para responder à pergunta atual; não introduza alegações anteriores em respostas sem relação com elas.\n"
+            "Ao responder quem é você, explique apenas a identidade e o funcionamento do Mosaic; não mencione memórias do usuário, fatos históricos ou assuntos anteriores sem solicitação.\n"
+            "Não invente datas de criação, lançamento ou disponibilidade do Mosaic. Se perguntarem uma data que não esteja registrada em fonte confiável, diga que não tem essa informação confirmada.\n"
             "Quando uma memória relevante estiver disponível no contexto, mencione-a quando pertinente sem substituir o fato por ela.\n"
             "Não diga que verificou fontes externas se nenhuma fonte ou ferramenta de verificação foi fornecida nesta solicitação."
         ),
@@ -100,8 +126,13 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
     else:
         memories = []
 
-    # Global memories are shared across conversations; project memories stay isolated.
-    memories = get_global_memories() + memories
+    # Identity questions need the canonical identity, not unrelated user/project memories.
+    # Keep memory retrieval out of this turn instead of relying only on model instructions.
+    if _is_identity_question(current_user.content if current_user else None):
+        memories = []
+    else:
+        # Global memories are shared across conversations; project memories stay isolated.
+        memories = get_global_memories() + memories
     if memories:
         memory_lines = [
             f"- [{memory.type}] {memory.key}: {memory.value}"
@@ -112,14 +143,6 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
             "content": "Mosaic memory (records, not verified facts):\n" + "\n".join(memory_lines),
         })
 
-    current_user = next(
-        (
-            message
-            for message in reversed(all_messages)
-            if message.role == "user"
-        ),
-        None,
-    )
 
     history = [
         {"role": message.role, "content": message.content}

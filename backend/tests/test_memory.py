@@ -1,7 +1,7 @@
 import pytest
 
 from app.db.database import get_connection, init_db
-from app.models.memory_repository import create_memory, get_memory, list_memories
+from app.models.memory_repository import create_memory, get_memory, list_memories, update_memory
 
 
 @pytest.fixture(autouse=True)
@@ -71,3 +71,26 @@ def test_invalid_memory_type_is_rejected() -> None:
 def test_invalid_confidence_is_rejected(confidence: float) -> None:
     with pytest.raises(ValueError, match="confidence"):
         create_memory("user_fact", "key", "value", "user", confidence=confidence)
+
+
+def test_memory_can_be_moved_from_project_scope_to_global_scope() -> None:
+    with get_connection() as connection:
+        connection.execute(
+            "INSERT INTO projects (name, workspace, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            ("Test Project", "/tmp/test-project", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+        )
+        connection.commit()
+
+    memory = create_memory(
+        type="user_claim",
+        key="alegacao",
+        value="o Brasil foi descoberto em 2002",
+        source="user",
+        project_id=1,
+    )
+
+    updated = update_memory(memory.id, clear_project_id=True)
+
+    assert updated is not None
+    assert updated.project_id is None
+    assert updated.value == memory.value

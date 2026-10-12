@@ -173,7 +173,13 @@ def test_chat_passes_project_state_and_memory_to_provider(client, monkeypatch) -
 
 
 def test_explicit_memory_request_is_saved_without_calling_model(client, monkeypatch) -> None:
-    conversation_id = _conversation(client)
+    project = create_project(name="Memory scope", workspace="/tmp/memory-scope")
+    model = create_model("Qwen 3B", "ollama", "qwen3:3b")
+    conversation = client.post(
+        "/conversations",
+        json={"title": "Project chat", "model_id": model.id, "project_id": project.id},
+    ).json()
+    conversation_id = conversation["id"]
 
     def unexpected_generate(*args, **kwargs):
         raise AssertionError("explicit memory commands should be handled by Mosaic Core")
@@ -194,6 +200,31 @@ def test_explicit_memory_request_is_saved_without_calling_model(client, monkeypa
     assert len(saved) == 1
     assert saved[0]["type"] == "user_claim"
     assert saved[0]["source"] == "user"
+    assert saved[0]["project_id"] is None
+
+    next_conversation = client.post(
+        "/conversations",
+        json={"title": "Memory recall", "model_id": model.id},
+    ).json()
+    captured = {}
+
+    def capture_context(self, messages, model_name, configuration):
+        captured["messages"] = messages
+        return "Lembro do registro salvo."
+
+    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", capture_context)
+    recall_response = client.post(
+        f"/conversations/{next_conversation['id']}/chat",
+        json={"content": "O que você lembra sobre o Brasil?"},
+    )
+
+    assert recall_response.status_code == 200
+    assert any(
+        item["role"] == "system"
+        and "Mosaic memory" in item["content"]
+        and "o Brasil foi descoberto em 2002" in item["content"]
+        for item in captured["messages"]
+    )
 
 
 def test_explicit_preference_memory_is_classified(client) -> None:
@@ -232,4 +263,66 @@ def test_save_this_information_uses_previous_user_statement(client) -> None:
         item["type"] == "user_claim"
         and item["value"] == "O Brasil foi descoberto em 2002"
         for item in memories
+    )
+
+
+def test_memory_api_can_clear_project_scope(client) -> None:
+    project = create_project(name="Memory scope API", workspace="/tmp/memory-scope-api")
+    response = client.post(
+        "/memories",
+        json={
+            "type": "user_claim",
+            "key": "alegacao",
+            "value": "o Brasil foi descoberto em 2002",
+            "source": "user",
+            "project_id": project.id,
+        },
+    )
+    assert response.status_code == 200
+    memory_id = response.json()["id"]
+
+    updated = client.patch(f"/memories/{memory_id}", json={"project_id": None})
+
+    assert updated.status_code == 200
+    assert updated.json()["project_id"] is None
+
+
+def test_save_to_memory_phrase_is_clean_and_retrievable_in_new_conversation(client, monkeypatch) -> None:
+    conversation_id = _conversation(client)
+
+    response = client.post(
+        f"/conversations/{conversation_id}/chat",
+        json={"content": "Salve na memória que a Alemanha foi descoberto em 2002"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["content"] == (
+        "Memória salva no Mosaic como user_claim: a Alemanha foi descoberto em 2002"
+    )
+
+    memories = client.get("/memories").json()
+    saved = [item for item in memories if "Alemanha" in item["value"]]
+    assert len(saved) == 1
+    assert saved[0]["value"] == "a Alemanha foi descoberto em 2002"
+    assert saved[0]["project_id"] is None
+
+    next_conversation_id = _conversation(client)
+    captured = {}
+
+    def capture_context(self, messages, model_name, configuration):
+        captured["messages"] = messages
+        return "O registro foi encontrado no contexto."
+
+    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", capture_context)
+    recall = client.post(
+        f"/conversations/{next_conversation_id}/chat",
+        json={"content": "O que você lembra sobre o que conversamos a respeito da Alemanha?"},
+    )
+
+    assert recall.status_code == 200
+    assert any(
+        item["role"] == "system"
+        and "Mosaic memory" in item["content"]
+        and "[user_claim] alegacao: a Alemanha foi descoberto em 2002" in item["content"]
+        for item in captured["messages"]
     )

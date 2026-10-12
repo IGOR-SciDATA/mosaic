@@ -122,6 +122,7 @@ def update_memory(
     source: str | None = None,
     project_id: int | None = None,
     confidence: float | None = None,
+    clear_project_id: bool = False,
 ) -> Memory | None:
     current = get_memory(memory_id)
     if current is None:
@@ -133,6 +134,9 @@ def update_memory(
     if confidence is not None and not 0.0 <= confidence <= 1.0:
         raise ValueError("Memory confidence must be between 0.0 and 1.0")
 
+    new_project_id = None if clear_project_id else (
+        current.project_id if project_id is None else project_id
+    )
     updated_at = _utc_now()
     with get_connection() as connection:
         connection.execute(
@@ -143,7 +147,7 @@ def update_memory(
             WHERE id = ?
             """,
             (
-                project_id if project_id is not None else current.project_id,
+                new_project_id,
                 new_type,
                 current.key if key is None else key,
                 current.value if value is None else value,

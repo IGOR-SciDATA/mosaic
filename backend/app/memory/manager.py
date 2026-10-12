@@ -7,7 +7,7 @@ from app.models.memory_repository import create_memory, list_memories
 _SAVE_PREFIX = re.compile(
     r"^\s*(?:mosaic[,! ]+)?(?:por favor[, ]+)?"
     r"(?:salve|salva|guarde|guarda|lembre(?:-se)?|registre)"
-    r"(?:\s+(?:essa|esta|a|isso|que))?\s*[, :]*",
+    r"(?:\s+(?:na\s+memória(?:\s+(?:que|de))?|essa|esta|a|isso|que))?\s*[, :]*",
     re.IGNORECASE,
 )
 
