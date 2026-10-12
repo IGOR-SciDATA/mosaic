@@ -135,6 +135,9 @@ def test_context_always_includes_mosaic_identity_and_global_memory() -> None:
     assert "Sou o Mosaic, um assistente de inteligência artificial" in context[0]["content"]
     assert "O modelo de IA selecionado é responsável por gerar minhas respostas" in context[0]["content"]
     assert "não se apresente como um modelo genérico" in context[0]["content"]
+    assert "não introduza alegações anteriores em respostas sem relação com elas" in context[0]["content"]
+    assert "não mencione memórias do usuário, fatos históricos ou assuntos anteriores" in context[0]["content"]
+    assert "Não invente datas de criação, lançamento ou disponibilidade do Mosaic" in context[0]["content"]
     assert "identidade nem a memória do sistema" in context[0]["content"]
     memory_messages = [item["content"] for item in context if item["role"] == "system" and "Mosaic memory" in item["content"]]
     assert len(memory_messages) == 1
