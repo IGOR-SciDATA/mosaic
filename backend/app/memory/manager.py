@@ -5,9 +5,9 @@ from app.models.memory_repository import create_memory, list_memories
 
 
 _SAVE_PREFIX = re.compile(
-    r"^\\s*(?:mosaic[,! ]+)?(?:por favor[, ]+)?"
+    r"^\s*(?:mosaic[,! ]+)?(?:por favor[, ]+)?"
     r"(?:salve|salva|guarde|guarda|lembre(?:-se)?|registre)"
-    r"(?:\\s+(?:essa|esta|a|isso|que))?\\s*[, :]*",
+    r"(?:\s+(?:essa|esta|a|isso|que))?\s*[, :]*",
     re.IGNORECASE,
 )
 
@@ -39,25 +39,21 @@ def save_explicit_memory(
     if not match:
         return None
 
-    value = content[match.end():].strip(" \\t:,.!?")
-    value = re.sub(r"^(?:que|o seguinte|a seguinte informação)\\s+", "", value, flags=re.IGNORECASE)
+    value = content[match.end():].strip(" \t:,.!?")
+    value = re.sub(r"^(?:que|o seguinte|a seguinte informação)\s+", "", value, flags=re.IGNORECASE)
     if not value:
         return None
 
     normalized = value.casefold()
     if any(term in normalized for term in ("gosto de", "gosto muito de", "prefiro ", "não gosto de", "nao gosto de", "minha preferência", "minha preferencia")):
-        memory_type = "user_preference"
-        key = "preferencia"
+        memory_type, key = "user_preference", "preferencia"
     elif any(term in normalized for term in ("minha opinião", "minha opiniao", "eu acho", "na minha visão", "na minha visao", "acredito que", "minha hipótese", "minha hipotese")):
-        memory_type = "user_claim"
-        key = "opiniao"
+        memory_type, key = "user_claim", "opiniao"
     elif any(term in normalized for term in ("sempre responda", "sempre faça", "sempre faca", "lembre-se de", "lembre de", "quero que você", "quero que voce")):
-        memory_type = "instruction"
-        key = "instrucao"
+        memory_type, key = "instruction", "instrucao"
     else:
         # A user-provided statement is a claim until independently verified.
-        memory_type = "user_claim"
-        key = "alegacao"
+        memory_type, key = "user_claim", "alegacao"
 
     return remember(
         type=memory_type,
