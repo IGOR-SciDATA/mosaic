@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from app.db.database import init_db
 from app.main import app
 from app.memory.manager import remember
-from app.models.message_repository import list_messages
+from app.models.message_repository import create_message, list_messages
 from app.models.project_repository import create_project
 from app.models.repository import create_model
 
@@ -34,7 +34,9 @@ def test_chat_flow_persists_user_and_assistant_messages(client, monkeypatch) -> 
     conversation_id = _conversation(client)
 
     def fake_generate(self, messages, model_name, configuration):
-        assert messages == [{"role": "user", "content": "Olá"}]
+        assert messages[-1] == {"role": "user", "content": "Olá"}
+        assert messages[0]["role"] == "system"
+        assert "identidade" in messages[0]["content"]
         assert model_name == "qwen3:3b"
         return "Olá! Como posso ajudar?"
 
@@ -70,7 +72,9 @@ def test_chat_flow_uses_previous_history(client, monkeypatch) -> None:
     client.post(f"/conversations/{conversation_id}/chat", json={"content": "Primeira"})
     client.post(f"/conversations/{conversation_id}/chat", json={"content": "Segunda"})
 
-    assert calls[1] == [
+    assert calls[1][0]["role"] == "system"
+    assert "identidade" in calls[1][0]["content"]
+    assert calls[1][-3:] == [
         {"role": "user", "content": "Primeira"},
         {"role": "assistant", "content": "Resposta"},
         {"role": "user", "content": "Segunda"},
@@ -150,15 +154,82 @@ def test_chat_passes_project_state_and_memory_to_provider(client, monkeypatch) -
     )
 
     assert response.status_code == 200
-    assert captured["messages"][0] == {
-        "role": "system",
-        "content": "Mosaic project state:\n{'phase': 'development'}",
-    }
-    assert captured["messages"][1] == {
-        "role": "system",
-        "content": "Mosaic memory:\n- [project_state] focus: Integrar o contexto do projeto",
-    }
+    assert "identidade" in captured["messages"][0]["content"]
+    assert any(
+        item["role"] == "system" and "Mosaic project state:" in item["content"]
+        and "{'phase': 'development'}" in item["content"]
+        for item in captured["messages"]
+    )
+    assert any(
+        item["role"] == "system" and "Mosaic memory" in item["content"]
+        and "[project_state] focus: Integrar o contexto do projeto" in item["content"]
+        for item in captured["messages"]
+    )
     assert captured["messages"][-1] == {
         "role": "user",
         "content": "Onde estamos?",
     }
+
+
+
+def test_explicit_memory_request_is_saved_without_calling_model(client, monkeypatch) -> None:
+    conversation_id = _conversation(client)
+
+    def unexpected_generate(*args, **kwargs):
+        raise AssertionError("explicit memory commands should be handled by Mosaic Core")
+
+    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", unexpected_generate)
+
+    response = client.post(
+        f"/conversations/{conversation_id}/chat",
+        json={"content": "Mosaic, salve que o Brasil foi descoberto em 2002"},
+    )
+
+    assert response.status_code == 200
+    assert "Memória salva no Mosaic como user_claim" in response.json()["content"]
+
+    memories_response = client.get("/memories")
+    assert memories_response.status_code == 200
+    saved = [item for item in memories_response.json() if item["value"] == "o Brasil foi descoberto em 2002"]
+    assert len(saved) == 1
+    assert saved[0]["type"] == "user_claim"
+    assert saved[0]["source"] == "user"
+
+
+def test_explicit_preference_memory_is_classified(client) -> None:
+    conversation_id = _conversation(client)
+
+    response = client.post(
+        f"/conversations/{conversation_id}/chat",
+        json={"content": "Mosaic, salve que eu gosto de música house"},
+    )
+
+    assert response.status_code == 200
+    assert "user_preference" in response.json()["content"]
+
+    memories = client.get("/memories").json()
+    assert any(
+        item["type"] == "user_preference" and item["value"] == "eu gosto de música house"
+        for item in memories
+    )
+
+
+
+def test_save_this_information_uses_previous_user_statement(client) -> None:
+    conversation_id = _conversation(client)
+
+    create_message(conversation_id, "user", "O Brasil foi descoberto em 2002")
+
+    saved = client.post(
+        f"/conversations/{conversation_id}/chat",
+        json={"content": "Mosaic, salve essa informação"},
+    )
+    assert saved.status_code == 200
+    assert "user_claim" in saved.json()["content"]
+
+    memories = client.get("/memories").json()
+    assert any(
+        item["type"] == "user_claim"
+        and item["value"] == "O Brasil foi descoberto em 2002"
+        for item in memories
+    )

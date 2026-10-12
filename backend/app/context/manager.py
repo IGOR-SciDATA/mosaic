@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from app.memory.manager import get_project_memories
+from app.memory.manager import get_global_memories, get_project_memories
 from app.models.conversation_repository import get_conversation
 from app.models.message_repository import list_messages
 from app.models.task_repository import list_tasks
@@ -68,8 +68,18 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
     all_messages = list_messages(conversation_id)
     context: list[dict[str, str]] = []
 
-    # Existing system messages are the only currently defined source of
-    # system/core instructions; no new instruction text is invented here.
+    # Identity and behavioral rules belong to Mosaic Core, not the selected model.
+    context.append({
+        "role": "system",
+        "content": (
+            "Você é o gerador de respostas do Mosaic, não a identidade nem a memória do sistema.\n"
+            "O Mosaic Core controla identidade, histórico e memórias; o modelo não deve alegar que sua memória interna é a fonte desses dados.\n"
+            "Trate memórias como informações registradas, não como verdade automaticamente confirmada.\n"
+            "Uma alegação do usuário deve continuar identificada como alegação do usuário. Ao responder perguntas factuais, diferencie o conhecimento factual disponível daquilo que o usuário pediu para guardar.\n"
+            "Quando uma memória relevante estiver disponível no contexto, mencione-a quando pertinente sem substituir o fato por ela.\n"
+            "Não diga que verificou fontes externas se nenhuma fonte ou ferramenta de verificação foi fornecida nesta solicitação."
+        ),
+    })
     context.extend(
         {"role": message.role, "content": message.content}
         for message in all_messages
@@ -87,15 +97,20 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
             })
 
         memories = get_project_memories(conversation.project_id)
-        if memories:
-            memory_lines = [
-                f"- [{memory.type}] {memory.key}: {memory.value}"
-                for memory in memories
-            ]
-            context.append({
-                "role": "system",
-                "content": "Mosaic memory:\n" + "\n".join(memory_lines),
-            })
+    else:
+        memories = []
+
+    # Global memories are shared across conversations; project memories stay isolated.
+    memories = get_global_memories() + memories
+    if memories:
+        memory_lines = [
+            f"- [{memory.type}] {memory.key}: {memory.value}"
+            for memory in memories
+        ]
+        context.append({
+            "role": "system",
+            "content": "Mosaic memory (records, not verified facts):\n" + "\n".join(memory_lines),
+        })
 
     current_user = next(
         (

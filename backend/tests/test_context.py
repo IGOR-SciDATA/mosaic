@@ -45,15 +45,21 @@ def test_context_includes_project_state_memory_before_history() -> None:
 
     context = build_context(conversation.id)
 
-    assert context[0] == {
-        "role": "system",
-        "content": "Mosaic project state:\\n{'phase': 'project'}",
-    }
-    assert context[1] == {
-        "role": "system",
-        "content": "Mosaic memory:\n- [project_state] status: Memory implementation started",
-    }
-    assert context[2] == {"role": "user", "content": "Onde paramos?"}
+    assert context[0]["role"] == "system"
+    assert "identidade" in context[0]["content"]
+    assert any(
+        item["role"] == "system"
+        and "Mosaic project state:" in item["content"]
+        and "{'phase': 'project'}" in item["content"]
+        for item in context
+    )
+    assert any(
+        item["role"] == "system"
+        and "Mosaic memory" in item["content"]
+        and "[project_state] status: Memory implementation started" in item["content"]
+        for item in context
+    )
+    assert context[-1] == {"role": "user", "content": "Onde paramos?"}
 
 
 def test_context_limits_history_and_keeps_current_user_message_last() -> None:
@@ -109,3 +115,24 @@ def test_context_includes_current_task_and_tool_results() -> None:
         for item in context
     )
     assert context[-1] == {"role": "user", "content": "Qual foi o resultado?"}
+
+
+
+def test_context_always_includes_mosaic_identity_and_global_memory() -> None:
+    model = create_model("Local Model", "ollama", "local:test")
+    conversation = create_conversation("General conversation", model.id)
+    remember(
+        type="user_claim",
+        key="alegacao",
+        value="o Brasil foi descoberto em 2002",
+        source="user",
+    )
+    create_message(conversation.id, "user", "Quando o Brasil foi descoberto?")
+
+    context = build_context(conversation.id)
+
+    assert context[0]["role"] == "system"
+    assert "identidade nem a memória do sistema" in context[0]["content"]
+    memory_messages = [item["content"] for item in context if item["role"] == "system" and "Mosaic memory" in item["content"]]
+    assert len(memory_messages) == 1
+    assert "[user_claim] alegacao: o Brasil foi descoberto em 2002" in memory_messages[0]
