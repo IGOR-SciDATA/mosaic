@@ -998,7 +998,7 @@ Temperature: 0.7
 Top P:        0.9
 Top K:        40
 Context:      4096
-Prediction:   512–1024
+Tokens:   512–1024
 ```
 
 Esses valores podem ser ajustados posteriormente conforme o hardware e o comportamento desejado.
