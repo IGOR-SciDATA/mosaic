@@ -202,6 +202,30 @@ def test_explicit_memory_request_is_saved_without_calling_model(client, monkeypa
     assert saved[0]["source"] == "user"
     assert saved[0]["project_id"] is None
 
+    next_conversation = client.post(
+        "/conversations",
+        json={"title": "Memory recall", "model_id": model.id},
+    ).json()
+    captured = {}
+
+    def capture_context(self, messages, model_name, configuration):
+        captured["messages"] = messages
+        return "Lembro do registro salvo."
+
+    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", capture_context)
+    recall_response = client.post(
+        f"/conversations/{next_conversation['id']}/chat",
+        json={"content": "O que você lembra sobre o Brasil?"},
+    )
+
+    assert recall_response.status_code == 200
+    assert any(
+        item["role"] == "system"
+        and "Mosaic memory" in item["content"]
+        and "o Brasil foi descoberto em 2002" in item["content"]
+        for item in captured["messages"]
+    )
+
 
 def test_explicit_preference_memory_is_classified(client) -> None:
     conversation_id = _conversation(client)
