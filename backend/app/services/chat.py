@@ -3,7 +3,7 @@ from collections.abc import Iterable
 from app.context.manager import build_context
 from app.models.conversation_repository import get_conversation
 from app.models.message import Message
-from app.models.message_repository import create_message
+from app.models.message_repository import create_message, list_messages
 from app.memory.manager import save_explicit_memory
 from app.models.repository import get_model
 from app.providers.ollama import OllamaProvider
@@ -24,8 +24,16 @@ def chat(conversation_id: int, content: str) -> Message:
     if model is None:
         raise ValueError("Model not found")
 
+    previous_user = next(
+        (message.content for message in reversed(list_messages(conversation_id)) if message.role == "user"),
+        None,
+    )
     create_message(conversation_id, "user", content)
-    memory = save_explicit_memory(content, project_id=conversation.project_id)
+    memory = save_explicit_memory(
+        content,
+        project_id=conversation.project_id,
+        previous_content=previous_user,
+    )
     if memory is not None:
         return create_message(
             conversation_id,
