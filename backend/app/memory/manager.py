@@ -42,6 +42,11 @@ def save_explicit_memory(
 
     value = content[match.end():].strip(" \t:,.!?")
     value = re.sub(r"^(?:que|o seguinte|a seguinte informação)\s+", "", value, flags=re.IGNORECASE)
+    if value.casefold().strip(" .,!?:") in {
+        "essa informação", "esta informação", "informação", "isso",
+        "o que eu disse", "o que falei",
+    }:
+        value = (previous_content or "").strip()
     if not value:
         return None
 
