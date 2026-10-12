@@ -285,3 +285,44 @@ def test_memory_api_can_clear_project_scope(client) -> None:
 
     assert updated.status_code == 200
     assert updated.json()["project_id"] is None
+
+
+def test_save_to_memory_phrase_is_clean_and_retrievable_in_new_conversation(client, monkeypatch) -> None:
+    conversation_id = _conversation(client)
+
+    response = client.post(
+        f"/conversations/{conversation_id}/chat",
+        json={"content": "Salve na memória que a Alemanha foi descoberto em 2002"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["content"] == (
+        "Memória salva no Mosaic como user_claim: a Alemanha foi descoberto em 2002"
+    )
+
+    memories = client.get("/memories").json()
+    saved = [item for item in memories if "Alemanha" in item["value"]]
+    assert len(saved) == 1
+    assert saved[0]["value"] == "a Alemanha foi descoberto em 2002"
+    assert saved[0]["project_id"] is None
+
+    next_conversation_id = _conversation(client)
+    captured = {}
+
+    def capture_context(self, messages, model_name, configuration):
+        captured["messages"] = messages
+        return "O registro foi encontrado no contexto."
+
+    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", capture_context)
+    recall = client.post(
+        f"/conversations/{next_conversation_id}/chat",
+        json={"content": "O que você lembra sobre o que conversamos a respeito da Alemanha?"},
+    )
+
+    assert recall.status_code == 200
+    assert any(
+        item["role"] == "system"
+        and "Mosaic memory" in item["content"]
+        and "[user_claim] alegacao: a Alemanha foi descoberto em 2002" in item["content"]
+        for item in captured["messages"]
+    )
