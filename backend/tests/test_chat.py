@@ -264,3 +264,24 @@ def test_save_this_information_uses_previous_user_statement(client) -> None:
         and item["value"] == "O Brasil foi descoberto em 2002"
         for item in memories
     )
+
+
+def test_memory_api_can_clear_project_scope(client) -> None:
+    project = create_project(name="Memory scope API", workspace="/tmp/memory-scope-api")
+    response = client.post(
+        "/memories",
+        json={
+            "type": "user_claim",
+            "key": "alegacao",
+            "value": "o Brasil foi descoberto em 2002",
+            "source": "user",
+            "project_id": project.id,
+        },
+    )
+    assert response.status_code == 200
+    memory_id = response.json()["id"]
+
+    updated = client.patch(f"/memories/{memory_id}", json={"project_id": None})
+
+    assert updated.status_code == 200
+    assert updated.json()["project_id"] is None
