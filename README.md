@@ -908,36 +908,14 @@ Depois da instalação, confirme:
 ollama --version
 ```
 
-## 🤖 5. Instalar o modelo Qwen
+## 🤖 5. Instalar o modelo Qwen 2.5 3B
 
-### ⚠️ Ressalva importante
+Nos testes práticos do MVP, **`qwen2.5:3b` apresentou melhor fluidez no hardware utilizado e não exibiu o comportamento de raciocínio `thinking` observado com o Qwen 3**. Por isso, ele é o modelo recomendado para a instalação inicial.
 
-O contrato inicial do MVP utiliza **Qwen 3B** como modelo de referência.
-
-Porém, o catálogo atual do Ollama não possui o identificador:
-
-```text
-qwen3:3b
-```
-
-Para a execução atual do Mosaic, utilize:
-
-```text
-qwen3:4b
-```
-
-Isso não altera a arquitetura do Mosaic. O Core continua independente do modelo e utiliza:
-
-```text
-provider
-+
-model_name
-```
-
-Para baixar o modelo:
+Baixe o modelo:
 
 ```bash
-ollama pull qwen3:4b
+ollama pull qwen2.5:3b
 ```
 
 Confira a instalação:
@@ -946,12 +924,20 @@ Confira a instalação:
 ollama list
 ```
 
+A escolha do modelo é uma configuração operacional, não uma dependência arquitetural. O Core permanece independente do modelo e utiliza:
+
+```text
+provider
++
+model_name
+```
+
 ## ▶️ 6. Testar o Qwen
 
 Execute:
 
 ```bash
-ollama run qwen3:4b
+ollama run qwen2.5:3b
 ```
 
 Digite uma mensagem simples, por exemplo:
@@ -987,9 +973,9 @@ Cadastre:
 
 | Campo | Valor |
 |---|---|
-| Nome | `Qwen 3 4B` |
+| Nome | `Qwen 2.5 3B` |
 | Provider | `ollama` |
-| Model name | `qwen3:4b` |
+| Model name | `qwen2.5:3b` |
 
 Uma configuração inicial recomendada é:
 
@@ -1051,7 +1037,7 @@ Projeto:
 Guitar Livre
 
 Modelo:
-Qwen 3 4B
+Qwen 2.5 3B
 
 Mensagem:
 Olá Mosaic, explique o objetivo deste projeto.
@@ -1116,7 +1102,7 @@ Exemplo:
 ```text
 Qwen
 provider = ollama
-model_name = qwen3:4b
+model_name = qwen2.5:3b
 ```
 
 A troca do modelo não deve apagar memória, estado ou histórico.
@@ -1226,82 +1212,60 @@ mosaic/
 
 ---
 
-# 🚦 Status
+# 🚦 Status atual do projeto
+
+O Mosaic já possui um MVP web funcional com backend FastAPI, frontend React/Vite, persistência SQLite, conversas com streaming, integração com Ollama, gerenciamento de contexto e memória persistente. A identidade do Core e a recuperação de memórias entre conversas foram testadas manualmente, inclusive após trocar o modelo utilizado.
+
+**Fase atual: Fase 12 — Final QA e validação ponta a ponta.** O foco agora é consolidar os testes automatizados e validar os fluxos completos sem ampliar a arquitetura desnecessariamente.
 
 | Sistema | Status |
 |---|:---:|
-| 🧩 Conceito do Core | 🟢 |
-| 🧬 Identity | 🟡 |
-| 💾 Memory | 🟡 |
-| 📍 State | 🟡 |
-| 🧭 Context Builder | 🟡 |
-| 🔌 Model Router | 🟡 |
-| 🧠 Modelo local | 🟡 |
-| 💬 Interface CLI | 🟡 |
-| 📚 Knowledge | 🔵 |
-| 🌐 Interface Web | 🔵 |
-| 🔐 Segurança avançada | 🔵 |
-| ♾️ Continuity / Seed | 🔵 |
+| 🧩 Core e API | 🟢 Implementado |
+| 🧬 Identidade persistente no contexto | 🟢 Implementado |
+| 💾 Memória persistente e salvamento explícito | 🟢 Implementado; validado manualmente |
+| 🔁 Recuperação entre conversas e modelos | 🟢 Validado manualmente |
+| 🗂️ Conversas, projetos e estado | 🟢 Implementação existente |
+| 🧭 Context Builder | 🟢 Implementado |
+| 🔌 Provider Ollama e troca de modelo | 🟢 Implementado |
+| 🌐 Interface Web | 🟢 Implementada |
+| 🧪 QA automatizado e ponta a ponta | 🟡 Em validação |
+| 📚 Sistema ampliado de Knowledge | 🔵 Planejado |
+| 🔐 Segurança avançada e permissões adicionais | 🔵 Planejado |
+| ♾️ Exportação, importação e migração de continuidade | 🔵 Planejado |
 
-**Legenda:** 🟢 definido · 🟡 em desenvolvimento · 🔵 planejado
+**Legenda:** 🟢 implementado ou validado no escopo indicado · 🟡 em validação · 🔵 planejado
 
-> O status deve refletir o estado real do repositório. Não marcar como implementado aquilo que ainda existe apenas como arquitetura.
+> A validação manual da memória entre conversas e modelos foi realizada no ambiente de desenvolvimento. Isso não substitui a execução dos testes automatizados e a validação ponta a ponta em diferentes ambientes.
 
 ---
 
 # 🗺️ Roadmap
 
 ```text
-FOUNDATION
+MVP IMPLEMENTADO
    │
-   ├── 01 Core
-   ├── 02 Identity
-   └── 03 Persistence
+   ├── Core, API e persistência SQLite
+   ├── Conversas, projetos e histórico
+   ├── Context Builder e identidade
+   ├── Memória explícita e recuperação global
+   ├── Provider Ollama e troca de modelo
+   └── Interface Web React/Vite
         │
         ▼
-MEMORY & STATE
+FASE 12 — FINAL QA
    │
-   ├── 04 Memory
-   ├── 05 State
-   ├── 06 Projects
-   └── 07 History
+   ├── Testes automatizados
+   ├── Validação ponta a ponta
+   ├── Revisão de erros e casos-limite
+   └── Documentação coerente com o código
         │
         ▼
-CONTEXT
+PRÓXIMAS EVOLUÇÕES
    │
-   ├── 08 Interpreter
-   ├── 09 Context Builder
-   └── 10 Retrieval
-        │
-        ▼
-MODELS
-   │
-   ├── 11 Local Model
-   ├── 12 Model Router
-   └── 13 Model Switching
-        │
-        ▼
-INTERACTION
-   │
-   ├── 14 CLI
-   └── 15 Web Interface
-        │
-        ▼
-CONTINUITY
-   │
-   ├── 16 Export
-   ├── 17 Import
-   ├── 18 Seed
-   └── 19 Migration
-        │
-        ▼
-EXPANSION
-   │
-   ├── 20 Knowledge
-   ├── 21 Tools
-   ├── 22 Voice
-   ├── 23 Vision
-   └── 24 Physical Interfaces
+   ├── Retrieval mais relevante
+   ├── Knowledge ampliado
+   ├── Exportação e importação
+   └── Segurança e continuidade avançadas
 ```
 
 ---
