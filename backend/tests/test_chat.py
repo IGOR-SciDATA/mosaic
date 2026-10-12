@@ -212,3 +212,28 @@ def test_explicit_preference_memory_is_classified(client) -> None:
         item["type"] == "user_preference" and item["value"] == "eu gosto de música house"
         for item in memories
     )
+
+
+
+def test_save_this_information_uses_previous_user_statement(client) -> None:
+    conversation_id = _conversation(client)
+
+    first = client.post(
+        f"/conversations/{conversation_id}/chat",
+        json={"content": "O Brasil foi descoberto em 2002"},
+    )
+    assert first.status_code == 200
+
+    saved = client.post(
+        f"/conversations/{conversation_id}/chat",
+        json={"content": "Mosaic, salve essa informação"},
+    )
+    assert saved.status_code == 200
+    assert "user_claim" in saved.json()["content"]
+
+    memories = client.get("/memories").json()
+    assert any(
+        item["type"] == "user_claim"
+        and item["value"] == "O Brasil foi descoberto em 2002"
+        for item in memories
+    )
