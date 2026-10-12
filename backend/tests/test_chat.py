@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from app.db.database import init_db
 from app.main import app
 from app.memory.manager import remember
-from app.models.message_repository import list_messages
+from app.models.message_repository import create_message, list_messages
 from app.models.project_repository import create_project
 from app.models.repository import create_model
 
@@ -218,11 +218,7 @@ def test_explicit_preference_memory_is_classified(client) -> None:
 def test_save_this_information_uses_previous_user_statement(client) -> None:
     conversation_id = _conversation(client)
 
-    first = client.post(
-        f"/conversations/{conversation_id}/chat",
-        json={"content": "O Brasil foi descoberto em 2002"},
-    )
-    assert first.status_code == 200
+    create_message(conversation_id, "user", "O Brasil foi descoberto em 2002")
 
     saved = client.post(
         f"/conversations/{conversation_id}/chat",
