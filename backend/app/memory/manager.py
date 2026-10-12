@@ -47,6 +47,8 @@ def save_explicit_memory(
     normalized = value.casefold()
     if any(term in normalized for term in ("gosto de", "gosto muito de", "prefiro ", "não gosto de", "nao gosto de", "minha preferência", "minha preferencia")):
         memory_type, key = "user_preference", "preferencia"
+    elif any(term in normalized for term in ("minha inferência", "minha inferencia", "deduzo que", "infiro que", "isso sugere que", "provavelmente")):
+        memory_type, key = "user_claim", "inferencia"
     elif any(term in normalized for term in ("minha opinião", "minha opiniao", "eu acho", "na minha visão", "na minha visao", "acredito que", "minha hipótese", "minha hipotese")):
         memory_type, key = "user_claim", "opiniao"
     elif any(term in normalized for term in ("sempre responda", "sempre faça", "sempre faca", "lembre-se de", "lembre de", "quero que você", "quero que voce")):
