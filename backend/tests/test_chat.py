@@ -173,7 +173,13 @@ def test_chat_passes_project_state_and_memory_to_provider(client, monkeypatch) -
 
 
 def test_explicit_memory_request_is_saved_without_calling_model(client, monkeypatch) -> None:
-    conversation_id = _conversation(client)
+    project = create_project(name="Memory scope", workspace="/tmp/memory-scope")
+    model = create_model("Qwen 3B", "ollama", "qwen3:3b")
+    conversation = client.post(
+        "/conversations",
+        json={"title": "Project chat", "model_id": model.id, "project_id": project.id},
+    ).json()
+    conversation_id = conversation["id"]
 
     def unexpected_generate(*args, **kwargs):
         raise AssertionError("explicit memory commands should be handled by Mosaic Core")
@@ -194,6 +200,7 @@ def test_explicit_memory_request_is_saved_without_calling_model(client, monkeypa
     assert len(saved) == 1
     assert saved[0]["type"] == "user_claim"
     assert saved[0]["source"] == "user"
+    assert saved[0]["project_id"] is None
 
 
 def test_explicit_preference_memory_is_classified(client) -> None:
