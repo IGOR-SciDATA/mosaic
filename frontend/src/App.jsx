@@ -353,7 +353,7 @@ function AgentTasksPanel({ conversation, project }) {
             <button disabled={busy} onClick={() => decideApproval(task, false)}>Rejeitar</button>
           </>}
           {task.status === "executing" && <button className="primary-action" disabled={busy} onClick={() => runTask(task.id)}>Continuar Agent</button>}
-          {(task.status === "pending" || task.status === "failed") && <button className="primary-action" disabled={busy} onClick={() => runTask(task.id)}>{task.status === "failed" ? "Tentar novamente" : "Executar"}</button>}
+          {task.status === "pending" && <button className="primary-action" disabled={busy} onClick={() => runTask(task.id)}>Executar</button>}
           {task.status === "cancelled" && <span className="muted-copy">Tarefa cancelada.</span>}
         </div>
       </article>)}</div>
