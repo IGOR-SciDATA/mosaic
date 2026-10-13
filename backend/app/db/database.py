@@ -223,4 +223,36 @@ def init_db() -> None:
             ON tool_results(tool_call_id)
         """)
 
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS task_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                conversation_id INTEGER NULL,
+                project_id INTEGER NULL,
+                tool_call_id INTEGER NULL,
+                action_id INTEGER NULL,
+                timestamp TEXT NOT NULL,
+                level TEXT NOT NULL CHECK (level IN ('debug', 'info', 'warning', 'error')),
+                component TEXT NOT NULL,
+                event_name TEXT NOT NULL,
+                message TEXT NOT NULL,
+                duration_ms INTEGER NULL CHECK (duration_ms IS NULL OR duration_ms >= 0),
+                status TEXT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}',
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+                FOREIGN KEY (tool_call_id) REFERENCES tool_calls(id) ON DELETE SET NULL,
+                FOREIGN KEY (action_id) REFERENCES actions(id) ON DELETE SET NULL
+            )
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_task_events_task_order
+            ON task_events(task_id, id)
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_task_events_conversation
+            ON task_events(conversation_id, id)
+        """)
+
         connection.commit()
