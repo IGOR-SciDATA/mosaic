@@ -72,3 +72,71 @@ def test_agent_can_be_cancelled_before_tool_execution():
     result = run_agent(task.id, decide)
     assert result["status"] == "cancelled"
     assert calls == 1
+
+
+
+def test_agent_does_not_restart_cancelled_task():
+    task = _task()
+    update_task(task.id, status="cancelled")
+    calls = 0
+
+    def decide(context):
+        nonlocal calls
+        calls += 1
+        return {"type": "final", "content": "must not run"}
+
+    result = run_agent(task.id, decide)
+    assert result == {"status": "cancelled", "iterations": 0}
+    assert calls == 0
+    assert get_task(task.id).status == "cancelled"
+
+
+def test_agent_does_not_restart_completed_task():
+    task = _task()
+    update_task(task.id, status="executing")
+    update_task(task.id, status="completed", result={"output": "already done"})
+    calls = 0
+
+    def decide(context):
+        nonlocal calls
+        calls += 1
+        return {"type": "final", "content": "duplicate"}
+
+    result = run_agent(task.id, decide)
+    assert result == {"status": "completed", "iterations": 0}
+    assert calls == 0
+
+
+def test_agent_preserves_cancellation_when_decider_raises():
+    task = _task()
+
+    def decide(context):
+        update_task(task.id, status="cancelled")
+        raise RuntimeError("provider stopped")
+
+    result = run_agent(task.id, decide)
+    assert result == {"status": "cancelled", "iterations": 1}
+    assert get_task(task.id).status == "cancelled"
+
+
+def test_agent_preserves_approval_pause_when_called_again():
+    task = _task()
+    first = run_agent(
+        task.id,
+        lambda context: {
+            "type": "tool_call",
+            "tool": "filesystem",
+            "arguments": {"operation": "read", "path": "README.md"},
+        },
+    )
+    calls = 0
+
+    def decide(context):
+        nonlocal calls
+        calls += 1
+        return {"type": "final", "content": "should wait"}
+
+    second = run_agent(task.id, decide)
+    assert second == first
+    assert calls == 0
+    assert get_task(task.id).status == "awaiting_approval"
