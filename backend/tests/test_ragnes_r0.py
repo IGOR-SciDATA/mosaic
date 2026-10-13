@@ -104,7 +104,6 @@ def test_context_bounds_number_and_size_of_tool_observations(tmp_path):
             conversation_id=conversation.id,
             tool_name="test_tool",
             arguments={"index": index},
-            status="completed",
         )
         create_tool_result(
             call.id,
