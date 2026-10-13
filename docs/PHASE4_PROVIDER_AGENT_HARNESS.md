@@ -25,7 +25,7 @@ Provider.generate(updated context)
 
 - `POST /tasks/{task_id}/run` starts or resumes an Agent Task using its conversation's model.
 - The response is the Agent run result, including `status`, `iterations`, and either `output`, `tool_call_id`, or `error` as applicable.
-- Unknown task/conversation/model references return 404; invalid task state/configuration returns 409; provider runtime failures return 502.
+- Unknown task/conversation/model references return 404; invalid task state/configuration returns 409. Provider/decision exceptions are handled by the existing Agent loop and persisted as a failed Task result.
 
 ## Decision protocol
 
