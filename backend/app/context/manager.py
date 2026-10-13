@@ -119,7 +119,7 @@ def _explicit_artifact_paths(content: str | None) -> list[str]:
     if not content:
         return []
     # Require an explicit filename with a suffix; never guess based on topic alone.
-    candidates = re.findall(r"([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[.][A-Za-z0-9_-]+)", content)
+    candidates = re.findall(r"(?<![A-Za-z0-9_./-])([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[.][A-Za-z0-9_-]+)", content)
     selected: list[str] = []
     for candidate in candidates:
         if Path(candidate).name.casefold() in {'agents.md', 'agent.md'} or candidate in selected:
