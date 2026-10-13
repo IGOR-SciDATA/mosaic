@@ -5,8 +5,7 @@ from app.context.manager import build_context
 from app.models.task_repository import get_task, update_task
 from app.models.tool_call_repository import create_tool_call
 from app.models.tool_result import ToolResult
-from app.services.tools import approve_tool_call, execute_tool_call
-from app.tools import registry
+from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_policy
 
 DEFAULT_ITERATION_LIMIT = 5
 
@@ -16,12 +15,6 @@ def _tool_context(tool_call_id: int, result: ToolResult) -> dict[str, str]:
     else:
         content = f"ToolResult {tool_call_id} failed: {result.error}"
     return {"role": "tool", "content": content}
-
-def _is_approval_required(tool_name: str) -> bool:
-    tool = registry.get(tool_name)
-    if tool is None:
-        raise ValueError(f"Unknown tool: {tool_name}")
-    return bool(tool.permission_policy.get("approval_required", False))
 
 def run_agent(task_id: int, decide: Callable[[list[dict[str, str]]], dict[str, Any]], *, iteration_limit: int = DEFAULT_ITERATION_LIMIT) -> dict[str, Any]:
     if iteration_limit <= 0:
@@ -77,9 +70,16 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, str]]], dict[str, A
             update_task(task_id, status="failed", result={"error": error})
             return {"status": "failed", "error": error, "iterations": iteration}
 
+        try:
+            policy = resolve_tool_policy(tool_name, arguments)
+        except Exception as exc:
+            error = f"Tool request rejected: {type(exc).__name__}: {exc}"
+            update_task(task_id, status="failed", result={"error": error})
+            return {"status": "failed", "error": error, "iterations": iteration}
+
         call = create_tool_call(task.conversation_id, tool_name, arguments, task_id=task_id)
         try:
-            if _is_approval_required(tool_name):
+            if policy["approval_required"]:
                 update_task(task_id, status="awaiting_approval", result={"tool_call_id": call.id, "iterations": iteration})
                 return {"status": "awaiting_approval", "tool_call_id": call.id, "iterations": iteration}
             approved = approve_tool_call(call)
