@@ -18,7 +18,7 @@ def test_context_adds_ranked_lexical_evidence_with_source(tmp_path):
     workspace = tmp_path / "workspace"
     (workspace / "backend").mkdir(parents=True)
     (workspace / "backend" / "harness.py").write_text(
-        "def run():\\n    # aprovação de ferramentas acontece antes da execução\\n    pass\\n",
+        "def run():\n    # aprovação de ferramentas acontece antes da execução\n    pass\n",
         encoding="utf-8",
     )
     (workspace / "notes.txt").write_text("receita de bolo e jardinagem", encoding="utf-8")
