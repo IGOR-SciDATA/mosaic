@@ -10,6 +10,7 @@ import re
 import shlex
 import signal
 import subprocess
+import sys
 import threading
 import time
 from typing import Any, Callable
@@ -231,6 +232,25 @@ class TerminalTool(Tool):
         except ValueError as exc:
             raise ValueError("Invalid command quoting") from exc
         _validate_command(tokens, root)
+
+        # Handle the portable workspace query without depending on a platform-specific
+        # executable (Windows does not ship a `pwd` command).
+        if tokens == ["pwd"]:
+            return {
+                "status": "success",
+                "returncode": 0,
+                "stdout": f"{root}{os.linesep}",
+                "stderr": "",
+                "output_truncated": False,
+                "duration_ms": 0,
+                "cwd": ".",
+            }
+
+        # Use the same interpreter running Mosaic for Python validation commands.
+        # A bare `python` may resolve to another installation that lacks pytest.
+        if tokens[0] == "python":
+            tokens[0] = sys.executable
+
         env = {"PATH": os.environ.get("PATH", ""), "HOME": str(root), "PYTHONNOUSERSITE": "1"}
         for key in ("SYSTEMROOT", "WINDIR", "TEMP", "TMP"):
             if key in os.environ:
