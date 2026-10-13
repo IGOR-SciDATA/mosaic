@@ -259,7 +259,7 @@ function AgentTasksPanel({ conversation, project }) {
 
   const [taskError, setTaskError] = useState("");
 
-  async function attachApprovalDetails(items, conversationId) {
+  async function attachApprovalDetails(items) {
     return Promise.all(items.map(async task => {
       const toolCallId = task.status === "awaiting_approval" ? task.result?.tool_call_id : null;
       if (!toolCallId) return task;
@@ -276,7 +276,7 @@ function AgentTasksPanel({ conversation, project }) {
     if (!conversation) { setTasks([]); return; }
     const all = await api.tasks.list();
     const filtered = all.filter(task => task.conversation_id === conversation.id).reverse();
-    setTasks(await attachApprovalDetails(filtered, conversation.id));
+    setTasks(await attachApprovalDetails(filtered));
   };
 
   useEffect(() => {
