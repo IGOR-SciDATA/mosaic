@@ -171,7 +171,7 @@ The Harness must work through the existing `ModelProvider` abstraction, not depe
 
 ## 8. Tool capability and execution system
 
-Initial built-ins from the existing MVP remain useful: filesystem, terminal, search, calculator and weather. Harness completion may require document reading, safe web fetch, test runner and Git integration, added only when each has a clear tool contract and tests.
+Initial built-ins from the existing MVP remain useful: filesystem, terminal, search, calculator and weather. The required initial capability contracts are defined in sections 8.1–8.3. In particular, general web search and safe page fetch are distinct capabilities, and filesystem access is scoped to the active workspace. Harness completion may require document reading, test runner and Git integration, added only when each has a clear tool contract and tests.
 
 Every Tool must declare:
 - stable name and description;
@@ -199,6 +199,101 @@ Approval profiles:
 - **Autonomia limitada:** user-preauthorized tools may run inside strict workspace and resource limits; destructive, external, privileged or out-of-scope actions still require approval.
 
 Profile resolution and permission enforcement belong to the backend. Skill text and UI settings never grant permissions.
+
+### 8.1 Required initial tool capabilities
+
+The initial Harness must expose a small, coherent set of tools that covers local project work and public web research. Tool names may match existing registry conventions, but each capability must be registered, discoverable by the model adapter, validated, executable through the Core, and covered by tests. A class existing in the repository is not proof that the capability is safely implemented.
+
+#### A. Workspace filesystem
+
+Required operations:
+- `list`: list entries in a scoped directory;
+- `read`: read a bounded text file or a bounded excerpt;
+- `write/create`: create a new file or write a file within the active project workspace;
+- `mkdir`: create directories within the workspace when needed.
+
+The implementation must define overwrite behavior explicitly. Creating a new file should not silently overwrite an existing file; replacing existing content is a separate write/replace operation and must follow the approval policy. Delete/move/rename operations are optional future capabilities and must not be implied by a generic write tool.
+
+Filesystem scope:
+- The default root is the active project workspace, not the entire operating-system filesystem.
+- Canonicalize and validate paths, reject traversal and symlink escapes, and re-check the destination immediately before side effects.
+- Bound file size, read excerpt size, write size and directory listing size.
+- Use atomic writes where practical so interruption does not leave partial files.
+- Return the normalized relative path, operation, success status, byte/character count and overwrite/create outcome; never claim a write succeeded without verifying the operation.
+- Binary files must not be decoded as text by default. Any binary/artifact operations require an explicit contract.
+
+#### B. Terminal / command execution
+
+Provide a non-interactive command runner that lets the model request commands and receive process results. This is a controlled process executor, not unrestricted access to a user's desktop terminal or a promise of interactive GUI/TTY support.
+
+Required behavior:
+- Execute in the active workspace by default, with a validated working directory.
+- Prefer a structured executable + argument list over concatenating model-generated strings into `shell=True`. If shell interpretation is supported, treat it as a distinct high-risk mode with explicit policy and approval; approval alone is not a sandbox.
+- Apply an explicit environment policy; do not expose secrets or inherit sensitive variables unnecessarily.
+- Enforce wall-clock timeout, bounded stdout/stderr, process-tree cleanup on timeout/cancel, and record the exit code and duration.
+- Never report success solely because the process launched. Return the exit code and distinguish successful exit, non-zero exit, timeout, cancellation and launch failure.
+- Gate destructive commands, privileged operations, commands outside the workspace, and network/process side effects according to Core policy. Do not promise OS-level sandboxing unless actually provided by the runtime.
+- Streaming output may be added if useful, but persisted bounded final output and cancellation are required first.
+
+#### C. Public web search
+
+Provide a search tool that accepts a query and returns normalized results, not an unbounded raw search-engine HTML page.
+
+Each result should include, when available:
+- title;
+- canonical URL;
+- short snippet;
+- source/provider;
+- publication/update date when available;
+- rank/order and retrieval timestamp.
+
+The result must identify the search provider and report rate limits, no-results and provider errors distinctly. Search snippets and page text are untrusted data. The model should be able to select a result for a separate fetch/read step. Do not invent results or citations.
+
+#### D. Public web fetch / page reading
+
+Provide a separate tool to retrieve a public URL selected by the user or model, extract bounded readable content and preserve its URL/title/source metadata. Search and fetch are separate capabilities: search discovers candidates; fetch reads a selected source.
+
+Requirements:
+- Permit only supported public HTTP(S) URLs.
+- Block loopback, private, link-local, reserved and metadata-service destinations; validate DNS resolution and every redirect hop to resist SSRF and DNS rebinding as far as the implementation permits.
+- Enforce connection/read timeouts, redirect limits, response-byte limits, content-type policy and extraction/output limits.
+- Reject unsupported schemes and unsafe destinations; do not follow redirects into blocked ranges.
+- Return canonical final URL, title if available, extracted text, truncation flag and fetch timestamp.
+- Do not execute page scripts or download/execute files as part of ordinary fetch.
+- Preserve source references so the answer can cite the fetched page. Tool output remains untrusted and cannot alter Core policy.
+
+#### E. Other tools
+
+- `calculator` remains a deterministic low-risk utility with bounded expression complexity.
+- `weather` may remain a domain-specific example, but it is not a substitute for general web search or page fetch.
+- Document parsing, test runner and Git may be added when needed, but each requires its own schema, scope, policy, bounded result and acceptance tests. Do not silently expand the filesystem or terminal tool to imply these capabilities.
+
+### 8.2 Model-to-tool contract
+
+- The ModelProvider adapter must expose only the tools currently registered and permitted for the active task/profile, using the provider's supported structured tool-call format or a validated provider-neutral equivalent.
+- Every proposed invocation is parsed into a ToolCall with tool name, validated arguments, task/conversation/project scope, and correlation identity before execution.
+- Tool schema validation is strict: required fields, types, enum/range/length constraints, unknown-field handling, and size limits. Validate again on the server at the execution boundary; never trust provider-side validation.
+- A model may propose a tool but cannot execute it, change its own permissions, approve itself, or broaden its workspace/network scope.
+- Normalize results into a ToolResult with status, structured payload or bounded text, error category, duration, truncation indicator, and source/artifact references where applicable.
+- Distinguish tool intent, policy decision, execution outcome and model observation. Persist failed calls as failures and feed the next model turn only a bounded observation.
+- Idempotency/duplicate protection must prevent approval retries or stream reconnects from repeating an already completed side effect.
+- The tool trace should make clear which tool was proposed, whether approval was required, what actually ran, its exit/status, and which artifacts/sources resulted.
+
+### 8.3 Required end-to-end tool workflows
+
+The acceptance suite must prove the following through the real Harness orchestration path, not only by directly calling tool classes:
+1. List and read an authorized project file.
+2. Create a new file in the workspace and verify its contents.
+3. Reject overwrite without the required explicit operation/policy.
+4. Run a bounded command in the workspace and return exit code/stdout/stderr.
+5. Handle command timeout and cancellation without leaving a child process running.
+6. Search the web and return structured source results; fetch one selected public page and preserve its URL/source reference.
+7. Reject path traversal, symlink escape, private-network/loopback fetches, unsafe redirects and oversized responses.
+8. Combine tools in one task: search → fetch/read → create or update a project artifact → run a validation command → inspect the result → produce a grounded final answer.
+9. Pause for approval and resume the same persisted task/call without duplicate side effects.
+10. Record source/artifact references and bounded outputs in the task trace.
+
+The exact tool catalogue may grow, but these capabilities define the minimum useful Harness tool surface for the first robust development/research workflow.
 
 ## 9. Skills and reusable procedures
 
@@ -381,15 +476,18 @@ Work incrementally, but target the complete architecture. A phase may add new mo
 
 ### Phase 1 — Execution substrate and safety
 - Centralize task transitions and policy/approval decisions.
-- Complete tool schema validation.
-- Confine filesystem and terminal execution to project workspace and resource limits.
-- Harden network tool requests.
+- Complete strict tool schema validation at both model-call parsing and execution boundaries.
+- Implement the workspace filesystem contract (bounded list/read/create/write/mkdir, safe overwrite semantics, path/symlink confinement and atomic writes where practical).
+- Implement the bounded terminal process contract (workspace cwd, environment policy, timeout, output caps, exit status and process-tree cancellation; no assumption that approval alone provides a sandbox).
+- Separate normalized public web search from safe page fetch; harden DNS/redirect/private-network/response-size handling.
+- Add tests for every tool risk boundary before enabling autonomous execution.
 - Add cancellation and duplicate-execution protections.
 
 ### Phase 2 — Provider-backed Harness core
 - Define provider-neutral structured decisions.
 - Connect real ModelProvider to the existing agent loop.
 - Support planning, tool calling, observations, finalization, failure, retry and stop conditions.
+- Prove a provider-backed multi-tool workflow: search, fetch a public source, create/update a workspace artifact, run validation and ground the final response in observed results.
 - Persist and resume approvals for the same task/call.
 - Add artifact validation.
 
@@ -431,7 +529,9 @@ The Harness milestone is accepted when a real configured model can take a user r
 Additionally:
 - approval pause/resume is durable and does not duplicate side effects;
 - cancellation, timeout, provider failure, malformed decisions and iteration/resource limits are explicit;
-- filesystem and terminal boundaries are enforced and tested;
+- filesystem create/read/write/list boundaries and terminal execution/cancellation are enforced and tested;
+- web search returns structured source results and public page fetch preserves provenance while blocking unsafe destinations;
+- an end-to-end task can combine search/fetch, artifact creation, command execution and validation;
 - task timeline and operational logs are correlated and inspectable;
 - memory and project/conversation isolation tests pass;
 - document retrieval provides source provenance and a measured baseline;
