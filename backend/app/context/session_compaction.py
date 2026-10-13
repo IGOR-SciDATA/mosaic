@@ -5,6 +5,7 @@ The summarizer does not infer facts or treat retrieved text as authorization.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -20,7 +21,7 @@ _CONSTRAINT_MARKERS = (
 )
 _OPEN_ISSUE_MARKERS = (
     "pendente", "não funciona", "nao funciona", "erro", "falha", "conflito",
-    "investigar", "ainda falta", "não resolv", "nao resolv", "?" ,
+    "investigar", "ainda falta", "não resolv", "nao resolv", "?",
 )
 
 
@@ -92,7 +93,7 @@ def build_session_summary(
     # Enforce a stable serialized-size budget. Drop lower-priority historical
     # assistant/tool summaries first; never silently remove current objective,
     # task state, user constraints, or provenance metadata.
-    while len(__import__("json").dumps(summary, ensure_ascii=False, default=str)) > max_chars:
+    while len(json.dumps(summary, ensure_ascii=False, default=str)) > max_chars:
         if summary["prior_assistant_statements"]:
             summary["prior_assistant_statements"].pop(0)
         elif summary["observations"]:
@@ -102,7 +103,7 @@ def build_session_summary(
         elif summary["constraints"]:
             last = summary["constraints"][-1]
             last["content"] = _clip(last["content"], 250)
-            if len(__import__("json").dumps(summary, ensure_ascii=False, default=str)) <= max_chars:
+            if len(json.dumps(summary, ensure_ascii=False, default=str)) <= max_chars:
                 break
             summary["constraints"].pop(0)
         else:
