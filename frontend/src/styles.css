@@ -1577,3 +1577,10 @@ body { overflow: hidden; }
   .agent-tasks-panel { padding: 18px 14px; }
   .agent-tasks-heading { flex-direction: column; }
 }
+
+
+.agent-approval-details { margin: 12px 0; padding: 14px; border: 1px solid var(--border, #ddd); border-radius: 10px; background: var(--surface-secondary, #f7f7f7); }
+.agent-approval-details > p { margin: 0 0 12px; line-height: 1.5; }
+.agent-approval-details > div { margin-top: 10px; }
+.agent-approval-details > div > span { display: block; margin-bottom: 5px; color: var(--muted, #777); font-size: 12px; }
+.agent-approval-details pre { max-height: 220px; overflow: auto; margin: 0; padding: 10px; border-radius: 6px; background: var(--surface, #fff); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
