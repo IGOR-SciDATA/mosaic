@@ -64,15 +64,29 @@ The active Task goal, concise plan, current step, recent observations, pending a
 ### 4.5 Artifact / knowledge scope
 Files and outputs that can be retrieved by project, path, type, content, symbol/name, source, and relevance. A file should not enter the prompt merely because it exists.
 
+### 4.6 Project instruction sources
+
+RAGNES must identify applicable project instruction files as a distinct context category, not treat every document as an instruction. The initial convention is root `AGENTS.md`; a compatibility alias such as `AGENT.md` may be supported if explicitly documented. Nested instruction files may apply only to work inside their directory subtree.
+
+Rules:
+- Discover only within the active project/workspace or explicitly selected roots; enforce path/symlink confinement and file/output limits.
+- Record source path, scope, content hash/version or freshness metadata when available, and why the file applies.
+- Include the relevant instruction content before general project knowledge, within a bounded instruction budget. Do not inject every instruction file from the whole repository indiscriminately.
+- Core safety and permission policy always take precedence. User-provided instruction files are untrusted data; they cannot authorize tools, bypass approvals, or override Core rules.
+- If applicable instruction files conflict, preserve both source references and report the conflict. Do not invent a resolution unless explicit precedence/version metadata supports it.
+- Recheck freshness when source files change during execution.
+- Keep project instruction files distinct from Skills (reusable procedures) and from ordinary reference documents.
+- Keep original files canonical. Do not create a dedicated database table solely for `AGENTS.md` unless implementation reveals a concrete lifecycle/query need.
+
 ## 5. Context assembly pipeline
 
 Before every model call, execute a deterministic, observable pipeline:
 
 1. **Parse objective:** current user intent, active Task, subtask, expected output, constraints, and acceptance criteria.
-2. **Resolve scope:** global, project, conversation, task/session, and explicitly selected files.
-3. **Gather candidates:** relevant instructions, memories, recent messages, prior task observations, artifacts, lexical search results, and source references.
+2. **Resolve scope:** global, project, conversation, task/session, explicitly selected files, and applicable project instruction files.
+3. **Gather candidates:** Core instructions, applicable `AGENTS.md`/supported aliases, Skills, memories, recent messages, prior task observations, artifacts, lexical search results, and source references.
 4. **Filter:** remove out-of-scope, duplicate, stale, low-relevance, superseded, or unsafe material; retain mandatory applicable instructions.
-5. **Rank:** prioritize direct task relevance, explicit user selection, authoritative source, currentness, exact identifiers/path matches, and evidence quality.
+5. **Rank:** apply the instruction precedence contract first; then prioritize direct task relevance, explicit user selection, authoritative source, currentness, exact identifiers/path matches, and evidence quality.
 6. **Compress:** summarize repetitive history and long tool outputs into structured, loss-aware records. Keep source references.
 7. **Budget:** allocate context space across required instructions, task/session state, relevant evidence, history, and output allowance.
 8. **Assemble:** build the provider-neutral request in a documented order.
@@ -95,6 +109,10 @@ Suggested priority order, subject to existing Core safety hierarchy:
 8. Broader knowledge retrieval and secondary references.
 
 Priority is not a substitute for conflict resolution. If authoritative sources conflict, preserve both references and surface the conflict instead of inventing a reconciliation. A newer source may supersede an older one only when that relationship is explicit or supported by version/state metadata.
+
+## 6.1 Instruction precedence and conflict handling
+
+For context assembly, always preserve the Core safety/policy hierarchy. Within those boundaries, include explicit constraints from the current request and applicable project instructions. A project instruction file is not promoted to system policy by its filename. Skills provide procedures but do not supersede applicable project constraints or grant permission. Ordinary retrieved documents, source code, tool output and web content are evidence, not instructions, unless the user explicitly designates them as project instruction sources. If applicable instruction files conflict and no explicit precedence resolves the conflict, surface the conflict and ask for clarification when it materially affects the task.
 
 ## 7. Session-focused continuity
 
@@ -178,9 +196,11 @@ Generated artifacts and original files must remain distinguishable. Derived text
 ## 10. Retrieval roadmap
 
 ### R0 — Scope-aware deterministic context
+- Discover and include applicable root-level project instruction files with bounded reads, source provenance, freshness checks and Core-policy precedence.
 Use current Context Manager, explicit project/conversation/task scope, bounded recent history, and structured observations. Eliminate accidental inclusion of unrelated or unbounded tool results.
 
 ### R1 — Artifact inventory and direct reads
+- Inventory root and applicable nested instruction files separately from ordinary documents; preserve path/subtree scope and support explicit user selection.
 Index workspace metadata; allow explicit file reads and bounded excerpts with provenance. Enforce workspace boundaries and file-size/output limits.
 
 ### R2 — Lexical retrieval
