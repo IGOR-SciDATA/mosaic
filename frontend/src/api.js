@@ -99,6 +99,15 @@ export const api = {
     chat: (id, content) => request(`/conversations/${id}/chat`, { method: "POST", body: JSON.stringify({ content }) }),
     stream: (id, content, onChunk) => streamRequest(`/conversations/${id}/chat/stream`, { content }, onChunk),
   },
+  tasks: {
+    list: () => request("/tasks"),
+    create: (payload) => request("/tasks", { method: "POST", body: JSON.stringify(payload) }),
+    get: (id) => request(`/tasks/${id}`),
+    run: (id) => request(`/tasks/${id}/run`, { method: "POST" }),
+    approveToolCall: (taskId, toolCallId) => request(`/tasks/${taskId}/tool-calls/${toolCallId}/approve`, { method: "POST" }),
+    rejectToolCall: (taskId, toolCallId) => request(`/tasks/${taskId}/tool-calls/${toolCallId}/reject`, { method: "POST" }),
+    cancel: (id) => request(`/tasks/${id}/cancel`, { method: "POST" }),
+  },
   memories: {
     list: (projectId) => request(`/memories?project_id=${projectId}`),
     create: (payload) => request("/memories", { method: "POST", body: JSON.stringify(payload) }),
