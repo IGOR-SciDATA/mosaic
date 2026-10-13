@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from app.models.task import Task
+from app.models.tool_call import ToolCall
 from app.models.task_repository import (
     create_task,
     delete_task,
@@ -60,6 +61,18 @@ def get_task_endpoint(task_id: int) -> Task:
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+@router.get("/{task_id}/tool-calls/{tool_call_id}", response_model=ToolCall)
+def get_pending_tool_call_endpoint(task_id: int, tool_call_id: int) -> ToolCall:
+    _, call = _pending_approval(task_id, tool_call_id)
+    try:
+        policy = resolve_tool_policy(call.tool_name, call.arguments)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not policy["approval_required"]:
+        raise HTTPException(status_code=409, detail="This ToolCall does not require human approval")
+    return call
 
 
 @router.post("/{task_id}/run")

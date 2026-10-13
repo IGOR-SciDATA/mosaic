@@ -7,6 +7,7 @@ from app.api.tasks import (
     approve_task_tool_call_endpoint,
     cancel_task_endpoint,
     reject_task_tool_call_endpoint,
+    get_pending_tool_call_endpoint,
 )
 from app.db.database import get_connection, init_db
 from pydantic import ValidationError
@@ -193,6 +194,16 @@ def _approval_task(tmp_path):
         result={"tool_call_id": call.id, "iterations": 1},
     )
     return workspace, task, call
+
+
+def test_pending_tool_call_details_are_available_only_for_current_approval(tmp_path):
+    _, task, call = _approval_task(tmp_path)
+
+    details = get_pending_tool_call_endpoint(task.id, call.id)
+
+    assert details.id == call.id
+    assert details.tool_name == call.tool_name
+    assert details.arguments == call.arguments
 
 
 def test_task_tool_approval_executes_once_and_resumes_task(tmp_path):

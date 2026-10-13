@@ -104,6 +104,7 @@ export const api = {
     create: (payload) => request("/tasks", { method: "POST", body: JSON.stringify(payload) }),
     get: (id) => request(`/tasks/${id}`),
     run: (id) => request(`/tasks/${id}/run`, { method: "POST" }),
+    getPendingToolCall: (taskId, toolCallId) => request(`/tasks/${taskId}/tool-calls/${toolCallId}`),
     approveToolCall: (taskId, toolCallId) => request(`/tasks/${taskId}/tool-calls/${toolCallId}/approve`, { method: "POST" }),
     rejectToolCall: (taskId, toolCallId) => request(`/tasks/${taskId}/tool-calls/${toolCallId}/reject`, { method: "POST" }),
     cancel: (id) => request(`/tasks/${id}/cancel`, { method: "POST" }),
