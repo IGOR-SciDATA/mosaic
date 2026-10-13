@@ -214,8 +214,7 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
                 "content": "Mosaic project state:\n" + str(project.state),
             })
 
-        if project is not None and current_user is not None:
-            context.extend(_selected_artifact_context(project.workspace, current_user.content))
+
 
         if project is not None:
             instructions = _project_instructions(project.workspace)
@@ -233,6 +232,9 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
                         + "\n</project-instructions>"
                     ),
                 })
+
+        if project is not None and current_user is not None:
+            context.extend(_selected_artifact_context(project.workspace, current_user.content))
 
         memories = get_project_memories(conversation.project_id)
     else:
