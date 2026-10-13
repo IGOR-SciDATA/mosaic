@@ -4,6 +4,7 @@ from typing import Any
 
 from app.db.database import get_connection
 from app.models.tool_call import ToolCall
+from app.core.state_transitions import TOOL_CALL_TRANSITIONS, validate_transition
 
 ALLOWED_STATUSES = {
     "pending",
@@ -35,6 +36,8 @@ def create_tool_call(
     if not tool_name:
         raise ValueError("Tool name is required")
     _validate_status(status)
+    if status != "pending":
+        raise ValueError("New tool calls must start in pending status")
     tool_arguments = arguments or {}
     created_at = _utc_now()
 
@@ -108,16 +111,19 @@ def update_tool_call(tool_call_id: int, *, status: str) -> ToolCall | None:
     if current is None:
         return None
 
+    validate_transition('tool call', current.status, status, TOOL_CALL_TRANSITIONS)
     updated_at = _utc_now()
     with get_connection() as connection:
-        connection.execute(
+        cursor = connection.execute(
             """
             UPDATE tool_calls
             SET status = ?, updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND status = ?
             """,
-            (status, updated_at, tool_call_id),
+            (status, updated_at, tool_call_id, current.status),
         )
+        if cursor.rowcount != 1:
+            raise ValueError("Concurrent tool call state change detected")
         connection.commit()
 
     return get_tool_call(tool_call_id)

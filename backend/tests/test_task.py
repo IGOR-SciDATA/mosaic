@@ -2,7 +2,9 @@ import sqlite3
 
 import pytest
 
+from app.api.tasks import TaskUpdate, cancel_task_endpoint
 from app.db.database import get_connection, init_db
+from pydantic import ValidationError
 from app.models.project_repository import create_project
 from app.models.task_repository import (
     create_task,
@@ -142,3 +144,16 @@ def test_database_enforces_relationship_check() -> None:
                     "2026-01-01T00:00:00+00:00",
                 ),
             )
+
+
+
+def test_task_status_cannot_be_changed_through_generic_patch() -> None:
+    with pytest.raises(ValidationError):
+        TaskUpdate.model_validate({"status": "completed"})
+
+
+def test_task_can_be_cancelled_through_core_endpoint() -> None:
+    project = create_project("Mosaic", "/tmp/mosaic")
+    task = create_task(type="generic", mode="agent", project_id=project.id)
+    cancelled = cancel_task_endpoint(task.id)
+    assert cancelled.status == "cancelled"

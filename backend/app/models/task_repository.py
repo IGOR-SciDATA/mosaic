@@ -4,6 +4,7 @@ from typing import Any
 
 from app.db.database import get_connection
 from app.models.task import Task
+from app.core.state_transitions import TASK_TRANSITIONS, validate_transition
 
 ALLOWED_TYPES = {"code_project", "document", "analysis", "report", "generic"}
 ALLOWED_MODES = {"create", "agent"}
@@ -49,6 +50,8 @@ def create_task(
     plan: dict[str, Any] | None = None,
     result: dict[str, Any] | None = None,
 ) -> Task:
+    if status != "pending":
+        raise ValueError("New tasks must start in pending status")
     _validate_task(conversation_id, project_id, type, mode, status)
     created_at = _utc_now()
 
@@ -156,6 +159,8 @@ def update_task(
     new_plan = current.plan if plan is None else plan
     new_result = current.result if result is None else result
 
+    if status is not None and new_status != current.status:
+        validate_transition("task", current.status, new_status, TASK_TRANSITIONS)
     _validate_task(
         new_conversation_id,
         new_project_id,
@@ -166,12 +171,12 @@ def update_task(
     updated_at = _utc_now()
 
     with get_connection() as connection:
-        connection.execute(
+        cursor = connection.execute(
             """
             UPDATE tasks
             SET conversation_id = ?, project_id = ?, type = ?, mode = ?,
                 status = ?, plan = ?, result = ?, updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND status = ?
             """,
             (
                 new_conversation_id,
@@ -183,8 +188,11 @@ def update_task(
                 json.dumps(new_result) if new_result is not None else None,
                 updated_at,
                 task_id,
+                current.status,
             ),
         )
+        if cursor.rowcount != 1:
+            raise ValueError("Concurrent task state change detected")
         connection.commit()
 
     return get_task(task_id)
