@@ -79,8 +79,9 @@ def build_session_summary(
         "completed_work": latest(completed_work),
         "observations": latest(observations),
         "open_issues": latest(open_issues),
-        "source_refs": [f"message:{message.id}" for message in messages],
+        "source_refs": [f"message:{message.id}" for message in messages[-40:]],
         "source_count": len(messages),
+        "source_refs_truncated": len(messages) > 40,
         "limitations": [
             "Derived summary; original messages remain canonical.",
             "Items are selected deterministically; absence does not prove an item never existed.",
