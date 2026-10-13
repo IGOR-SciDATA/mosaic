@@ -70,11 +70,13 @@ def evaluate_ragnes(
 
     Recall is measured over labeled relevant paths. Irrelevant-context ratio is
     the fraction of selected result files not labeled relevant. Fact coverage
-    checks whether each labeled fact appears in the selected excerpts. Source
+    checks whether each labeled fact appears in bounded excerpts. Source
     correctness checks that each result path exists in the workspace inventory.
     The full-context baseline includes every readable inventory artifact, making
     its recall an upper bound rather than a quality claim.
     """
+    if max_context_chars < 1:
+        raise ValueError("max_context_chars must be positive")
     root = Path(workspace).resolve(strict=True)
     case_list = list(cases)
     inventory = list_workspace_artifacts(root)
@@ -96,17 +98,28 @@ def evaluate_ragnes(
         results = search["results"]
         selected_paths = [item["path"] for item in results]
         selected_set = set(selected_paths)
-        retrieved_relevant = relevant & selected_set
-        recall = len(retrieved_relevant) / len(relevant) if relevant else 1.0
+        recall = len(relevant & selected_set) / len(relevant) if relevant else 1.0
         irrelevant_ratio = (
             sum(path not in relevant for path in selected_paths) / len(selected_paths)
             if selected_paths else (0.0 if not relevant else 1.0)
         )
-        excerpts = "\n".join(
-            snippet["content"]
-            for item in results
-            for snippet in item.get("snippets", [])
-        )
+
+        excerpt_parts: list[str] = []
+        remaining_chars = max_context_chars
+        for item in results:
+            for snippet in item.get("snippets", []):
+                if remaining_chars <= 0:
+                    break
+                piece = str(snippet.get("content", ""))[:remaining_chars]
+                if piece:
+                    excerpt_parts.append(piece)
+                    remaining_chars -= len(piece)
+            if remaining_chars <= 0:
+                break
+        excerpts = "\n".join(excerpt_parts)
+        # Include separators in the aggregate budget as well.
+        if len(excerpts) > max_context_chars:
+            excerpts = excerpts[:max_context_chars]
         normalized_excerpt = _normalize(excerpts)
         required_facts = [str(fact) for fact in case.get("required_facts", [])]
         covered_facts = [fact for fact in required_facts if _normalize(fact) in normalized_excerpt]
@@ -130,7 +143,9 @@ def evaluate_ragnes(
             ) if required_facts else 1.0,
             "retrieved_chars": retrieved_chars,
             "latency_ms": latency_ms,
-            "truncated": bool(search.get("truncated", False)),
+            "truncated": bool(search.get("truncated", False)) or (
+                len(excerpts) >= max_context_chars
+            ),
             "baseline_recall": round(
                 len(relevant & set(all_readable_paths)) / len(relevant), 4
             ) if relevant else 1.0,
