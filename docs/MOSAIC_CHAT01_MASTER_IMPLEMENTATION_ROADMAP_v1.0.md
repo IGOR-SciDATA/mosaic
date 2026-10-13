@@ -92,11 +92,12 @@ Tasks:
 - Establish one authoritative backend policy/approval decision point across Action and ToolCall lifecycles.
 - Define and enforce legal Task/Action/ToolCall state transitions; reject invalid transitions.
 - Ensure cancellation and duplicate requests are handled safely.
-- Add/verify SSRF and private-address protections for external fetch/search tools, where applicable.
+- Separate normalized public web search results from safe public-page fetch, and add/verify DNS/redirect/private-address/response-size protections for both.
+- Ensure each registered tool declares a strict schema, scope, risk/side-effect class, approval policy, timeout, output limit and normalized result/error shape.
 - Redact secrets and bound tool output.
 - Do not add a permissions table or new database entities without an explicit approved schema amendment.
 
-**Exit gate:** tests prove workspace confinement, unsafe command denial/approval, invalid transition rejection, cancellation, bounded output, and approval state correctness.
+**Exit gate:** tests prove workspace confinement, filesystem create/read/write/list and overwrite semantics, unsafe command denial/approval, command timeout/cancellation, structured search results, safe source fetch/SSRF defenses, invalid transition rejection, bounded output, and approval state correctness.
 
 ### Phase 2 — Provider-backed Harness end-to-end
 
