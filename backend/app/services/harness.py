@@ -68,8 +68,8 @@ def run_task_agent(task_id: int, *, iteration_limit: int = 5) -> dict[str, Any]:
     provider = _get_provider(model.provider)
     def decide(context: list[dict[str, str]]) -> dict[str, Any]:
         messages = [
-            *context,
             {"role": "system", "content": _AGENT_PROTOCOL},
+            *context,
         ]
         raw = provider.generate(
             messages=messages,
