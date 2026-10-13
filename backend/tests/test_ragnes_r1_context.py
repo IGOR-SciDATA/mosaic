@@ -57,12 +57,14 @@ def test_context_ignores_paths_outside_workspace(tmp_path):
     workspace.mkdir()
     outside = tmp_path / "outside.txt"
     outside.write_text("outside secret", encoding="utf-8")
+    (workspace / "outside.txt").write_text("inside decoy secret", encoding="utf-8")
     conversation = _conversation_for_workspace(workspace, "Leia ../outside.txt")
 
     context = build_context(conversation.id)
 
     assert not any("RAGNES selected artifact evidence" in item["content"] for item in context)
     assert "outside secret" not in str(context)
+    assert "inside decoy secret" not in str(context)
 
 
 def test_context_bounds_number_of_explicit_artifacts(tmp_path):
