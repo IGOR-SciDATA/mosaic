@@ -4,6 +4,7 @@ from app.db.database import get_connection, init_db
 from app.models.project_repository import create_project
 from app.models.task_repository import create_task, update_task
 from app.models.task_event_repository import create_task_event, list_task_events
+from app.api.tasks import list_task_events_endpoint
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +39,17 @@ def test_event_metadata_redacts_secret_fields_and_bounds_payload():
         row = connection.execute("SELECT metadata FROM task_events WHERE id = ?", (event.id,)).fetchone()
     assert "do-not-store" not in row["metadata"]
     assert event.metadata["api_key"] == "[REDACTED]"
+
+
+def test_events_api_returns_ordered_events_after_cursor():
+    project = create_project("Events", "/tmp/events")
+    task = create_task(type="generic", mode="agent", project_id=project.id)
+    update_task(task.id, status="executing")
+
+    events = list_task_events_endpoint(task.id, after_id=0, limit=10)
+    assert len(events) == 2
+    next_events = list_task_events_endpoint(task.id, after_id=events[0].id, limit=10)
+    assert [event.id for event in next_events] == [events[1].id]
 
 
 def test_event_cursor_and_limit_are_validated():
