@@ -119,7 +119,7 @@ def _explicit_artifact_paths(content: str | None) -> list[str]:
     if not content:
         return []
     # Require a directory separator and file suffix; do not guess files from topic words.
-    candidates = re.findall(r"([A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+\\.[A-Za-z0-9_-]+)", content)
+    candidates = re.findall(r"([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\\.[A-Za-z0-9_-]+)", content)
     selected: list[str] = []
     for candidate in candidates:
         normalized = candidate
