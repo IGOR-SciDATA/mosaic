@@ -65,7 +65,7 @@ def get_task_endpoint(task_id: int) -> Task:
 
 @router.get("/{task_id}/tool-calls/{tool_call_id}", response_model=ToolCall)
 def get_pending_tool_call_endpoint(task_id: int, tool_call_id: int) -> ToolCall:
-    task, call = _pending_approval(task_id, tool_call_id)
+    _, call = _pending_approval(task_id, tool_call_id)
     try:
         policy = resolve_tool_policy(call.tool_name, call.arguments)
     except ValueError as exc:
