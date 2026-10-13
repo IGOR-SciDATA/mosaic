@@ -166,11 +166,11 @@ Do not infer “80% complete” from iteration count.
 Approval is a first-class interaction, not a browser confirmation dialog.
 
 An approval card must show:
-- **What Mosaic wants to do** in plain language.
+- **What Mosaic wants to do** in plain language, naming the capability (for example, read/write a project file, run a command, search the web or fetch a page).
 - Target path/resource or external destination.
 - Relevant arguments/impact, safely formatted.
 - Why approval is required.
-- Whether the action writes, deletes, executes a command, accesses the network, or changes external state.
+- Whether the action reads or writes files, may overwrite content, executes a process/command, accesses the network, or changes external state.
 - Choices supported by the Core: approve, reject, or cancel the task when available.
 
 Example:
@@ -230,7 +230,9 @@ Details view:
 - event timestamp;
 - component/event type;
 - tool name and safe arguments;
-- status, duration, and redacted result/error;
+- whether it was proposed, approval-gated, approved, executed, or rejected;
+- status/exit code where applicable, duration, and redacted bounded result/error;
+- source URLs and artifact paths created/modified where applicable;
 - relevant file/source references;
 - task and tool-call identifiers for diagnostics.
 
