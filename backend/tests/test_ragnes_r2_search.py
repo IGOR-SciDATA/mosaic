@@ -7,12 +7,12 @@ def test_lexical_search_returns_relevant_bounded_snippets_with_provenance(tmp_pa
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "README.md").write_text(
-        "Mosaic overview\\nThe harness controls tool approval.\\nDone.", encoding="utf-8"
+        "Mosaic overview\nThe harness controls tool approval.\nDone.", encoding="utf-8"
     )
     (workspace / "irrelevant.txt").write_text("gardening and cooking", encoding="utf-8")
     (workspace / "backend").mkdir()
     (workspace / "backend" / "approval.py").write_text(
-        "def request_approval():\\n    return 'pending'\\n", encoding="utf-8"
+        "def request_approval():\n    return 'pending'\n", encoding="utf-8"
     )
 
     result = search_workspace_artifacts(workspace, "tool approval")
@@ -29,7 +29,7 @@ def test_lexical_search_finds_terms_beyond_first_excerpt_window(tmp_path):
     workspace.mkdir()
     lines = [f"ordinary line {index}" for index in range(250)]
     lines[231] = "unique retrieval identifier"
-    (workspace / "large.txt").write_text("\\n".join(lines), encoding="utf-8")
+    (workspace / "large.txt").write_text("\n".join(lines), encoding="utf-8")
 
     result = search_workspace_artifacts(workspace, "unique retrieval identifier")
 
