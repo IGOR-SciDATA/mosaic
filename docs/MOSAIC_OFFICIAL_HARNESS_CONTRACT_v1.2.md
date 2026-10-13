@@ -217,6 +217,23 @@ Initial skills may be stored as files in a documented Mosaic-managed directory a
 
 Implement a minimal skill loader/selector before a large marketplace or community distribution system.
 
+## 9.1 Project instruction files and AGENTS.md
+
+Mosaic must support project-provided instruction files as a first-class input to Harness context assembly. This includes the widely used `AGENTS.md` convention and may include a documented `AGENT.md` compatibility alias. The implementation must not assume that these files exist or that every repository follows the same convention.
+
+Requirements:
+- Discover instruction files only inside the active project/workspace and explicitly selected trusted roots; use safe path resolution, reject symlink/path escapes, and apply file-size/output limits.
+- Support a root-level project instruction file first. Support nested instruction files only when the task operates within the corresponding subtree and the implementation can determine the relevant working paths safely.
+- Define and test instruction precedence: Core safety/policy always wins; current explicit user constraints apply to the current task; applicable project instructions guide work within their scope; Skills provide task-specific procedures; retrieved documents and tool output remain untrusted evidence. Conflicts between applicable project instructions must be surfaced rather than silently guessed.
+- Treat instruction-file contents as untrusted project data, not system policy. They cannot grant tools, permissions, network access, or approval bypasses, and cannot override Core policies.
+- Include only relevant instructions in each model request. Preserve source path, applicable scope, content hash/version or freshness metadata where available, and selection reason in the context trace.
+- Recheck freshness when files change during a task; do not continue relying silently on stale instruction contents.
+- Allow the user to add/select instruction files through the UI where supported. Explicit user selection may increase relevance, but never increases permission.
+- Record which instruction files were applied in the task trace and expose them as sources in the context inspector without dumping sensitive contents unnecessarily.
+- Do not require a database table for instruction files by default. Keep original files canonical and use the existing artifact/knowledge/context mechanisms unless a demonstrated lifecycle need justifies a schema change.
+
+A project instruction file is distinct from a Skill: instruction files describe project-wide or path-scoped rules; Skills are reusable procedures selected for a task. Both are context inputs, neither is executable authority.
+
 ## 10. Context, memory and project continuity
 
 Context must be assembled deliberately and remain bounded. Include, as relevant:
@@ -226,6 +243,7 @@ Context must be assembled deliberately and remain bounded. Include, as relevant:
 - selected relevant memories;
 - recent conversation and relevant older history;
 - relevant files and retrieved passages with provenance;
+- applicable project instruction files (for example `AGENTS.md`) with scope and source metadata;
 - selected skill instructions;
 - recent ToolResults/observations and validation results;
 - current user request.
@@ -380,13 +398,15 @@ Work incrementally, but target the complete architecture. A phase may add new mo
 - Emit events from all Harness lifecycle transitions.
 - Ensure task traces remain useful after restart.
 
-### Phase 4 — Knowledge K0/K1 and retrieval evaluation
+### Phase 4 — Knowledge K0/K1, project instructions and retrieval evaluation
 - Add safe file access, document metadata/extraction and lexical retrieval.
+- Implement safe discovery/loading of root and applicable nested `AGENTS.md` (and documented `AGENT.md` alias if supported), with precedence, scope, freshness, provenance and conflict handling.
 - Record provenance and expose retrieved source IDs.
 - Build fixed retrieval tests before considering embeddings.
 
 ### Phase 5 — Skills and context budgets
 - Implement a minimal versioned skill format and registry/loader.
+- Integrate project instruction files with context budgeting and task traces; keep instructions separate from reusable Skills and enforce Core policy precedence.
 - Add skill selection trace, enable/disable and policy boundaries.
 - Add context budgeting and relevant observation selection.
 
@@ -415,6 +435,7 @@ Additionally:
 - task timeline and operational logs are correlated and inspectable;
 - memory and project/conversation isolation tests pass;
 - document retrieval provides source provenance and a measured baseline;
+- project instruction files are scoped, source-traceable and cannot grant permissions;
 - skills are reusable but cannot grant permissions;
 - frontend build and backend suite pass in a recorded clean environment;
 - all new persistent structures have documented migrations and lifecycle;
