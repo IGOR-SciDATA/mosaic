@@ -26,7 +26,7 @@ def test_context_reads_only_explicitly_named_workspace_artifact(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "src").mkdir()
-    (workspace / "src" / "main.py").write_text("line one\\nselected evidence\\nline three", encoding="utf-8")
+    (workspace / "src" / "main.py").write_text(chr(10).join(["line one", "selected evidence", "line three"]), encoding="utf-8")
     (workspace / "other.py").write_text("must not be injected", encoding="utf-8")
     conversation = _conversation_for_workspace(workspace, "Analise src/main.py")
 
