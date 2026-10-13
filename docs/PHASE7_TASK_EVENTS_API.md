@@ -15,6 +15,7 @@ Add the purpose-specific `task_events` table required by Harness v1.2. It is not
 
 - Persist task creation/status changes and tool proposal/status changes.
 - Expose ordered task event retrieval using `after_id` cursor for refresh/reconnect.
+- Add an SSE stream that honors `Last-Event-ID`, emits ordered event IDs and keep-alives, and closes after a bounded 30-second window so clients can reconnect.
 - Redact metadata keys likely to contain secrets and bound metadata/message sizes.
 - No broker, external logging service, new service process, or schema unrelated to the event timeline.
 
