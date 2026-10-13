@@ -5,6 +5,7 @@ from typing import Any
 from app.db.database import get_connection
 from app.models.tool_call import ToolCall
 from app.core.state_transitions import TOOL_CALL_TRANSITIONS, validate_transition
+from app.models.task_event_repository import create_task_event
 
 ALLOWED_STATUSES = {
     "pending",
@@ -62,7 +63,7 @@ def create_tool_call(
         )
         connection.commit()
 
-    return ToolCall(
+    call = ToolCall(
         id=cursor.lastrowid,
         conversation_id=conversation_id,
         task_id=task_id,
@@ -72,6 +73,13 @@ def create_tool_call(
         created_at=created_at,
         updated_at=created_at,
     )
+    if task_id is not None:
+        create_task_event(
+            task_id=task_id, conversation_id=conversation_id, tool_call_id=call.id,
+            event_name="tool.proposed", message=f"Tool proposed: {tool_name}", component="tool",
+            status="pending", metadata={"tool_name": tool_name, "arguments": tool_arguments},
+        )
+    return call
 
 
 def get_tool_call(tool_call_id: int) -> ToolCall | None:
@@ -126,7 +134,16 @@ def update_tool_call(tool_call_id: int, *, status: str) -> ToolCall | None:
             raise ValueError("Concurrent tool call state change detected")
         connection.commit()
 
-    return get_tool_call(tool_call_id)
+    updated = get_tool_call(tool_call_id)
+    if updated is not None and updated.task_id is not None:
+        create_task_event(
+            task_id=updated.task_id, conversation_id=updated.conversation_id,
+            tool_call_id=updated.id, event_name=f"tool.{status}",
+            message=f"ToolCall {updated.id} status changed to {status}", component="tool",
+            status=status, metadata={"tool_name": updated.tool_name},
+            level="error" if status == "failed" else "warning" if status == "rejected" else "info",
+        )
+    return updated
 
 
 def _row_to_tool_call(row) -> ToolCall:
