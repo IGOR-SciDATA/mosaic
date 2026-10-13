@@ -4,6 +4,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from app.models.task import Task
+from app.models.task_event import TaskEvent
+from app.models.task_event_repository import list_task_events, create_task_event
 from app.models.task_repository import (
     create_task,
     delete_task,
@@ -40,7 +42,8 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 @router.post("", response_model=Task)
 def create_task_endpoint(payload: TaskCreate) -> Task:
     try:
-        return create_task(**payload.model_dump())
+        task = create_task(**payload.model_dump())
+        return task
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -48,6 +51,17 @@ def create_task_endpoint(payload: TaskCreate) -> Task:
 @router.get("", response_model=list[Task])
 def list_tasks_endpoint() -> list[Task]:
     return list_tasks()
+
+
+@router.get("/{task_id}/events", response_model=list[TaskEvent])
+def list_task_events_endpoint(task_id: int, after_id: int = 0, limit: int = 100) -> list[TaskEvent]:
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    try:
+        return list_task_events(task_id, after_id=after_id, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/{task_id}", response_model=Task)
