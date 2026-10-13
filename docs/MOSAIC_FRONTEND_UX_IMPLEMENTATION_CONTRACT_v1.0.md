@@ -62,7 +62,7 @@ The user should not need to understand Harness, ToolCall, Context Manager, provi
 - Model selector using real enabled Models returned by the Core
 - Current project/context indicator when relevant
 - Mode selector or action affordance for Chat / Agent, without making it mandatory for simple chat
-- Attach/select files where supported
+- Attach/select files where supported, including project instruction files when the backend supports them
 - Streaming assistant response
 
 **C. Task execution surface**
@@ -78,6 +78,7 @@ The user should not need to understand Harness, ToolCall, Context Manager, provi
 - **Artifacts:** files/results produced by tasks, with safe open/download actions.
 - **Execution details:** filtered events, tool calls, results, errors, durations and source references.
 - **Settings:** execution profile, default model, and relevant tool/skill controls as they become available.
+- **Project instructions:** show discovered/applicable instruction files (such as `AGENTS.md`), allow users to add/select them only through real backend-supported flows, and show the scope in which they apply.
 
 Do not implement all supporting views before the end-to-end task flow works.
 
@@ -319,6 +320,7 @@ Implement in small, verifiable increments:
 ### Frontend Phase 4 — Execution settings
 - Expose only implemented execution profiles and actual supported settings.
 - Add Skills/settings views only when corresponding backend contracts exist.
+- Add project instruction file discovery/selection UI only when Core APIs expose actual discovered files, scope, freshness and applied-source metadata; do not treat file contents as permissions.
 
 ### Frontend Phase 5 — Observability
 - Add filters and technical details for events, ToolCalls, ToolResults and source references.
