@@ -132,7 +132,7 @@ Every task view should provide a readable timeline. Example:
 - **Validando resultado** — verificando se o objetivo foi atendido.
 - **Concluída** — resultado e artefatos disponíveis.
 
-Each item may include timestamp and a short description. Tool-specific technical data, arguments and outputs are behind “Ver detalhes”.
+Each item may include timestamp and a short description. Tool-specific technical data, safe arguments and bounded outputs are behind “Ver detalhes”. The UI must distinguish a proposed tool call from an executed operation and show the authoritative Core result.
 
 ### 6.1 Status mapping
 
