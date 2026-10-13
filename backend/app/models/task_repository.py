@@ -5,6 +5,7 @@ from typing import Any
 from app.db.database import get_connection
 from app.models.task import Task
 from app.core.state_transitions import TASK_TRANSITIONS, validate_transition
+from app.models.task_event_repository import create_task_event
 
 ALLOWED_TYPES = {"code_project", "document", "analysis", "report", "generic"}
 ALLOWED_MODES = {"create", "agent"}
@@ -78,7 +79,7 @@ def create_task(
         )
         connection.commit()
 
-    return Task(
+    task = Task(
         id=cursor.lastrowid,
         conversation_id=conversation_id,
         project_id=project_id,
@@ -90,6 +91,12 @@ def create_task(
         created_at=created_at,
         updated_at=created_at,
     )
+    create_task_event(
+        task_id=task.id, conversation_id=conversation_id, project_id=project_id,
+        event_name="task.created", message="Task created", status="pending",
+        metadata={"mode": mode, "type": type},
+    )
+    return task
 
 
 def get_task(task_id: int) -> Task | None:
@@ -195,7 +202,16 @@ def update_task(
             raise ValueError("Concurrent task state change detected")
         connection.commit()
 
-    return get_task(task_id)
+    updated = get_task(task_id)
+    if status is not None and new_status != current.status:
+        create_task_event(
+            task_id=task_id, conversation_id=updated.conversation_id if updated else current.conversation_id,
+            project_id=updated.project_id if updated else current.project_id,
+            event_name="task.status_changed", message=f"Task status changed from {current.status} to {new_status}",
+            status=new_status, metadata={"previous_status": current.status, "status": new_status},
+            level="error" if new_status == "failed" else "warning" if new_status == "cancelled" else "info",
+        )
+    return updated
 
 
 def delete_task(task_id: int) -> bool:
