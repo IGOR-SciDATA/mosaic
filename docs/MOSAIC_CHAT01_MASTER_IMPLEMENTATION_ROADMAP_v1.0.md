@@ -112,7 +112,7 @@ Tasks:
 - Ensure approval-required actions pause and resume the same persisted Task after the decision; do not restart duplicate execution.
 - Keep Harness as a service inside the existing Core, not a second Core.
 
-**Exit gate:** integration test demonstrates a real provider-backed multi-step Task with a tool call, persisted result, observation fed back to the model, and final response. Also test approval pause/resume, failure, iteration limit, and cancellation.
+**Exit gate:** integration test demonstrates a real provider-backed multi-step Task with tool call(s), persisted results, bounded observations fed back to the model, and a final response. The full suite also tests approval pause/resume, failure, iteration limit, cancellation, and a combined search → fetch → filesystem artifact → terminal validation workflow.
 
 ### Phase 3 — Execution events, Task APIs and reconnection substrate
 
@@ -251,6 +251,10 @@ Required scenarios:
 - project instruction prompt injection and attempts to bypass Core policy are rejected/ignored as authority;
 - normal chat remains normal chat;
 - provider-backed multi-step Task with real tool calls;
+- filesystem list/read/create/write within workspace, with overwrite, traversal and symlink protections;
+- terminal command execution with non-zero exit, timeout, cancellation and output-limit handling;
+- structured web search and source-preserving public-page fetch with SSRF/redirect protections;
+- combined search → fetch → write artifact → run validation → grounded final response;
 - unsafe tool request rejected or gated;
 - approval pause/decision/resume;
 - cancellation and failure recovery;
