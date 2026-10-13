@@ -122,7 +122,7 @@ def _explicit_artifact_paths(content: str | None) -> list[str]:
     candidates = re.findall(r"([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[.][A-Za-z0-9_-]+)", content)
     selected: list[str] = []
     for candidate in candidates:
-        if candidate == 'AGENTS.md' or candidate in selected:
+        if Path(candidate).name.casefold() in {'agents.md', 'agent.md'} or candidate in selected:
             continue
         selected.append(candidate)
         if len(selected) >= EXPLICIT_ARTIFACT_LIMIT:
