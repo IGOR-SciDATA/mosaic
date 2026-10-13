@@ -72,7 +72,7 @@ def search_workspace_artifacts(
             break
         path_text = entry["path"]
         # Project instruction files are loaded separately by Context Manager.
-        if path_text.casefold() in {"agents.md", "agent.md"}:
+        if Path(path_text).name.casefold() in {"agents.md", "agent.md"}:
             continue
         size = entry["size_bytes"]
         if size > MAX_ARTIFACT_BYTES or size > max_total_bytes - bytes_scanned:
