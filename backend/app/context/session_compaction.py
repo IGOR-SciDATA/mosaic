@@ -48,7 +48,7 @@ def build_session_summary(
     """Build a bounded structured summary from older messages and current Core state."""
     messages = list(older_messages)
     constraints = []
-    completed_work = []
+    prior_assistant_statements = []
     observations = []
     open_issues = []
 
@@ -60,7 +60,7 @@ def build_session_summary(
         if message.role == "user" and any(marker in lowered for marker in _CONSTRAINT_MARKERS):
             constraints.append(item)
         elif message.role == "assistant":
-            completed_work.append(item)
+            prior_assistant_statements.append(item)
         elif message.role == "tool":
             observations.append(item)
 
@@ -76,7 +76,7 @@ def build_session_summary(
         "objective": _clip(current_objective or "", 1_000) if current_objective else None,
         "task_state": task,
         "constraints": latest(constraints),
-        "completed_work": latest(completed_work),
+        "prior_assistant_statements": latest(prior_assistant_statements),
         "observations": latest(observations),
         "open_issues": latest(open_issues),
         "source_refs": [f"message:{message.id}" for message in messages[-40:]],
@@ -93,8 +93,8 @@ def build_session_summary(
     # assistant/tool summaries first; never silently remove current objective,
     # task state, user constraints, or provenance metadata.
     while len(__import__("json").dumps(summary, ensure_ascii=False, default=str)) > max_chars:
-        if summary["completed_work"]:
-            summary["completed_work"].pop(0)
+        if summary["prior_assistant_statements"]:
+            summary["prior_assistant_statements"].pop(0)
         elif summary["observations"]:
             summary["observations"].pop(0)
         elif summary["open_issues"]:
