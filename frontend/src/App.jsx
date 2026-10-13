@@ -256,12 +256,27 @@ function Modal({title,onClose,children}){
 function AgentTasksPanel({ conversation, project }) {
   const [tasks, setTasks] = useState([]);
   const [busy, setBusy] = useState(false);
+
   const [taskError, setTaskError] = useState("");
+
+  async function attachApprovalDetails(items, conversationId) {
+    return Promise.all(items.map(async task => {
+      const toolCallId = task.status === "awaiting_approval" ? task.result?.tool_call_id : null;
+      if (!toolCallId) return task;
+      try {
+        const toolCall = await api.tasks.getPendingToolCall(task.id, toolCallId);
+        return { ...task, pending_tool_call: toolCall };
+      } catch {
+        return task;
+      }
+    }));
+  }
 
   const refresh = async () => {
     if (!conversation) { setTasks([]); return; }
     const all = await api.tasks.list();
-    setTasks(all.filter(task => task.conversation_id === conversation.id).reverse());
+    const filtered = all.filter(task => task.conversation_id === conversation.id).reverse();
+    setTasks(await attachApprovalDetails(filtered, conversation.id));
   };
 
   useEffect(() => {
@@ -270,7 +285,9 @@ function AgentTasksPanel({ conversation, project }) {
       if (!conversation) { setTasks([]); return; }
       try {
         const all = await api.tasks.list();
-        if (!cancelled) setTasks(all.filter(task => task.conversation_id === conversation.id).reverse());
+        const filtered = all.filter(task => task.conversation_id === conversation.id).reverse();
+        const enriched = await attachApprovalDetails(filtered, conversation.id);
+        if (!cancelled) setTasks(enriched);
       } catch (err) {
         if (!cancelled) setTaskError("Não foi possível carregar as tarefas: " + err.message);
       }
@@ -344,13 +361,19 @@ function AgentTasksPanel({ conversation, project }) {
     {!tasks.length ? <div className="empty-state"><Icon name="check" size={24}/><strong>Nenhuma tarefa nesta conversa</strong><span>Crie uma tarefa para experimentar o loop do Agent.</span></div> :
       <div className="agent-task-list">{tasks.map(task => <article className="agent-task-card" key={task.id}>
         <div className="agent-task-top"><strong>Tarefa #{task.id}</strong><span className={"agent-task-status status-" + task.status}>{label(task.status)}</span></div>
-        {task.status === "awaiting_approval" && <p>O modelo solicitou uma ferramenta que exige sua aprovação. A execução ainda não foi autorizada.</p>}
+        {task.status === "awaiting_approval" && <div className="agent-approval-details">
+          <p>O modelo solicitou uma ferramenta. Confira os dados antes de autorizar a execução.</p>
+          {task.pending_tool_call ? <>
+            <div><span>Ferramenta</span><strong>{task.pending_tool_call.tool_name}</strong></div>
+            <div><span>Argumentos</span><pre>{JSON.stringify(task.pending_tool_call.arguments, null, 2)}</pre></div>
+          </> : <p>Não foi possível carregar os detalhes desta solicitação. Atualize a aba antes de decidir.</p>}
+        </div>}
         {task.result?.output && <div className="agent-task-result">{task.result.output}</div>}
         {task.result?.error && <div className="agent-task-result task-error">{task.result.error}</div>}
         <div className="agent-task-actions">
           {task.status === "awaiting_approval" && <>
-            <button className="primary-action" disabled={busy} onClick={() => decideApproval(task, true)}>Aprovar ferramenta</button>
-            <button disabled={busy} onClick={() => decideApproval(task, false)}>Rejeitar</button>
+            <button className="primary-action" disabled={busy || !task.pending_tool_call} onClick={() => decideApproval(task, true)}>Aprovar ferramenta</button>
+            <button disabled={busy || !task.pending_tool_call} onClick={() => decideApproval(task, false)}>Rejeitar</button>
           </>}
           {task.status === "executing" && <button className="primary-action" disabled={busy} onClick={() => runTask(task.id)}>Continuar Agent</button>}
           {task.status === "pending" && <button className="primary-action" disabled={busy} onClick={() => runTask(task.id)}>Executar</button>}
