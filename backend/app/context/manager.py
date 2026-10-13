@@ -122,7 +122,7 @@ def _explicit_artifact_paths(content: str | None) -> list[str]:
     candidates = re.findall(r"([A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+\\.[A-Za-z0-9_-]+)", content)
     selected: list[str] = []
     for candidate in candidates:
-        normalized = candidate.replace("\\\\", "/")
+        normalized = candidate
         if normalized == "AGENTS.md" or normalized in selected:
             continue
         selected.append(normalized)
