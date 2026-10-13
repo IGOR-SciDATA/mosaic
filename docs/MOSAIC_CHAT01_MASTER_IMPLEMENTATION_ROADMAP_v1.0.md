@@ -139,12 +139,15 @@ Tasks:
 - Build deterministic, bounded context assembly with source references and observable truncation/compaction metadata.
 - Preserve explicit user constraints, applicable safety instructions, confirmed decisions, unresolved issues, and evidence.
 - Implement workspace artifact inventory and bounded direct reads/excerpts with paths and line/range references where possible.
+- Add safe discovery/loading of root-level `AGENTS.md` and, only if explicitly supported, a documented `AGENT.md` alias; handle nested files only for tasks scoped to their directory subtree.
+- Separate project instruction files from Skills and ordinary knowledge documents; apply Core-policy precedence, bounded context inclusion, freshness checks, provenance, and explicit conflict reporting.
+- Add tests for path/symlink escape, unrelated subtree instructions, conflicting instructions, stale content, prompt injection, and attempts to grant permissions from an instruction file.
 - Enforce workspace boundaries, symlink/path checks, file-size limits, and output limits.
 - Recheck source freshness before relying on files that may have changed.
 - Do not introduce embeddings or a vector database in R0/R1.
 - Do not create a Session table by default; use Conversation + Task + project/workspace unless a concrete gap is demonstrated.
 
-**Exit gate:** tests prove context isolation, bounded history and tool observations, safe file access, explicit-file prioritization, source provenance, and no cross-project/workspace leakage.
+**Exit gate:** tests prove context isolation, bounded history and tool observations, safe file access, explicit-file prioritization, source provenance, applicable `AGENTS.md` discovery/scope, conflict handling, freshness, and no cross-project/workspace leakage.
 
 ### Phase 5 — Frontend Task workspace and approval loop
 
@@ -199,6 +202,8 @@ Tasks:
 
 Tasks:
 - Implement Skills as versioned reusable procedures with scope, description, inputs, and instructions, following Harness v1.2.
+- Integrate the project-instruction loader into context selection and task traces; expose the instruction files applied and their scope in the source inspector.
+- Keep the user experience clear about adding instruction files versus adding Skills; neither mechanism grants tool permissions.
 - Select only task-relevant Skills and include them within RAGNES context budget.
 - Skills do not grant permission; Core policy remains authoritative.
 - Define model/context budget behavior, output reservation, iteration/time limits, and how low-ranked context is removed first.
@@ -242,6 +247,8 @@ Tasks:
 **Goal:** validate the whole product and prepare a repeatable development workflow.
 
 Required scenarios:
+- root-level and applicable nested `AGENTS.md` discovery, bounded inclusion, provenance, freshness and conflicts;
+- project instruction prompt injection and attempts to bypass Core policy are rejected/ignored as authority;
 - normal chat remains normal chat;
 - provider-backed multi-step Task with real tool calls;
 - unsafe tool request rejected or gated;
