@@ -67,8 +67,6 @@ def run_task_agent(task_id: int, *, iteration_limit: int = 5) -> dict[str, Any]:
         raise ValueError("Configured model is disabled")
 
     provider = _get_provider(model.provider)
-    base_context = build_context(task.conversation_id)
-
     def decide(context: list[dict[str, str]]) -> dict[str, Any]:
         messages = [
             *context,
