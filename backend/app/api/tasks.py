@@ -1,7 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models.task import Task
 from app.models.task_repository import (
@@ -24,11 +24,12 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     conversation_id: int | None = None
     project_id: int | None = None
     type: str | None = None
     mode: str | None = None
-    status: str | None = None
     plan: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
 
@@ -74,3 +75,18 @@ def delete_task_endpoint(task_id: int) -> dict[str, bool]:
     if not delete_task(task_id):
         raise HTTPException(status_code=404, detail="Task not found")
     return {"deleted": True}
+
+
+
+@router.post("/{task_id}/cancel", response_model=Task)
+def cancel_task_endpoint(task_id: int) -> Task:
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    try:
+        cancelled = update_task(task_id, status="cancelled")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if cancelled is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return cancelled

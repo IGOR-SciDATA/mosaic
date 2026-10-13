@@ -4,6 +4,7 @@ from typing import Any
 
 from app.db.database import get_connection
 from app.models.action import Action
+from app.core.state_transitions import ACTION_TRANSITIONS, validate_transition
 
 ALLOWED_STATUSES = {
     "pending",
@@ -36,6 +37,8 @@ def create_action(
     if not type:
         raise ValueError("Action type is required")
     _validate_status(status)
+    if status != "pending":
+        raise ValueError("New actions must start in pending status")
     action_payload = payload or {}
     created_at = _utc_now()
 
@@ -135,16 +138,18 @@ def update_action(
 
     if not new_type:
         raise ValueError("Action type is required")
+    if status is not None:
+        validate_transition('action', current.status, new_status, ACTION_TRANSITIONS)
     _validate_status(new_status)
     updated_at = _utc_now()
 
     with get_connection() as connection:
-        connection.execute(
+        cursor = connection.execute(
             """
             UPDATE actions
             SET type = ?, target = ?, payload = ?, status = ?,
                 result = ?, updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND status = ?
             """,
             (
                 new_type,
@@ -154,8 +159,11 @@ def update_action(
                 json.dumps(new_result) if new_result is not None else None,
                 updated_at,
                 action_id,
+                current.status,
             ),
         )
+        if cursor.rowcount != 1:
+            raise ValueError("Concurrent action state change detected")
         connection.commit()
 
     return get_action(action_id)

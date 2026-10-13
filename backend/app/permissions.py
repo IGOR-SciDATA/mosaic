@@ -1,23 +1,10 @@
 from app.models.action import Action
 from app.models.action_repository import update_action
-
-ALLOWED_TRANSITIONS = {
-    "pending": {"approved", "rejected", "cancelled"},
-    "approved": {"executing", "cancelled"},
-    "executing": {"completed", "failed", "cancelled"},
-    "completed": set(),
-    "rejected": set(),
-    "failed": set(),
-    "cancelled": set(),
-}
+from app.core.state_transitions import ACTION_TRANSITIONS, validate_transition
 
 
 def transition_action(action: Action, status: str, result: dict | None = None) -> Action:
-    allowed = ALLOWED_TRANSITIONS.get(action.status, set())
-    if status not in allowed:
-        raise ValueError(
-            f"Invalid action transition: {action.status} -> {status}"
-        )
+    validate_transition("action", action.status, status, ACTION_TRANSITIONS)
 
     return update_action(action.id, status=status, result=result)
 
