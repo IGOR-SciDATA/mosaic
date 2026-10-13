@@ -2,10 +2,19 @@ import sqlite3
 
 import pytest
 
-from app.api.tasks import TaskUpdate, cancel_task_endpoint
+from app.api.tasks import (
+    TaskUpdate,
+    approve_task_tool_call_endpoint,
+    cancel_task_endpoint,
+    reject_task_tool_call_endpoint,
+)
 from app.db.database import get_connection, init_db
 from pydantic import ValidationError
 from app.models.project_repository import create_project
+from app.models.conversation_repository import create_conversation
+from app.models.repository import create_model
+from app.models.tool_call_repository import create_tool_call, get_tool_call
+from app.models.tool_result_repository import list_tool_results
 from app.models.task_repository import (
     create_task,
     delete_task,
@@ -157,3 +166,86 @@ def test_task_can_be_cancelled_through_core_endpoint() -> None:
     task = create_task(type="generic", mode="agent", project_id=project.id)
     cancelled = cancel_task_endpoint(task.id)
     assert cancelled.status == "cancelled"
+
+
+
+def _approval_task(tmp_path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Approval test", str(workspace))
+    model = create_model("Approval model", "ollama", "approval:test")
+    conversation = create_conversation("Approval test", model.id, project_id=project.id)
+    task = create_task(
+        type="generic",
+        mode="agent",
+        conversation_id=conversation.id,
+        project_id=project.id,
+    )
+    task = update_task(task.id, status="executing")
+    call = create_tool_call(
+        conversation.id,
+        "filesystem",
+        {"operation": "create", "path": "approved.txt", "content": "approved"},
+        task_id=task.id,
+    )
+    task = update_task(
+        task.id,
+        status="awaiting_approval",
+        result={"tool_call_id": call.id, "iterations": 1},
+    )
+    return workspace, task, call
+
+
+def test_task_tool_approval_executes_once_and_resumes_task(tmp_path):
+    workspace, task, call = _approval_task(tmp_path)
+
+    resumed = approve_task_tool_call_endpoint(task.id, call.id)
+
+    assert resumed.status == "executing"
+    assert resumed.result["resumed_tool_call_id"] == call.id
+    assert resumed.result["tool_result_status"] == "completed"
+    assert get_tool_call(call.id).status == "completed"
+    assert (workspace / "approved.txt").read_text(encoding="utf-8") == "approved"
+    assert len(list_tool_results(call.id)) == 1
+
+
+def test_task_tool_rejection_never_executes_and_resumes_with_failure(tmp_path):
+    workspace, task, call = _approval_task(tmp_path)
+
+    resumed = reject_task_tool_call_endpoint(task.id, call.id)
+
+    assert resumed.status == "executing"
+    assert resumed.result["rejected"] is True
+    assert get_tool_call(call.id).status == "rejected"
+    assert not (workspace / "approved.txt").exists()
+    results = list_tool_results(call.id)
+    assert len(results) == 1
+    assert results[0].status == "failed"
+    assert "rejected by user" in results[0].error
+
+
+def test_task_tool_approval_rejects_unrelated_tool_call(tmp_path):
+    workspace, task, call = _approval_task(tmp_path)
+    other = create_tool_call(
+        call.conversation_id,
+        "filesystem",
+        {"operation": "create", "path": "other.txt", "content": "no"},
+        task_id=task.id,
+    )
+
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc:
+        approve_task_tool_call_endpoint(task.id, other.id)
+    assert exc.value.status_code == 409
+    assert get_tool_call(other.id).status == "pending"
+    assert not (workspace / "other.txt").exists()
+
+
+def test_task_tool_approval_cannot_be_replayed(tmp_path):
+    workspace, task, call = _approval_task(tmp_path)
+    approve_task_tool_call_endpoint(task.id, call.id)
+
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc:
+        approve_task_tool_call_endpoint(task.id, call.id)
+    assert exc.value.status_code == 409
+    assert len(list_tool_results(call.id)) == 1
