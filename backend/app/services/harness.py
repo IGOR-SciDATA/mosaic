@@ -1,7 +1,6 @@
 import json
 from typing import Any
 
-from app.context.manager import build_context
 from app.models.conversation_repository import get_conversation
 from app.models.repository import get_model
 from app.models.task_repository import get_task
