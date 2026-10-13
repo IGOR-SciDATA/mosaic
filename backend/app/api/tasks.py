@@ -13,7 +13,7 @@ from app.models.task_repository import (
 )
 from app.models.tool_call_repository import get_tool_call, update_tool_call
 from app.models.tool_result_repository import create_tool_result
-from app.services.tools import approve_tool_call, execute_tool_call
+from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_policy
 
 
 class TaskCreate(BaseModel):
@@ -118,6 +118,9 @@ def _pending_approval(task_id: int, tool_call_id: int):
 def approve_task_tool_call_endpoint(task_id: int, tool_call_id: int) -> Task:
     task, call = _pending_approval(task_id, tool_call_id)
     try:
+        policy = resolve_tool_policy(call.tool_name, call.arguments)
+        if not policy["approval_required"]:
+            raise HTTPException(status_code=409, detail="This ToolCall does not require human approval")
         approved = approve_tool_call(call)
         tool_result = execute_tool_call(approved)
         current = get_task(task_id)
@@ -148,6 +151,9 @@ def approve_task_tool_call_endpoint(task_id: int, tool_call_id: int) -> Task:
 def reject_task_tool_call_endpoint(task_id: int, tool_call_id: int) -> Task:
     task, call = _pending_approval(task_id, tool_call_id)
     try:
+        policy = resolve_tool_policy(call.tool_name, call.arguments)
+        if not policy["approval_required"]:
+            raise HTTPException(status_code=409, detail="This ToolCall does not require human approval")
         rejected = update_tool_call(tool_call_id, status="rejected")
         if rejected is None:
             raise HTTPException(status_code=404, detail="ToolCall not found")
