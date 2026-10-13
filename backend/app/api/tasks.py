@@ -1,11 +1,15 @@
+import asyncio
+import json
+import time
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
 from app.models.task import Task
 from app.models.task_event import TaskEvent
-from app.models.task_event_repository import list_task_events, create_task_event
+from app.models.task_event_repository import list_task_events
 from app.models.task_repository import (
     create_task,
     delete_task,
@@ -62,6 +66,52 @@ def list_task_events_endpoint(task_id: int, after_id: int = 0, limit: int = 100)
         return list_task_events(task_id, after_id=after_id, limit=limit)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/{task_id}/events/stream")
+async def stream_task_events_endpoint(
+    task_id: int, request: Request, after_id: int = 0,
+) -> StreamingResponse:
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    last_event_id = request.headers.get("last-event-id")
+    if last_event_id:
+        try:
+            after_id = max(after_id, int(last_event_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid Last-Event-ID header")
+    if after_id < 0:
+        raise HTTPException(status_code=422, detail="after_id must be non-negative")
+
+    async def generate():
+        cursor = after_id
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if await request.is_disconnected():
+                break
+            events = list_task_events(task_id, after_id=cursor, limit=100)
+            if events:
+                for event in events:
+                    payload = json.dumps({
+                        "id": event.id, "task_id": event.task_id,
+                        "conversation_id": event.conversation_id, "project_id": event.project_id,
+                        "tool_call_id": event.tool_call_id, "action_id": event.action_id,
+                        "timestamp": event.timestamp, "level": event.level,
+                        "component": event.component, "event_name": event.event_name,
+                        "message": event.message, "duration_ms": event.duration_ms,
+                        "status": event.status, "metadata": event.metadata,
+                    }, ensure_ascii=False)
+                    yield f"id: {event.id}\\nevent: task_event\\ndata: {payload}\\n\\n"
+                    cursor = event.id
+            else:
+                yield ": keep-alive\\n\\n"
+                await asyncio.sleep(1)
+
+    return StreamingResponse(
+        generate(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/{task_id}", response_model=Task)
