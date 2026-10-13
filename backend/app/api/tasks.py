@@ -102,10 +102,10 @@ async def stream_task_events_endpoint(
                         "message": event.message, "duration_ms": event.duration_ms,
                         "status": event.status, "metadata": event.metadata,
                     }, ensure_ascii=False)
-                    yield f"id: {event.id}\\nevent: task_event\\ndata: {payload}\\n\\n"
+                    yield f"id: {event.id}\nevent: task_event\ndata: {payload}\n\n"
                     cursor = event.id
             else:
-                yield ": keep-alive\\n\\n"
+                yield ": keep-alive\n\n"
                 await asyncio.sleep(1)
 
     return StreamingResponse(
