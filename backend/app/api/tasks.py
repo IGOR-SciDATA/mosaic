@@ -14,6 +14,7 @@ from app.models.task_repository import (
 from app.models.tool_call_repository import get_tool_call, update_tool_call
 from app.models.tool_result_repository import create_tool_result
 from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_policy
+from app.services.harness import run_task_agent
 
 
 class TaskCreate(BaseModel):
@@ -59,6 +60,18 @@ def get_task_endpoint(task_id: int) -> Task:
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+@router.post("/{task_id}/run")
+def run_task_agent_endpoint(task_id: int) -> dict[str, Any]:
+    try:
+        return run_task_agent(task_id)
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if message in {"Task not found", "Conversation not found", "Model not found"} else 409
+        raise HTTPException(status_code=status_code, detail=message) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.patch("/{task_id}", response_model=Task)
