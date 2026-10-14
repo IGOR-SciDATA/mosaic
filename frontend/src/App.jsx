@@ -105,7 +105,7 @@ function TopBar({ onMenu, project, conversation, models, onModelChange, modelSta
 }
 
 function ProjectHeader({ project, tab, setTab }) {
-  const tabs=[["note","Conversa"],["folder","Arquivos"],["check","Tarefas"],["memory","Memória"],["tool","Artefatos"],["note","Notas"]];
+  const tabs=[["note","Conversa"],["folder","Arquivos"],["check","Tarefas"],["memory","Memória"],["tool","Artefatos"],["settings","Agente"],["note","Notas"]];
   return <section className="project-header"><div className="project-identity"><MosaicMark compact/><div><h1>{project?.name || "Mosaic"}</h1><p>{project?.description || "Workspace de desenvolvimento do Mosaic."}</p></div></div><nav className="project-tabs">{tabs.map(([i,l])=><button key={l} className={tab===l?"active":""} onClick={()=>setTab(l)}><Icon name={i} size={16}/><span>{l}</span></button>)}</nav></section>;
 }
 
@@ -238,6 +238,8 @@ function TaskWorkspace({ conversationId, projectId }) {
   const [tasks, setTasks] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [events, setEvents] = useState([]);
+  const [toolCalls, setToolCalls] = useState([]);
+  const [connectionState, setConnectionState] = useState("connecting");
   const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -267,6 +269,7 @@ function TaskWorkspace({ conversationId, projectId }) {
     let active = true;
     setLoading(true);
     setEvents([]);
+    setToolCalls([]);
     setTasks([]);
     setSelectedId(null);
     (async () => {
@@ -292,9 +295,10 @@ function TaskWorkspace({ conversationId, projectId }) {
     let active = true;
     const refresh = async () => {
       try {
-        const [task, nextEvents] = await Promise.all([
+        const [task, nextEvents, nextToolCalls] = await Promise.all([
           api.tasks.get(selectedId),
           api.tasks.events(selectedId, 0),
+          api.toolCalls.list(conversationId, selectedId),
         ]);
         if (!active) return;
         setTasks(items => {
@@ -302,6 +306,7 @@ function TaskWorkspace({ conversationId, projectId }) {
           return [...rest, task].sort((a, b) => a.id - b.id);
         });
         setEvents(nextEvents);
+        setToolCalls(nextToolCalls);
       } catch (err) {
         if (active) setError("Não foi possível atualizar a execução: " + err.message);
       }
@@ -309,7 +314,39 @@ function TaskWorkspace({ conversationId, projectId }) {
     refresh();
     const timer = setInterval(refresh, 2500);
     return () => { active = false; clearInterval(timer); };
+  }, [selectedId, conversationId]);
+
+  useEffect(() => {
+    if (!selectedId) return undefined;
+    let active = true;
+    const latestEventId = events.reduce((max, event) => Math.max(max, event.id || 0), 0);
+    const source = api.tasks.streamEvents(selectedId, latestEventId, event => {
+      if (!active) return;
+      setEvents(current => current.some(item => item.id === event.id) ? current : [...current, event].sort((a, b) => a.id - b.id));
+    }, state => { if (active) setConnectionState(state); });
+    return () => { active = false; source.close(); };
   }, [selectedId]);
+
+  async function decideCall(callId, decision) {
+    if (!selectedId || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.tasks.decideToolCall(selectedId, callId, decision);
+      const [task, calls, nextEvents] = await Promise.all([
+        api.tasks.get(selectedId),
+        api.toolCalls.list(conversationId, selectedId),
+        api.tasks.events(selectedId, 0),
+      ]);
+      setTasks(items => items.map(item => item.id === task.id ? task : item));
+      setToolCalls(calls);
+      setEvents(nextEvents);
+    } catch (err) {
+      setError("Não foi possível registrar sua decisão: " + err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function startTask(event) {
     event.preventDefault();
@@ -368,8 +405,8 @@ function TaskWorkspace({ conversationId, projectId }) {
           <div className="task-detail-heading"><div><span className="task-id">TAREFA #{selected.id}</span><h3>{selected.plan?.goal || "Execução do Mosaic"}</h3></div><span className={"task-status status-" + selected.status}>{TASK_STATUS_LABELS[selected.status] || selected.status}</span></div>
           <div className="task-progress-meta"><span>Estado atual</span><strong>{TASK_STATUS_LABELS[selected.status] || selected.status}</strong></div>
           {active && selected.status !== "awaiting_approval" && <div className="task-progress-track"><span/></div>}
-          {selected.status === "awaiting_approval" && <div className="task-notice"><Icon name="check" size={17}/>O Core está aguardando uma decisão. A interface de aprovação será conectada no próximo incremento.</div>}
-          <div className="task-timeline-heading"><strong>Linha do tempo</strong><span>{events.length} eventos persistidos</span></div>
+          {selected.status === "awaiting_approval" && <div className="approval-stack"><div className="task-notice"><Icon name="check" size={17}/>O Mosaic precisa da sua autorização antes de executar esta operação.</div>{toolCalls.filter(call => call.status === "pending").map(call => <article className="approval-card" key={call.id}><span className="eyebrow">AÇÃO #{call.id} · AGUARDANDO</span><h4>Permitir {call.tool_name}?</h4><p>O agente solicitou esta ferramenta. Revise os argumentos antes de autorizar a execução.</p><details><summary>Ver operação e argumentos</summary><pre>{JSON.stringify(call.arguments, null, 2)}</pre></details><div className="approval-actions"><button type="button" className="danger-action" disabled={busy} onClick={() => decideCall(call.id, "reject")}>Recusar</button><button type="button" className="primary-action" disabled={busy} onClick={() => decideCall(call.id, "approve")}>{busy ? "Registrando…" : "Aprovar e continuar"}</button></div></article>)}</div>}
+          <div className="task-timeline-heading"><strong>Linha do tempo</strong><span>{events.length} eventos · {connectionState === "connected" ? "ao vivo" : connectionState === "reconnecting" ? "reconectando" : "conectando"}</span></div>
           {!events.length ? <div className="task-muted">Aguardando eventos do Core…</div> : <ol className="task-timeline">{events.map(event => <li key={event.id}><span className={"timeline-marker level-" + event.level}/><div><div className="timeline-event-head"><strong>{event.message}</strong><time>{new Date(event.timestamp).toLocaleTimeString("pt-BR", {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</time></div><small>{event.component} · {event.event_name}{event.status ? " · " + event.status : ""}</small></div></li>)}</ol>}
           {selected.result?.output && <div className="task-result"><strong>Resultado final</strong><FormattedResponse content={selected.result.output}/></div>}
           {selected.result?.error && <div className="task-inline-error"><strong>Falha:</strong> {selected.result.error}</div>}
@@ -377,6 +414,65 @@ function TaskWorkspace({ conversationId, projectId }) {
         </>}
       </section>
     </div>
+  </section>;
+}
+
+
+function AgentConfigWorkspace({ projectId }) {
+  const [instructions, setInstructions] = useState("");
+  const [skills, setSkills] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    if (!projectId) { setInstructions(""); setSkills([]); return undefined; }
+    setLoading(true);
+    setError("");
+    api.projects.agentConfig(projectId).then(config => {
+      if (!active) return;
+      setInstructions(config.instructions || "");
+      setSkills(Array.isArray(config.skills) ? config.skills : []);
+    }).catch(err => { if (active) setError("Não foi possível carregar as instruções: " + err.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [projectId]);
+
+  function updateSkill(index, patch) {
+    setSkills(items => items.map((skill, i) => i === index ? { ...skill, ...patch } : skill));
+  }
+  function addSkill() {
+    if (skills.length >= 12) return;
+    setSkills(items => [...items, { name: "", content: "", enabled: true }]);
+  }
+  async function save(event) {
+    event.preventDefault();
+    if (!projectId || saving) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      const config = await api.projects.saveAgentConfig(projectId, { instructions, skills });
+      setInstructions(config.instructions || "");
+      setSkills(config.skills || []);
+      setNotice("Configuração salva. As instruções e skills serão consideradas no contexto das próximas execuções.");
+    } catch (err) { setError("Não foi possível salvar: " + err.message); }
+    finally { setSaving(false); }
+  }
+
+  if (!projectId) return <div className="agent-config-workspace"><div className="task-empty"><Icon name="settings" size={25}/><strong>Selecione um projeto</strong><span>As instruções e skills são específicas de cada workspace.</span></div></div>;
+  return <section className="agent-config-workspace">
+    <div className="task-workspace-heading"><div><span className="eyebrow">CONTROLE DO AGENTE</span><h2>Instruções e skills</h2><p>Defina o papel, os limites de trabalho e as especialidades do agente neste projeto.</p></div></div>
+    {loading ? <div className="task-muted">Carregando configuração…</div> : <form onSubmit={save}>
+      <section className="agent-config-card"><div className="agent-config-card-heading"><div><strong>AGENTS.md</strong><span>Instruções permanentes do projeto</span></div><span className="task-count">Até 12.000 caracteres</span></div><p>Descreva o objetivo do agente, padrões do projeto, estilo de trabalho e regras que ele deve seguir. O arquivo é salvo na raiz do workspace.</p><textarea className="agent-instructions-editor" value={instructions} maxLength={12000} onChange={event => setInstructions(event.target.value)} rows={12} placeholder={"Ex.: Você é o agente responsável por este projeto.\n- Priorize mudanças pequenas e testáveis.\n- Leia os contratos antes de editar.\n- Não declare testes como aprovados sem executá-los."}/><div className="agent-editor-footer"><span>{instructions.length.toLocaleString("pt-BR")} / 12.000 caracteres</span></div></section>
+      <section className="agent-config-card"><div className="agent-config-card-heading"><div><strong>Skills do projeto</strong><span>Capacidades e procedimentos reutilizáveis</span></div><button type="button" className="secondary-action" onClick={addSkill} disabled={skills.length >= 12}>+ Adicionar skill</button></div><p>Uma skill é uma instrução especializada. Ative somente as relevantes; elas entram no contexto do agente, mas não concedem permissões extras às ferramentas.</p>
+        {!skills.length && <div className="task-muted">Nenhuma skill cadastrada. Adicione, por exemplo, “Revisão de código”, “Testes Python” ou “Documentação”.</div>}
+        {skills.map((skill, index) => <article className="skill-editor" key={index}><div className="skill-editor-head"><label className="skill-enabled"><input type="checkbox" checked={skill.enabled !== false} onChange={event => updateSkill(index, { enabled: event.target.checked })}/> Ativa</label><button type="button" className="text-danger" onClick={() => setSkills(items => items.filter((_, i) => i !== index))}>Remover</button></div><label>Nome da skill<input value={skill.name} maxLength={80} onChange={event => updateSkill(index, { name: event.target.value })} placeholder="Ex.: Revisão de código" required/></label><label>Instruções da skill<textarea value={skill.content} maxLength={4000} rows={5} onChange={event => updateSkill(index, { content: event.target.value })} placeholder="Quando usar esta skill, passos a seguir, critérios de qualidade…"/></label><div className="agent-editor-footer"><span>{(skill.content || "").length.toLocaleString("pt-BR")} / 4.000 caracteres</span></div></article>)}
+        <div className="agent-editor-footer"><span>Máximo de 12 skills; até 12.000 caracteres ativos no total.</span></div>
+      </section>
+      {error && <div className="task-inline-error" role="alert">{error}</div>}{notice && <div className="agent-config-success" role="status">{notice}</div>}
+      <div className="agent-config-save"><span>As regras de segurança e aprovações do Core sempre prevalecem.</span><button className="primary-action" type="submit" disabled={saving || loading}>{saving ? "Salvando…" : "Salvar configuração do agente"}</button></div>
+    </form>}
   </section>;
 }
 
@@ -523,7 +619,7 @@ export default function App(){
   }
 
   return <div className="app-shell"><Sidebar projects={projects} conversations={projectConversations} activeProjectId={projectId} activeConversationId={conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>setModal("conversation")} onModelSettings={()=>setModal({type:"models"})} onHelp={()=>setModal({type:"help"})} mobileOpen={mobile} onClose={()=>setMobile(false)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
-    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null}/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage}/></>}</main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
+    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null}/> : projectTab === "Agente" ? <AgentConfigWorkspace projectId={project?.id ?? null}/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage}/></>}</main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
     {modal?.type==="help"&&<Modal title="Ajuda" onClose={()=>setModal(null)}><div className="modal-form"><p className="modal-hint">O Mosaic é uma interface conectada ao Mosaic Core. O estado persistente vem do backend; esta interface apresenta e controla esse estado.</p><div className="help-block"><strong>Começando</strong><span>Crie um projeto, depois crie uma conversa e selecione um modelo registrado no Core.</span></div><div className="help-block"><strong>Modelos</strong><span>Use Configurações para cadastrar e ajustar modelos. O status no topo consulta o Ollama quando o provider é Ollama.</span></div><div className="help-block"><strong>Contexto</strong><span>O painel lateral mostra projeto, modelo, memória e histórico reais da conversa ativa.</span></div></div></Modal>}
     {modal?.type==="models"&&<Modal title="Modelos e configurações" onClose={()=>!saving&&setModal(null)}><div className="modal-form"><p className="modal-hint">Os valores abaixo são persistidos no Core e enviados ao provider quando a conversa usa este modelo.</p>{models.map(m=><button key={m.id} type="button" className="related-item" onClick={()=>setModal({type:"model",modelId:m.id})}><span className="status-dot"/><span>{m.name}</span><span className="model-provider">{m.provider} · {m.model_name}</span></button>)}<button type="button" className="primary-action" onClick={()=>setModal({type:"new-model"})}>+ Cadastrar modelo</button></div></Modal>}
     {modal?.type==="model"&&(()=>{const m=models.find(x=>x.id===modal.modelId);if(!m)return null;const c=m.configuration||{};return <Modal title={"Configurar "+m.name} onClose={()=>!saving&&setModal(null)}><form className="modal-form modal-wide" onSubmit={saveModel}><input type="hidden" name="id" value={m.id}/><label>Nome<input name="name" defaultValue={m.name} required/></label><div className="model-config-grid"><label>Temperature<input type="number" name="temperature" step="0.1" min="0" max="2" defaultValue={c.temperature ?? 0.7}/></label><label>Top P<input type="number" name="top_p" step="0.05" min="0" max="1" defaultValue={c.top_p ?? 0.9}/></label><label>Top K<input type="number" name="top_k" min="0" max="100" defaultValue={c.top_k ?? 40}/></label><label>Contexto<input type="number" name="num_ctx" min="256" max="131072" defaultValue={c.num_ctx ?? 4096}/></label><label>Máx. tokens<input type="number" name="num_predict" min="-1" max="131072" defaultValue={c.num_predict ?? -1}/></label><label className="model-config-toggle">Ativo<input type="checkbox" name="enabled" defaultChecked={m.enabled}/></label></div><p className="model-config-status">Provider: {m.provider} · Modelo local: {m.model_name}</p><div className="modal-actions"><button type="button" onClick={()=>setModal({type:"models"})}>Voltar</button><button className="primary-action" disabled={saving}>{saving?"Salvando…":"Salvar configurações"}</button></div></form></Modal>})()}
