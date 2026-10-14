@@ -8,7 +8,7 @@ Connect the existing agent loop to the configured real ModelProvider and expose 
 - Uses the configured conversation model through the existing Ollama ModelProvider.
 - Includes registered tool names, descriptions and input schemas in the decision prompt.
 - Validates the model's JSON envelope and tool arguments before returning a decision to the agent loop.
-- Adds `POST /tasks/{task_id}/run`; it claims a pending agent Task before scheduling the loop, preventing a second request from starting the same pending Task.
+- Adds `POST /tasks/start` to persist the user's goal as a conversation message, create an agent Task, and schedule execution. Also adds `POST /tasks/{task_id}/run` for an existing pending agent Task. Both claim the Task before scheduling the loop.
 - Uses existing Task, ToolCall, ToolResult and TaskEvent persistence. No schema or dependency changes.
 
 ## Boundaries / limitations
