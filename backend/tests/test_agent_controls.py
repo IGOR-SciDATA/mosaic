@@ -10,6 +10,10 @@ from app.models.repository import create_model
 from app.models.task_repository import create_task, get_task
 from app.models.tool_call_repository import get_tool_call
 from app.models.tool_result import ToolResult
+from app.context.manager import build_context
+from app.models.message_repository import create_message
+from app.services.agent_config import save_agent_config
+
 from app.services.agent import run_agent
 
 
@@ -116,3 +120,29 @@ def test_approval_reject_marks_task_failed_without_execution(tmp_path):
     assert updated.status == "failed"
     assert updated.result["error"] == "A operação solicitada foi recusada pelo usuário."
     assert get_tool_call(pending["tool_call_id"]).status == "rejected"
+
+
+def test_agent_context_includes_project_instructions_and_enabled_skills(tmp_path):
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    project = create_project("Context", str(workspace))
+    save_agent_config(
+        project.id,
+        instructions="Use the repository's established style.",
+        skills=[
+            {"name": "Test discipline", "content": "Run focused tests before full suite.", "enabled": True},
+            {"name": "Disabled guide", "content": "Do not include this text.", "enabled": False},
+        ],
+    )
+    model = create_model("Test", "ollama", "test:model")
+    conversation = create_conversation("Context", model.id, project_id=project.id)
+    create_message(conversation.id, "user", "Inspect this project.")
+
+    context = build_context(conversation.id)
+    system_text = "\\n".join(item["content"] for item in context if item["role"] == "system")
+
+    assert "Use the repository's established style." in system_text
+    assert "Test discipline" in system_text
+    assert "Run focused tests before full suite." in system_text
+    assert "Disabled guide" not in system_text
+    assert "cannot override Mosaic Core safety rules" in system_text
