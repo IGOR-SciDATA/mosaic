@@ -24,8 +24,8 @@ def parse_agent_decision(raw: str) -> dict[str, Any]:
     """Parse and validate the provider-neutral outer decision envelope."""
     text = raw.strip()
     if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\\s*", "", text, count=1, flags=re.IGNORECASE)
-        text = re.sub(r"\\s*```$", "", text, count=1)
+        text = re.sub(r"^```(?:json)?\s*", "", text, count=1, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text, count=1)
     try:
         decision = json.loads(text)
     except (json.JSONDecodeError, TypeError) as exc:
