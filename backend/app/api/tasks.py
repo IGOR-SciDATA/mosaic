@@ -176,9 +176,13 @@ def cancel_task_endpoint(task_id: int) -> Task:
 def _execute_approved_call_and_resume(task_id: int, tool_call_id: int) -> None:
     """Execute a pre-approved persisted ToolCall and resume the same Task."""
     try:
+        current = get_task(task_id)
         call = get_tool_call(tool_call_id)
         if call is None or call.task_id != task_id or call.status != "approved":
             raise ValueError("Approved ToolCall is no longer available")
+        if current is None or current.status == "cancelled":
+            update_tool_call(tool_call_id, status="cancelled")
+            return
         execute_tool_call(call)
         current = get_task(task_id)
         if current is None or current.status == "cancelled":
