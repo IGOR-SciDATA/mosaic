@@ -417,6 +417,69 @@ function TaskWorkspace({ conversationId, projectId }) {
 }
 
 
+
+function ProjectFilesWorkspace({ projectId, mode = "files" }) {
+  const [inventory, setInventory] = useState([]);
+  const [selectedPath, setSelectedPath] = useState("");
+  const [excerpt, setExcerpt] = useState(null);
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [error, setError] = useState("");
+  const [truncated, setTruncated] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setInventory([]); setSelectedPath(""); setExcerpt(null); setSearchResults(null); setError("");
+    if (!projectId) return undefined;
+    setLoading(true);
+    api.projects.artifacts(projectId).then(data => {
+      if (!active) return;
+      setInventory(data.entries || []);
+      setTruncated(Boolean(data.truncated));
+    }).catch(err => { if (active) setError("Não foi possível listar os arquivos: " + err.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [projectId]);
+
+  async function openFile(path) {
+    if (!projectId || !path) return;
+    setSelectedPath(path); setReading(true); setError("");
+    try { setExcerpt(await api.projects.artifactExcerpt(projectId, path)); }
+    catch (err) { setExcerpt(null); setError("Não foi possível ler este arquivo: " + err.message); }
+    finally { setReading(false); }
+  }
+
+  async function search(event) {
+    event.preventDefault();
+    if (!projectId || !query.trim()) { setSearchResults(null); return; }
+    setError("");
+    try { const data = await api.projects.searchArtifacts(projectId, query.trim()); setSearchResults(data.results || []); }
+    catch (err) { setError("A busca falhou: " + err.message); }
+  }
+
+  const entries = searchResults === null ? inventory : searchResults.map(result => ({
+    path: result.path, name: result.path.split("/").pop(), suffix: result.path.includes(".") ? "." + result.path.split(".").pop().toLowerCase() : "", size_bytes: result.size_bytes, score: result.score, matched_terms: result.matched_terms,
+  }));
+  const title = mode === "artifacts" ? "Arquivos e artefatos do workspace" : "Arquivos do projeto";
+
+  return <section className="project-files-workspace">
+    <div className="task-workspace-heading"><div><span className="eyebrow">{mode === "artifacts" ? "RESULTADOS DO WORKSPACE" : "EXPLORADOR DO PROJETO"}</span><h2>{title}</h2><p>{mode === "artifacts" ? "Inspecione arquivos existentes no workspace. O Core ainda não possui um registro separado de artefatos por tarefa." : "Navegue pelos arquivos e abra trechos de texto com origem e linhas preservadas."}</p></div><span className="task-count">{inventory.length} arquivos{truncated ? "+" : ""}</span></div>
+    {!projectId ? <div className="task-empty"><Icon name="folder" size={25}/><strong>Selecione um projeto</strong><span>O inventário é limitado ao workspace do projeto ativo.</span></div> : <>
+      <form className="project-file-search" onSubmit={search}><Icon name="search" size={17}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar por nome ou conteúdo…" maxLength={300}/><button type="submit" className="secondary-action" disabled={!query.trim()}>Buscar</button>{searchResults !== null && <button type="button" className="text-danger" onClick={() => {setSearchResults(null);setQuery("");}}>Limpar</button>}</form>
+      {error && <div className="task-inline-error" role="alert">{error}</div>}
+      <div className="project-file-layout"><section className="project-file-list"><div className="task-panel-heading"><strong>{searchResults === null ? "Inventário" : "Resultados da busca"}</strong><span>{entries.length}</span></div>
+        {loading ? <div className="task-muted">Lendo inventário…</div> : !entries.length ? <div className="task-muted">Nenhum arquivo encontrado.</div> : entries.map(entry => <button type="button" key={entry.path} className={selectedPath === entry.path ? "project-file-item selected" : "project-file-item"} onClick={() => openFile(entry.path)}><Icon name="file" size={16}/><span><strong>{entry.path}</strong><small>{entry.suffix || "arquivo"} · {Number(entry.size_bytes || 0).toLocaleString("pt-BR")} bytes{entry.score ? " · relevância " + entry.score : ""}</small></span></button>)}
+        {truncated && searchResults === null && <div className="task-muted">Inventário limitado por segurança. Alguns arquivos podem não aparecer.</div>}
+      </section>
+      <section className="project-file-preview"><div className="task-panel-heading"><strong>{selectedPath || "Pré-visualização"}</strong>{excerpt && <span>Linhas {excerpt.start_line}–{excerpt.end_line} de {excerpt.total_lines}</span>}</div>
+        {!selectedPath ? <div className="task-empty compact"><Icon name="file" size={23}/><strong>Selecione um arquivo</strong><span>O conteúdo será lido sob demanda, com limites e validação de caminho.</span></div> : reading ? <div className="task-muted">Lendo trecho…</div> : excerpt ? <><pre className="project-file-code">{excerpt.content}</pre><div className="project-file-provenance"><span>Origem: {excerpt.path} · linhas {excerpt.start_line}–{excerpt.end_line}</span>{excerpt.truncated && <span>Trecho truncado</span>}</div></> : <div className="task-muted">Pré-visualização indisponível.</div>}
+      </section></div>
+    </>}
+  </section>;
+}
+
 function AgentConfigWorkspace({ projectId }) {
   const [instructions, setInstructions] = useState("");
   const [skills, setSkills] = useState([]);
@@ -618,7 +681,7 @@ export default function App(){
   }
 
   return <div className="app-shell"><Sidebar projects={projects} conversations={projectConversations} activeProjectId={projectId} activeConversationId={conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>setModal("conversation")} onModelSettings={()=>setModal({type:"models"})} onHelp={()=>setModal({type:"help"})} mobileOpen={mobile} onClose={()=>setMobile(false)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
-    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null}/> : projectTab === "Agente" ? <AgentConfigWorkspace projectId={project?.id ?? null}/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage}/></>}</main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
+    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null}/> : projectTab === "Agente" ? <AgentConfigWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage}/></>}</main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
     {modal?.type==="help"&&<Modal title="Ajuda" onClose={()=>setModal(null)}><div className="modal-form"><p className="modal-hint">O Mosaic é uma interface conectada ao Mosaic Core. O estado persistente vem do backend; esta interface apresenta e controla esse estado.</p><div className="help-block"><strong>Começando</strong><span>Crie um projeto, depois crie uma conversa e selecione um modelo registrado no Core.</span></div><div className="help-block"><strong>Modelos</strong><span>Use Configurações para cadastrar e ajustar modelos. O status no topo consulta o Ollama quando o provider é Ollama.</span></div><div className="help-block"><strong>Contexto</strong><span>O painel lateral mostra projeto, modelo, memória e histórico reais da conversa ativa.</span></div></div></Modal>}
     {modal?.type==="models"&&<Modal title="Modelos e configurações" onClose={()=>!saving&&setModal(null)}><div className="modal-form"><p className="modal-hint">Os valores abaixo são persistidos no Core e enviados ao provider quando a conversa usa este modelo.</p>{models.map(m=><button key={m.id} type="button" className="related-item" onClick={()=>setModal({type:"model",modelId:m.id})}><span className="status-dot"/><span>{m.name}</span><span className="model-provider">{m.provider} · {m.model_name}</span></button>)}<button type="button" className="primary-action" onClick={()=>setModal({type:"new-model"})}>+ Cadastrar modelo</button></div></Modal>}
     {modal?.type==="model"&&(()=>{const m=models.find(x=>x.id===modal.modelId);if(!m)return null;const c=m.configuration||{};return <Modal title={"Configurar "+m.name} onClose={()=>!saving&&setModal(null)}><form className="modal-form modal-wide" onSubmit={saveModel}><input type="hidden" name="id" value={m.id}/><label>Nome<input name="name" defaultValue={m.name} required/></label><div className="model-config-grid"><label>Temperature<input type="number" name="temperature" step="0.1" min="0" max="2" defaultValue={c.temperature ?? 0.7}/></label><label>Top P<input type="number" name="top_p" step="0.05" min="0" max="1" defaultValue={c.top_p ?? 0.9}/></label><label>Top K<input type="number" name="top_k" min="0" max="100" defaultValue={c.top_k ?? 40}/></label><label>Contexto<input type="number" name="num_ctx" min="256" max="131072" defaultValue={c.num_ctx ?? 4096}/></label><label>Máx. tokens<input type="number" name="num_predict" min="-1" max="131072" defaultValue={c.num_predict ?? -1}/></label><label className="model-config-toggle">Ativo<input type="checkbox" name="enabled" defaultChecked={m.enabled}/></label></div><p className="model-config-status">Provider: {m.provider} · Modelo local: {m.model_name}</p><div className="modal-actions"><button type="button" onClick={()=>setModal({type:"models"})}>Voltar</button><button className="primary-action" disabled={saving}>{saving?"Salvando…":"Salvar configurações"}</button></div></form></Modal>})()}
