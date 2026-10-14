@@ -8,6 +8,7 @@ MAX_INSTRUCTIONS_CHARS = 12_000
 MAX_SKILLS = 12
 MAX_SKILL_NAME_CHARS = 80
 MAX_SKILL_CONTENT_CHARS = 4_000
+MAX_ENABLED_SKILL_TOTAL_CHARS = 12_000
 
 
 def _workspace(project: Project) -> Path:
@@ -47,6 +48,7 @@ def get_agent_config(project_id: int) -> dict[str, Any] | None:
             "instructions_chars": MAX_INSTRUCTIONS_CHARS,
             "skills": MAX_SKILLS,
             "skill_content_chars": MAX_SKILL_CONTENT_CHARS,
+            "enabled_skill_total_chars": MAX_ENABLED_SKILL_TOTAL_CHARS,
         },
     }
 
@@ -80,6 +82,10 @@ def save_agent_config(
             raise ValueError("Skill enabled must be boolean")
         seen.add(name.casefold())
         normalized.append({"name": name, "content": content, "enabled": enabled})
+
+    enabled_total = sum(len(item["content"]) for item in normalized if item["enabled"])
+    if enabled_total > MAX_ENABLED_SKILL_TOTAL_CHARS:
+        raise ValueError(f"Enabled skill content must total at most {MAX_ENABLED_SKILL_TOTAL_CHARS} characters")
 
     path = _instructions_path(project)
     if instructions:
