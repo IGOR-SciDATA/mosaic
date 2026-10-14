@@ -1720,3 +1720,15 @@ body { overflow: hidden; }
 .project-file-provenance { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border-soft); color: var(--dim); font-size: 9px; }
 @media (max-width: 950px) { .project-file-layout { grid-template-columns: 1fr; } .project-file-list { max-height: 280px; overflow: auto; } }
 @media (max-width: 600px) { .project-files-workspace { padding: 20px 12px 28px; } .project-file-search { flex-wrap: wrap; } .project-file-search input { min-width: 100px; } }
+
+
+.tool-inspector { margin-top: 14px; border-top: 1px solid var(--border-soft); }
+.tool-inspector .task-timeline-heading { margin-left: -17px; margin-right: -17px; }
+.tool-inspector-item { border-bottom: 1px solid var(--border-soft); }
+.tool-inspector-item summary { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 0; cursor: pointer; color: #d8d8db; font-size: 10px; }
+.tool-inspector-item summary > span:first-child { overflow-wrap: anywhere; }
+.tool-inspector-body { padding: 0 0 12px; }
+.tool-inspector-body > strong, .tool-result-inspector > strong { display: block; margin: 8px 0; color: var(--muted); font-size: 10px; }
+.tool-inspector-body pre, .tool-result-inspector pre { max-height: 240px; overflow: auto; padding: 10px; border-radius: 6px; background: rgba(0,0,0,.32); color: #c7c8cb; white-space: pre-wrap; overflow-wrap: anywhere; font: 10px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tool-result-inspector { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border-soft); }
+.tool-result-inspector p { color: #ffaaa6; font-size: 10px; overflow-wrap: anywhere; }
