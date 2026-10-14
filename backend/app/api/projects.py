@@ -12,6 +12,8 @@ from app.models.project_repository import (
 )
 from app.services.project import create_project_with_workspace
 from app.services.agent_config import get_agent_config, save_agent_config
+from app.context.artifacts import list_workspace_artifacts, read_workspace_excerpt
+from app.context.search import search_workspace_artifacts
 
 
 class ProjectCreate(BaseModel):
@@ -110,3 +112,44 @@ def save_project_agent_config_endpoint(
     if config is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return config
+
+
+@router.get("/{project_id}/artifacts")
+def list_project_artifacts_endpoint(project_id: int) -> dict:
+    project = get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return list_workspace_artifacts(project.workspace)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/{project_id}/artifacts/excerpt")
+def read_project_artifact_excerpt_endpoint(
+    project_id: int, path: str, start_line: int = 1, max_lines: int = 200,
+) -> dict:
+    project = get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return read_workspace_excerpt(
+            project.workspace, path, start_line=start_line, max_lines=max_lines,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/{project_id}/artifacts/search")
+def search_project_artifacts_endpoint(
+    project_id: int, q: str, max_results: int = 10,
+) -> dict:
+    project = get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return search_workspace_artifacts(
+            project.workspace, q, max_results=max_results,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
