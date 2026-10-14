@@ -95,7 +95,7 @@ def test_approval_executes_pending_tool_and_resumes_same_task(monkeypatch, tmp_p
     assert updated.id == task.id
     assert updated.status == "executing"
     assert get_task(task.id).id == task.id
-    assert get_tool_call(call_id).status == "executing"
+    assert get_tool_call(call_id).status == "approved"
     assert len(background.tasks) == 1
 
 
