@@ -419,6 +419,82 @@ function TaskWorkspace({ conversationId, projectId }) {
 
 
 
+
+function ProjectMemoryWorkspace({ projectId }) {
+  const empty = { type: "fact", key: "", value: "", source: "user", confidence: "" };
+  const [memories, setMemories] = useState([]);
+  const [form, setForm] = useState(empty);
+  const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function refresh() {
+    if (!projectId) { setMemories([]); return; }
+    setLoading(true);
+    try { setMemories(await api.memories.list(projectId)); setError(""); }
+    catch (err) { setError("Não foi possível carregar memórias: " + err.message); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { setForm(empty); setEditingId(null); refresh(); }, [projectId]);
+
+  function edit(memory) {
+    setEditingId(memory.id);
+    setForm({ type: memory.type, key: memory.key, value: memory.value, source: memory.source, confidence: memory.confidence ?? "" });
+    setNotice("");
+  }
+  async function save(event) {
+    event.preventDefault();
+    if (!projectId || saving) return;
+    setSaving(true); setError(""); setNotice("");
+    const payload = { type: form.type.trim(), key: form.key.trim(), value: form.value.trim(), source: form.source.trim(), project_id: projectId, confidence: form.confidence === "" ? null : Number(form.confidence) };
+    try {
+      if (editingId) await api.memories.update(editingId, payload);
+      else await api.memories.create(payload);
+      setForm(empty); setEditingId(null); await refresh(); setNotice("Memória salva no Core.");
+    } catch (err) { setError("Não foi possível salvar a memória: " + err.message); }
+    finally { setSaving(false); }
+  }
+  async function remove(memory) {
+    if (!window.confirm("Excluir a memória “" + memory.key + "”?")) return;
+    try { await api.memories.remove(memory.id); await refresh(); setNotice("Memória excluída."); }
+    catch (err) { setError("Não foi possível excluir: " + err.message); }
+  }
+  if (!projectId) return <div className="agent-config-workspace"><div className="task-empty"><Icon name="memory" size={25}/><strong>Selecione um projeto</strong><span>As memórias ficam vinculadas ao projeto ativo.</span></div></div>;
+  return <section className="agent-config-workspace">
+    <div className="task-workspace-heading"><div><span className="eyebrow">CONTEXTO PERSISTENTE</span><h2>Memória do projeto</h2><p>Gerencie registros persistidos no Core. Uma memória é um registro, não uma verdade automaticamente verificada.</p></div><span className="task-count">{memories.length} registros</span></div>
+    <form className="agent-config-card memory-editor-form" onSubmit={save}><div className="agent-config-card-heading"><div><strong>{editingId ? "Editar memória" : "Nova memória"}</strong><span>Campos salvos no banco do Mosaic Core</span></div></div>
+      <div className="memory-form-grid"><label>Tipo<input value={form.type} onChange={e => setForm(v => ({...v,type:e.target.value}))} required maxLength={80}/></label><label>Chave<input value={form.key} onChange={e => setForm(v => ({...v,key:e.target.value}))} required maxLength={200} placeholder="Ex.: stack_principal"/></label><label>Origem<input value={form.source} onChange={e => setForm(v => ({...v,source:e.target.value}))} required maxLength={120}/></label><label>Confiança (opcional)<input type="number" min="0" max="1" step="0.05" value={form.confidence} onChange={e => setForm(v => ({...v,confidence:e.target.value}))} placeholder="0–1"/></label></div>
+      <label className="memory-value-label">Conteúdo<textarea value={form.value} onChange={e => setForm(v => ({...v,value:e.target.value}))} required rows={3} maxLength={5000} placeholder="O que o Mosaic deve lembrar?"/></label>
+      <div className="modal-actions"><button type="button" onClick={() => {setForm(empty);setEditingId(null);}}>Limpar</button><button className="primary-action" disabled={saving}>{saving ? "Salvando…" : editingId ? "Atualizar memória" : "Salvar memória"}</button></div>
+    </form>
+    {error && <div className="task-inline-error" role="alert">{error}</div>}{notice && <div className="agent-config-success" role="status">{notice}</div>}
+    <section className="memory-manager-list"><div className="task-panel-heading"><strong>Memórias persistidas</strong><button type="button" onClick={refresh} aria-label="Atualizar memórias">↻</button></div>{loading ? <div className="task-muted">Carregando memórias…</div> : !memories.length ? <div className="task-muted">Nenhuma memória registrada para este projeto.</div> : memories.map(memory => <article className="memory-manager-item" key={memory.id}><div><strong>{memory.key}</strong><span className="memory-type">{memory.type}</span></div><p>{memory.value}</p><small>Origem: {memory.source}{memory.confidence !== null && memory.confidence !== undefined ? " · Confiança " + Math.round(memory.confidence*100) + "%" : ""}</small><div className="memory-item-actions"><button type="button" className="secondary-action" onClick={() => edit(memory)}>Editar</button><button type="button" className="text-danger" onClick={() => remove(memory)}>Excluir</button></div></article>)}</section>
+  </section>;
+}
+
+function ProjectNotesWorkspace({ project, onSaved }) {
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  useEffect(() => { setNotes(String(project?.metadata?.notes || "")); setError(""); setNotice(""); }, [project?.id, project?.metadata?.notes]);
+  async function save(event) {
+    event.preventDefault();
+    if (!project || saving) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      const updated = await api.projects.update(project.id, { metadata: { ...(project.metadata || {}), notes } });
+      onSaved(updated);
+      setNotice("Notas salvas no projeto.");
+    } catch (err) { setError("Não foi possível salvar as notas: " + err.message); }
+    finally { setSaving(false); }
+  }
+  if (!project) return <div className="agent-config-workspace"><div className="task-empty"><Icon name="note" size={25}/><strong>Selecione um projeto</strong><span>As notas ficam associadas aos metadados do projeto.</span></div></div>;
+  return <section className="agent-config-workspace"><div className="task-workspace-heading"><div><span className="eyebrow">ANOTAÇÕES DO PROJETO</span><h2>Notas</h2><p>Registre decisões e lembretes do projeto sem tratá-los automaticamente como instruções do agente.</p></div></div><form className="agent-config-card" onSubmit={save}><label className="memory-value-label">Notas de {project.name}<textarea className="project-notes-editor" value={notes} onChange={e => setNotes(e.target.value)} rows={18} maxLength={20000} placeholder="Decisões, pendências, links internos e lembretes…"/></label><div className="agent-editor-footer">{notes.length.toLocaleString("pt-BR")} / 20.000 caracteres</div>{error && <div className="task-inline-error" role="alert">{error}</div>}{notice && <div className="agent-config-success" role="status">{notice}</div>}<div className="agent-config-save"><span>Salvas nos metadados persistentes do projeto.</span><button className="primary-action" disabled={saving}>{saving ? "Salvando…" : "Salvar notas"}</button></div></form></section>;
+}
+
 function ProjectFilesWorkspace({ projectId, mode = "files" }) {
   const [inventory, setInventory] = useState([]);
   const [selectedPath, setSelectedPath] = useState("");
@@ -682,7 +758,7 @@ export default function App(){
   }
 
   return <div className="app-shell"><Sidebar projects={projects} conversations={projectConversations} activeProjectId={projectId} activeConversationId={conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>setModal("conversation")} onModelSettings={()=>setModal({type:"models"})} onHelp={()=>setModal({type:"help"})} mobileOpen={mobile} onClose={()=>setMobile(false)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
-    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null}/> : projectTab === "Agente" ? <AgentConfigWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage}/></>}</main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
+    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null}/> : projectTab === "Agente" ? <AgentConfigWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage}/></>}</main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
     {modal?.type==="help"&&<Modal title="Ajuda" onClose={()=>setModal(null)}><div className="modal-form"><p className="modal-hint">O Mosaic é uma interface conectada ao Mosaic Core. O estado persistente vem do backend; esta interface apresenta e controla esse estado.</p><div className="help-block"><strong>Começando</strong><span>Crie um projeto, depois crie uma conversa e selecione um modelo registrado no Core.</span></div><div className="help-block"><strong>Modelos</strong><span>Use Configurações para cadastrar e ajustar modelos. O status no topo consulta o Ollama quando o provider é Ollama.</span></div><div className="help-block"><strong>Contexto</strong><span>O painel lateral mostra projeto, modelo, memória e histórico reais da conversa ativa.</span></div></div></Modal>}
     {modal?.type==="models"&&<Modal title="Modelos e configurações" onClose={()=>!saving&&setModal(null)}><div className="modal-form"><p className="modal-hint">Os valores abaixo são persistidos no Core e enviados ao provider quando a conversa usa este modelo.</p>{models.map(m=><button key={m.id} type="button" className="related-item" onClick={()=>setModal({type:"model",modelId:m.id})}><span className="status-dot"/><span>{m.name}</span><span className="model-provider">{m.provider} · {m.model_name}</span></button>)}<button type="button" className="primary-action" onClick={()=>setModal({type:"new-model"})}>+ Cadastrar modelo</button></div></Modal>}
     {modal?.type==="model"&&(()=>{const m=models.find(x=>x.id===modal.modelId);if(!m)return null;const c=m.configuration||{};return <Modal title={"Configurar "+m.name} onClose={()=>!saving&&setModal(null)}><form className="modal-form modal-wide" onSubmit={saveModel}><input type="hidden" name="id" value={m.id}/><label>Nome<input name="name" defaultValue={m.name} required/></label><div className="model-config-grid"><label>Temperature<input type="number" name="temperature" step="0.1" min="0" max="2" defaultValue={c.temperature ?? 0.7}/></label><label>Top P<input type="number" name="top_p" step="0.05" min="0" max="1" defaultValue={c.top_p ?? 0.9}/></label><label>Top K<input type="number" name="top_k" min="0" max="100" defaultValue={c.top_k ?? 40}/></label><label>Contexto<input type="number" name="num_ctx" min="256" max="131072" defaultValue={c.num_ctx ?? 4096}/></label><label>Máx. tokens<input type="number" name="num_predict" min="-1" max="131072" defaultValue={c.num_predict ?? -1}/></label><label className="model-config-toggle">Ativo<input type="checkbox" name="enabled" defaultChecked={m.enabled}/></label></div><p className="model-config-status">Provider: {m.provider} · Modelo local: {m.model_name}</p><div className="modal-actions"><button type="button" onClick={()=>setModal({type:"models"})}>Voltar</button><button className="primary-action" disabled={saving}>{saving?"Salvando…":"Salvar configurações"}</button></div></form></Modal>})()}
