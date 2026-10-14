@@ -11,6 +11,7 @@ from app.models.project_repository import (
     update_project,
 )
 from app.services.project import create_project_with_workspace
+from app.services.agent_config import get_agent_config, save_agent_config
 
 
 class ProjectCreate(BaseModel):
@@ -19,6 +20,17 @@ class ProjectCreate(BaseModel):
     description: str | None = None
     metadata: dict[str, Any] = {}
     state: dict[str, Any] = {}
+
+
+class AgentSkill(BaseModel):
+    name: str
+    content: str = ""
+    enabled: bool = True
+
+
+class AgentConfigUpdate(BaseModel):
+    instructions: str = ""
+    skills: list[AgentSkill] = []
 
 
 class ProjectUpdate(BaseModel):
@@ -70,3 +82,31 @@ def delete_project_endpoint(project_id: int) -> dict[str, bool]:
     if not delete_project(project_id):
         raise HTTPException(status_code=404, detail="Project not found")
     return {"deleted": True}
+
+
+@router.get("/{project_id}/agent-config")
+def get_project_agent_config_endpoint(project_id: int) -> dict:
+    try:
+        config = get_agent_config(project_id)
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if config is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return config
+
+
+@router.put("/{project_id}/agent-config")
+def save_project_agent_config_endpoint(
+    project_id: int, payload: AgentConfigUpdate,
+) -> dict:
+    try:
+        config = save_agent_config(
+            project_id,
+            instructions=payload.instructions,
+            skills=[skill.model_dump() for skill in payload.skills],
+        )
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if config is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return config
