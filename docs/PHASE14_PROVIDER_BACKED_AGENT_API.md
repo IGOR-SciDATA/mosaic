@@ -20,6 +20,6 @@ Connect the existing agent loop to the configured real ModelProvider and expose 
 ## Validation
 Run from `backend`:
 ```bash
-python -m pytest tests/test_agent_decision.py tests/test_agent.py tests/test_task_events.py -q
+python -m pytest tests/test_agent_decision.py tests/test_agent_task_api.py tests/test_agent.py tests/test_task_events.py -q
 python -m pytest -q
 ```
