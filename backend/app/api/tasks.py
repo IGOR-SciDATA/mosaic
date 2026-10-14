@@ -3,13 +3,17 @@ import json
 import time
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
+from app.models.conversation_repository import get_conversation
+from app.models.message_repository import create_message
 from app.models.task import Task
 from app.models.task_event import TaskEvent
 from app.models.task_event_repository import list_task_events
+from app.services.agent import run_agent
+from app.services.agent_decision import create_provider_decider
 from app.models.task_repository import (
     create_task,
     delete_task,
@@ -27,6 +31,12 @@ class TaskCreate(BaseModel):
     status: str = "pending"
     plan: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
+
+
+class TaskStart(BaseModel):
+    conversation_id: int
+    goal: str
+    type: str = "generic"
 
 
 class TaskUpdate(BaseModel):
@@ -154,3 +164,70 @@ def cancel_task_endpoint(task_id: int) -> Task:
     if cancelled is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return cancelled
+
+
+
+def _run_provider_agent(task_id: int) -> None:
+    """Execute the persisted Task in the in-process background worker."""
+    try:
+        run_agent(task_id, create_provider_decider(task_id))
+    except Exception as exc:
+        current = get_task(task_id)
+        if current is not None and current.status in {"pending", "executing"}:
+            try:
+                update_task(task_id, status="failed", result={"error": f"{type(exc).__name__}: {exc}"})
+            except ValueError:
+                # A concurrent cancellation or terminal transition remains authoritative.
+                pass
+
+
+@router.post("/start", response_model=Task, status_code=202)
+def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTasks) -> Task:
+    """Persist the user's goal, create an agent Task, and start the provider-backed loop."""
+    goal = payload.goal.strip()
+    if not goal:
+        raise HTTPException(status_code=422, detail="Task goal must not be empty")
+    conversation = get_conversation(payload.conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if payload.type not in {"code_project", "document", "analysis", "report", "generic"}:
+        raise HTTPException(status_code=422, detail="Invalid task type")
+    # Persist the goal as a normal conversation message so it is part of the canonical context.
+    create_message(conversation.id, "user", goal)
+    try:
+        task = create_task(
+            type=payload.type,
+            mode="agent",
+            conversation_id=conversation.id,
+            project_id=conversation.project_id,
+            plan={"goal": goal},
+        )
+        claimed = update_task(task.id, status="executing")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if claimed is None:
+        raise HTTPException(status_code=500, detail="Could not claim newly created Task")
+    background_tasks.add_task(_run_provider_agent, task.id)
+    return claimed
+
+
+@router.post("/{task_id}/run", response_model=Task, status_code=202)
+def run_task_endpoint(task_id: int, background_tasks: BackgroundTasks) -> Task:
+    """Explicitly start an agent-mode Task; normal chat remains unchanged."""
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.mode != "agent":
+        raise HTTPException(status_code=409, detail="Task must use agent mode")
+    if task.conversation_id is None or get_conversation(task.conversation_id) is None:
+        raise HTTPException(status_code=400, detail="Agent Task requires a valid conversation")
+    if task.status != "pending":
+        raise HTTPException(status_code=409, detail=f"Task cannot start from status: {task.status}")
+    try:
+        claimed = update_task(task_id, status="executing")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if claimed is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    background_tasks.add_task(_run_provider_agent, task_id)
+    return claimed
