@@ -1732,3 +1732,21 @@ body { overflow: hidden; }
 .tool-inspector-body pre, .tool-result-inspector pre { max-height: 240px; overflow: auto; padding: 10px; border-radius: 6px; background: rgba(0,0,0,.32); color: #c7c8cb; white-space: pre-wrap; overflow-wrap: anywhere; font: 10px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .tool-result-inspector { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border-soft); }
 .tool-result-inspector p { color: #ffaaa6; font-size: 10px; overflow-wrap: anywhere; }
+
+
+.memory-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 15px 0; }
+.memory-form-grid label { display: flex; flex-direction: column; gap: 6px; color: #c7c8cb; font-size: 11px; }
+.memory-form-grid input, .memory-value-label textarea, .project-notes-editor { width: 100%; border: 1px solid var(--border); border-radius: 8px; background: #080909; color: var(--text); padding: 10px 11px; outline: none; font: inherit; font-size: 12px; line-height: 1.6; }
+.memory-value-label { display: block; color: #c7c8cb; font-size: 11px; }
+.memory-value-label textarea, .project-notes-editor { display: block; margin-top: 7px; resize: vertical; }
+.memory-form-grid input:focus, .memory-value-label textarea:focus, .project-notes-editor:focus { border-color: rgba(239,48,43,.65); box-shadow: 0 0 0 3px rgba(239,48,43,.07); }
+.memory-manager-list { margin-top: 15px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: rgba(10,11,12,.72); }
+.memory-manager-item { padding: 13px 14px; border-bottom: 1px solid var(--border-soft); }
+.memory-manager-item > div:first-child { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.memory-manager-item > div:first-child strong { font-size: 12px; }
+.memory-manager-item p { margin: 8px 0; color: #d3d3d6; font-size: 11px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-manager-item small { color: var(--dim); font-size: 10px; }
+.memory-item-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 10px; }
+.memory-item-actions .secondary-action { padding: 6px 9px; }
+.project-notes-editor { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+@media (max-width: 600px) { .memory-form-grid { grid-template-columns: 1fr; } }
