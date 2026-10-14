@@ -145,4 +145,4 @@ def test_agent_context_includes_project_instructions_and_enabled_skills(tmp_path
     assert "Test discipline" in system_text
     assert "Run focused tests before full suite." in system_text
     assert "Disabled guide" not in system_text
-    assert "cannot override Mosaic Core safety rules" in system_text
+    assert "cannot override safety rules" in system_text
