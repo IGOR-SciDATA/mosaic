@@ -222,6 +222,164 @@ function Composer({ disabled, onSubmit, model }) {
   return <form className="composer" onSubmit={submit}><textarea disabled={disabled} value={text} onChange={e=>setText(e.target.value)} placeholder={disabled?"Selecione uma conversa para começar...":"Digite sua mensagem..."} rows="2" onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit(e);}}}/><div className="composer-toolbar"><div className="composer-tools"><button type="button" disabled={disabled}><Icon name="plus"/></button><button type="button" disabled={disabled}><Icon name="globe"/></button><button type="button" disabled={disabled}><Icon name="book"/></button><button type="button" disabled={disabled}><Icon name="at"/></button></div><div className="composer-submit"><span className="composer-model">{model?.name || "Modelo"}</span><button className="send-button" type="submit" disabled={disabled}><Icon name="send" size={19}/></button></div></div></form>;
 }
 
+
+const TASK_STATUS_LABELS = {
+  pending: "Na fila",
+  planning: "Planejando",
+  executing: "Executando",
+  awaiting_approval: "Aguardando aprovação",
+  validating: "Validando",
+  completed: "Concluída",
+  failed: "Falhou",
+  cancelled: "Cancelada",
+};
+
+function TaskWorkspace({ conversationId, projectId }) {
+  const [tasks, setTasks] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [goal, setGoal] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function refreshTasks(preferId = null) {
+    if (!conversationId) { setTasks([]); setSelectedId(null); setLoading(false); return; }
+    try {
+      const data = await api.tasks.list();
+      const scoped = data.filter(task => task.conversation_id === conversationId);
+      setTasks(scoped);
+      setSelectedId(current => {
+        const preferred = preferId ?? current;
+        return scoped.some(task => task.id === preferred)
+          ? preferred
+          : (scoped[scoped.length - 1]?.id ?? null);
+      });
+      setError("");
+    } catch (err) {
+      setError("Não foi possível carregar as tarefas: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setEvents([]);
+    setTasks([]);
+    setSelectedId(null);
+    (async () => {
+      if (!conversationId) { if (active) setLoading(false); return; }
+      try {
+        const data = await api.tasks.list();
+        if (!active) return;
+        const scoped = data.filter(task => task.conversation_id === conversationId);
+        setTasks(scoped);
+        setSelectedId(scoped[scoped.length - 1]?.id ?? null);
+        setError("");
+      } catch (err) {
+        if (active) setError("Não foi possível carregar as tarefas: " + err.message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!selectedId) { setEvents([]); return undefined; }
+    let active = true;
+    const refresh = async () => {
+      try {
+        const [task, nextEvents] = await Promise.all([
+          api.tasks.get(selectedId),
+          api.tasks.events(selectedId, 0),
+        ]);
+        if (!active) return;
+        setTasks(items => {
+          const rest = items.filter(item => item.id !== task.id);
+          return [...rest, task].sort((a, b) => a.id - b.id);
+        });
+        setEvents(nextEvents);
+      } catch (err) {
+        if (active) setError("Não foi possível atualizar a execução: " + err.message);
+      }
+    };
+    refresh();
+    const timer = setInterval(refresh, 2500);
+    return () => { active = false; clearInterval(timer); };
+  }, [selectedId]);
+
+  async function startTask(event) {
+    event.preventDefault();
+    const trimmed = goal.trim();
+    if (!trimmed || !conversationId || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const task = await api.tasks.start({ conversation_id: conversationId, project_id: projectId, goal: trimmed, type: "generic" });
+      setGoal("");
+      await refreshTasks(task.id);
+      setSelectedId(task.id);
+    } catch (err) {
+      setError("Não foi possível iniciar a tarefa: " + err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelTask() {
+    if (!selectedId || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const updated = await api.tasks.cancel(selectedId);
+      setTasks(items => items.map(task => task.id === updated.id ? updated : task));
+    } catch (err) {
+      setError("Não foi possível cancelar a tarefa: " + err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const selected = tasks.find(task => task.id === selectedId) || null;
+  const active = selected && ["pending", "planning", "executing", "awaiting_approval", "validating"].includes(selected.status);
+
+  return <section className="task-workspace">
+    <div className="task-workspace-heading">
+      <div><span className="eyebrow">EXECUÇÃO AGÊNTICA</span><h2>Tarefas</h2><p>Peça ao Mosaic para executar um objetivo e acompanhe o estado persistido pelo Core.</p></div>
+      <span className="task-count">{tasks.length} {tasks.length === 1 ? "tarefa" : "tarefas"}</span>
+    </div>
+    {!conversationId
+      ? <div className="task-empty"><Icon name="tool" size={25}/><strong>Selecione uma conversa</strong><span>As tarefas ficam vinculadas à conversa e ao projeto ativos.</span></div>
+      : <form className="task-start-form" onSubmit={startTask}>
+          <label htmlFor="agent-task-goal">O que você quer que o Mosaic faça?</label>
+          <textarea id="agent-task-goal" value={goal} onChange={event => setGoal(event.target.value)} rows={3} maxLength={8000} placeholder="Ex.: Analise a estrutura deste projeto e identifique os próximos passos." disabled={busy}/>
+          <div className="task-start-footer"><span>Execução real · o Core controla ferramentas e permissões</span><button type="submit" className="primary-action" disabled={busy || !goal.trim()}><Icon name="send" size={15}/>{busy ? "Enviando…" : "Executar tarefa"}</button></div>
+        </form>}
+    {error && <div className="task-inline-error" role="alert">{error}</div>}
+    <div className="task-layout">
+      <section className="task-list-panel"><div className="task-panel-heading"><strong>Histórico de tarefas</strong><button type="button" onClick={() => refreshTasks()} aria-label="Atualizar tarefas" title="Atualizar">↻</button></div>
+        {loading ? <div className="task-muted">Carregando tarefas…</div> : !tasks.length ? <div className="task-muted">Nenhuma tarefa nesta conversa.</div> : <div className="task-list">{[...tasks].reverse().map(task => <button type="button" key={task.id} className={selectedId === task.id ? "task-list-item selected" : "task-list-item"} onClick={() => setSelectedId(task.id)}><span className={"task-status-dot status-" + task.status}/><span className="task-list-copy"><strong>{task.plan?.goal || ("Tarefa #" + task.id)}</strong><small>#{task.id} · {new Date(task.updated_at).toLocaleString("pt-BR", {dateStyle:"short",timeStyle:"short"})}</small></span><span className={"task-status status-" + task.status}>{TASK_STATUS_LABELS[task.status] || task.status}</span></button>)}</div>}
+      </section>
+      <section className="task-detail-panel">
+        {!selected ? <div className="task-empty compact"><Icon name="layers" size={23}/><strong>Selecione uma tarefa</strong><span>O estado, a linha do tempo e o resultado aparecerão aqui.</span></div> : <>
+          <div className="task-detail-heading"><div><span className="task-id">TAREFA #{selected.id}</span><h3>{selected.plan?.goal || "Execução do Mosaic"}</h3></div><span className={"task-status status-" + selected.status}>{TASK_STATUS_LABELS[selected.status] || selected.status}</span></div>
+          <div className="task-progress-meta"><span>Estado atual</span><strong>{TASK_STATUS_LABELS[selected.status] || selected.status}</strong></div>
+          {active && selected.status !== "awaiting_approval" && <div className="task-progress-track"><span/></div>}
+          {selected.status === "awaiting_approval" && <div className="task-notice"><Icon name="check" size={17}/>O Core está aguardando uma decisão. A interface de aprovação será conectada no próximo incremento.</div>}
+          <div className="task-timeline-heading"><strong>Linha do tempo</strong><span>{events.length} eventos persistidos</span></div>
+          {!events.length ? <div className="task-muted">Aguardando eventos do Core…</div> : <ol className="task-timeline">{events.map(event => <li key={event.id}><span className={"timeline-marker level-" + event.level}/><div><div className="timeline-event-head"><strong>{event.message}</strong><time>{new Date(event.timestamp).toLocaleTimeString("pt-BR", {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</time></div><small>{event.component} · {event.event_name}{event.status ? " · " + event.status : ""}</small></div></li>)}</ol>}
+          {selected.result?.output && <div className="task-result"><strong>Resultado final</strong><FormattedResponse content={selected.result.output}/></div>}
+          {selected.result?.error && <div className="task-inline-error"><strong>Falha:</strong> {selected.result.error}</div>}
+          {active && <div className="task-detail-actions"><span>{selected.status === "awaiting_approval" ? "Aguardando aprovação" : "A tarefa está ativa"}</span><button type="button" className="danger-action" onClick={cancelTask} disabled={busy}>Cancelar tarefa</button></div>}
+        </>}
+      </section>
+    </div>
+  </section>;
+}
+
 function ContextRow({icon,label,children}){return <div className="context-row"><span className="context-row-icon"><Icon name={icon} size={18}/></span><span className="context-row-label">{label}</span><div className="context-row-value">{children}</div></div>;}
 function ContextPanel({tab,setTab,project,conversation,model,memoryCount,messageCount,memories}) {
   return <aside className="context-panel"><nav className="context-tabs">{["Contexto","Memória","Arquivos"].map(x=><button key={x} className={tab===x?"active":""} onClick={()=>setTab(x)}>{x}</button>)}</nav>
@@ -365,7 +523,7 @@ export default function App(){
   }
 
   return <div className="app-shell"><Sidebar projects={projects} conversations={projectConversations} activeProjectId={projectId} activeConversationId={conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>setModal("conversation")} onModelSettings={()=>setModal({type:"models"})} onHelp={()=>setModal({type:"help"})} mobileOpen={mobile} onClose={()=>setMobile(false)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
-    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}<div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage}/></main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
+    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null}/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage}/></>}</main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
     {modal?.type==="help"&&<Modal title="Ajuda" onClose={()=>setModal(null)}><div className="modal-form"><p className="modal-hint">O Mosaic é uma interface conectada ao Mosaic Core. O estado persistente vem do backend; esta interface apresenta e controla esse estado.</p><div className="help-block"><strong>Começando</strong><span>Crie um projeto, depois crie uma conversa e selecione um modelo registrado no Core.</span></div><div className="help-block"><strong>Modelos</strong><span>Use Configurações para cadastrar e ajustar modelos. O status no topo consulta o Ollama quando o provider é Ollama.</span></div><div className="help-block"><strong>Contexto</strong><span>O painel lateral mostra projeto, modelo, memória e histórico reais da conversa ativa.</span></div></div></Modal>}
     {modal?.type==="models"&&<Modal title="Modelos e configurações" onClose={()=>!saving&&setModal(null)}><div className="modal-form"><p className="modal-hint">Os valores abaixo são persistidos no Core e enviados ao provider quando a conversa usa este modelo.</p>{models.map(m=><button key={m.id} type="button" className="related-item" onClick={()=>setModal({type:"model",modelId:m.id})}><span className="status-dot"/><span>{m.name}</span><span className="model-provider">{m.provider} · {m.model_name}</span></button>)}<button type="button" className="primary-action" onClick={()=>setModal({type:"new-model"})}>+ Cadastrar modelo</button></div></Modal>}
     {modal?.type==="model"&&(()=>{const m=models.find(x=>x.id===modal.modelId);if(!m)return null;const c=m.configuration||{};return <Modal title={"Configurar "+m.name} onClose={()=>!saving&&setModal(null)}><form className="modal-form modal-wide" onSubmit={saveModel}><input type="hidden" name="id" value={m.id}/><label>Nome<input name="name" defaultValue={m.name} required/></label><div className="model-config-grid"><label>Temperature<input type="number" name="temperature" step="0.1" min="0" max="2" defaultValue={c.temperature ?? 0.7}/></label><label>Top P<input type="number" name="top_p" step="0.05" min="0" max="1" defaultValue={c.top_p ?? 0.9}/></label><label>Top K<input type="number" name="top_k" min="0" max="100" defaultValue={c.top_k ?? 40}/></label><label>Contexto<input type="number" name="num_ctx" min="256" max="131072" defaultValue={c.num_ctx ?? 4096}/></label><label>Máx. tokens<input type="number" name="num_predict" min="-1" max="131072" defaultValue={c.num_predict ?? -1}/></label><label className="model-config-toggle">Ativo<input type="checkbox" name="enabled" defaultChecked={m.enabled}/></label></div><p className="model-config-status">Provider: {m.provider} · Modelo local: {m.model_name}</p><div className="modal-actions"><button type="button" onClick={()=>setModal({type:"models"})}>Voltar</button><button className="primary-action" disabled={saving}>{saving?"Salvando…":"Salvar configurações"}</button></div></form></Modal>})()}
