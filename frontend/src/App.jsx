@@ -319,8 +319,7 @@ function TaskWorkspace({ conversationId, projectId }) {
   useEffect(() => {
     if (!selectedId) return undefined;
     let active = true;
-    const latestEventId = events.reduce((max, event) => Math.max(max, event.id || 0), 0);
-    const source = api.tasks.streamEvents(selectedId, latestEventId, event => {
+    const source = api.tasks.streamEvents(selectedId, 0, event => {
       if (!active) return;
       setEvents(current => current.some(item => item.id === event.id) ? current : [...current, event].sort((a, b) => a.id - b.id));
     }, state => { if (active) setConnectionState(state); });
