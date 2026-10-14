@@ -89,6 +89,8 @@ export const api = {
     create: (payload) => request("/projects", { method: "POST", body: JSON.stringify(payload) }),
     update: (id, payload) => request(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
     remove: (id) => request(`/projects/${id}`, { method: "DELETE" }),
+    agentConfig: (id) => request(`/projects/${id}/agent-config`),
+    saveAgentConfig: (id, payload) => request(`/projects/${id}/agent-config`, { method: "PUT", body: JSON.stringify(payload) }),
   },
   conversations: {
     list: () => request("/conversations"),
@@ -104,7 +106,21 @@ export const api = {
     get: (id) => request(`/tasks/${id}`),
     start: (payload) => request("/tasks/start", { method: "POST", body: JSON.stringify(payload) }),
     events: (id, afterId = 0) => request(`/tasks/${id}/events?after_id=${afterId}&limit=100`),
+    decideToolCall: (taskId, toolCallId, decision) => request(`/tasks/${taskId}/tool-calls/${toolCallId}/decision`, { method: "POST", body: JSON.stringify({ decision }) }),
+    streamEvents: (id, afterId = 0, onEvent, onState) => {
+      const source = new EventSource(`${API_BASE_URL}/tasks/${id}/events/stream?after_id=${afterId}`);
+      source.addEventListener("task_event", event => {
+        try { onEvent(JSON.parse(event.data)); } catch { /* Ignore malformed event payloads. */ }
+      });
+      source.onopen = () => onState?.("connected");
+      source.onerror = () => onState?.("reconnecting");
+      return source;
+    },
     cancel: (id) => request(`/tasks/${id}/cancel`, { method: "POST" }),
+  },
+  toolCalls: {
+    list: (conversationId, taskId) => request(`/tool-calls?conversation_id=${conversationId}${taskId ? `&task_id=${taskId}` : ""}`),
+    get: (id) => request(`/tool-calls/${id}`),
   },
   memories: {
     list: (projectId) => request(`/memories?project_id=${projectId}`),

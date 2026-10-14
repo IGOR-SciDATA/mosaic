@@ -11,6 +11,7 @@ from app.api.projects import router as projects_router
 from app.api.memories import router as memories_router
 from app.api.models import router as models_router
 from app.api.tasks import router as tasks_router
+from app.api.tool_calls import router as tool_calls_router
 from app.db.database import init_db
 
 
@@ -36,6 +37,7 @@ app.include_router(projects_router)
 app.include_router(memories_router)
 app.include_router(models_router)
 app.include_router(tasks_router)
+app.include_router(tool_calls_router)
 app.include_router(actions_router)
 app.include_router(chat_router)
 
