@@ -91,6 +91,9 @@ export const api = {
     remove: (id) => request(`/projects/${id}`, { method: "DELETE" }),
     agentConfig: (id) => request(`/projects/${id}/agent-config`),
     saveAgentConfig: (id, payload) => request(`/projects/${id}/agent-config`, { method: "PUT", body: JSON.stringify(payload) }),
+    artifacts: (id) => request(`/projects/${id}/artifacts`),
+    artifactExcerpt: (id, path, startLine = 1, maxLines = 200) => request(`/projects/${id}/artifacts/excerpt?path=${encodeURIComponent(path)}&start_line=${startLine}&max_lines=${maxLines}`),
+    searchArtifacts: (id, query) => request(`/projects/${id}/artifacts/search?q=${encodeURIComponent(query)}&max_results=10`),
   },
   conversations: {
     list: () => request("/conversations"),
