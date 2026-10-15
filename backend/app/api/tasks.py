@@ -13,6 +13,8 @@ from app.models.task import Task
 from app.models.task_event import TaskEvent
 from app.models.task_event_repository import list_task_events
 from app.services.agent import run_agent
+from app.services.tools import approve_tool_call, execute_tool_call
+from app.models.tool_call_repository import get_tool_call, update_tool_call
 from app.services.agent_decision import create_provider_decider
 from app.models.task_repository import (
     create_task,
@@ -37,6 +39,10 @@ class TaskStart(BaseModel):
     conversation_id: int
     goal: str
     type: str = "generic"
+
+
+class ToolDecision(BaseModel):
+    decision: str
 
 
 class TaskUpdate(BaseModel):
@@ -167,6 +173,35 @@ def cancel_task_endpoint(task_id: int) -> Task:
 
 
 
+def _execute_approved_call_and_resume(task_id: int, tool_call_id: int) -> None:
+    """Execute a pre-approved persisted ToolCall and resume the same Task."""
+    try:
+        current = get_task(task_id)
+        call = get_tool_call(tool_call_id)
+        if call is None or call.task_id != task_id or call.status != "approved":
+            raise ValueError("Approved ToolCall is no longer available")
+        if current is None or current.status == "cancelled":
+            update_tool_call(tool_call_id, status="cancelled")
+            return
+        execute_tool_call(call)
+        current = get_task(task_id)
+        if current is None or current.status == "cancelled":
+            return
+        if current.status != "executing":
+            return
+        _run_provider_agent(task_id)
+    except Exception as exc:
+        current = get_task(task_id)
+        if current is not None and current.status == "executing":
+            try:
+                update_task(task_id, status="failed", result={
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "tool_call_id": tool_call_id,
+                })
+            except ValueError:
+                pass
+
+
 def _run_provider_agent(task_id: int) -> None:
     """Execute the persisted Task in the in-process background worker."""
     try:
@@ -231,3 +266,50 @@ def run_task_endpoint(task_id: int, background_tasks: BackgroundTasks) -> Task:
         raise HTTPException(status_code=404, detail="Task not found")
     background_tasks.add_task(_run_provider_agent, task_id)
     return claimed
+
+
+@router.post("/{task_id}/tool-calls/{tool_call_id}/decision", response_model=Task, status_code=202)
+def decide_tool_call_endpoint(
+    task_id: int,
+    tool_call_id: int,
+    payload: ToolDecision,
+    background_tasks: BackgroundTasks,
+) -> Task:
+    """Approve/reject the pending call, then resume the same persisted agent Task."""
+    if payload.decision not in {"approve", "reject"}:
+        raise HTTPException(status_code=422, detail="decision must be 'approve' or 'reject'")
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status != "awaiting_approval":
+        raise HTTPException(status_code=409, detail="Task is not awaiting approval")
+    call = get_tool_call(tool_call_id)
+    if call is None or call.task_id != task_id:
+        raise HTTPException(status_code=404, detail="Pending ToolCall not found for this Task")
+    if call.status != "pending":
+        raise HTTPException(status_code=409, detail=f"ToolCall is no longer pending: {call.status}")
+    if payload.decision == "reject":
+        try:
+            update_tool_call(tool_call_id, status="rejected")
+            updated = update_task(task_id, status="failed", result={
+                "error": "A operação solicitada foi recusada pelo usuário.",
+                "tool_call_id": tool_call_id,
+            })
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return updated
+
+    try:
+        approve_tool_call(call)
+        updated = update_task(task_id, status="executing", result={
+            "last_tool_call_id": tool_call_id,
+            "resuming": True,
+        })
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    background_tasks.add_task(_execute_approved_call_and_resume, task_id, tool_call_id)
+    return updated
