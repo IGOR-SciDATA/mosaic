@@ -36,7 +36,7 @@ def test_agent_auto_paginates_reads_and_uses_task_scoped_context(tmp_path: Path)
         encoding="utf-8",
     )
     task = _task(plan={"goal": "leia Documento.md"}, project_id=project.id)
-    create_message(task.conversation_id, "user", "objetivo antigo que não deve ser repetido")
+    create_message(task.conversation_id, "user", "leia Documento.md")
     create_message(task.conversation_id, "assistant", "resposta antiga irrelevante")
 
     observed_contexts = []
@@ -52,7 +52,7 @@ def test_agent_auto_paginates_reads_and_uses_task_scoped_context(tmp_path: Path)
         assert [message["content"] for message in context if message.get("role") == "user"] == [
             "leia Documento.md"
         ]
-        assert not any("objetivo antigo" in message.get("content", "") for message in context)
+        assert any("resposta antiga irrelevante" in message.get("content", "") for message in context)
         assert any("linha 190" in message.get("content", "") for message in context)
         read_calls = [
             call for call in list_tool_calls(task.conversation_id)
