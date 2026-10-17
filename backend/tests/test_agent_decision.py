@@ -113,7 +113,7 @@ def test_provider_decider_does_not_retry_more_than_once(monkeypatch):
 
 
 def test_diagnostic_preview_keeps_response_tail_and_redacts_thinking_and_secrets():
-    preview = _diagnostic_preview("A" * 800 + " tail=secret-value", limit=100)
+    preview = _diagnostic_preview("A" * 800 + " token=secret-value", limit=100)
     assert len(preview) <= 100
     assert "AAAA" in preview
-    assert "tail=[REDACTED]" in preview
+    assert "token=[REDACTED]" in preview
