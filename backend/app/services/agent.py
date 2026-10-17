@@ -56,7 +56,7 @@ def _verified_source_reads(task_id: int, conversation_id: int, goal: str) -> lis
             total_lines = data.get("total_lines")
             start_line = data.get("start_line")
             end_line = data.get("end_line")
-            if not isinstance(path, str) or not isinstance(content, str) or not content.strip():
+            if not isinstance(path, str) or not isinstance(content, str):
                 continue
             if not isinstance(total_lines, int) or not isinstance(start_line, int) or not isinstance(end_line, int):
                 continue
@@ -64,7 +64,7 @@ def _verified_source_reads(task_id: int, conversation_id: int, goal: str) -> lis
             entry = coverage.setdefault(key, {"total_lines": total_lines, "ranges": []})
             if entry["total_lines"] != total_lines:
                 continue
-            if start_line >= 1 and end_line >= start_line:
+            if start_line >= 1 and end_line >= start_line and end_line <= total_lines:
                 entry["ranges"].append((start_line, end_line))
 
     missing = []
