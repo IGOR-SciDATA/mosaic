@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -9,7 +10,7 @@ from app.models.repository import create_model
 from app.models.task_repository import create_task, get_task, update_task
 from app.models.tool_call_repository import create_tool_call, get_tool_call, list_tool_calls
 from app.models.tool_result_repository import list_tool_results
-from app.services.agent import run_agent
+from app.services.agent import _tool_context, run_agent
 from app.services.tools import approve_tool_call, execute_tool_call
 
 @pytest.fixture(autouse=True)
@@ -62,6 +63,13 @@ def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_
     assert result["artifact"]["path"] == "Resumo.md"
     assert result["artifact"]["bytes"] > 0
     assert (workspace / "Resumo.md").is_file()
+
+
+def test_tool_observation_is_bounded_and_marks_truncation():
+    result = SimpleNamespace(status="completed", data={"content": "x" * 20_000}, error=None)
+    observation = _tool_context(1, result)
+    assert len(observation["content"]) < 13_000
+    assert "observação truncada pelo Core" in observation["content"]
 
 
 def test_agent_runs_tool_then_returns_final():
