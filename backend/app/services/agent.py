@@ -280,7 +280,7 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
 def _artifact_output_path(goal: str) -> str:
     """Choose a deterministic, non-source filename for a requested summary artifact."""
     named_output = re.search(
-        r"\\b(?:called|named|chamado|chamada|com\s+o\s+nome)\\s+[\\"']?([A-Za-z0-9_./-]+\\.md)\\b",
+        r"\b(?:called|named|chamado|chamada|com\s+o\s+nome)\s+([A-Za-z0-9_./-]+\.md)\b",
         goal,
         flags=re.IGNORECASE,
     )
@@ -304,20 +304,20 @@ def _artifact_content_from_final(content: str) -> str | None:
 
     # Some small local models append a narration of their intended tool use after
     # producing the actual document. Do not persist that narration as document content.
-    paragraphs = re.split(r"\\n\\s*\\n", text)
+    paragraphs = re.split(r"\n\s*\n", text)
     narration = re.compile(
         r"^(?:para criar (?:um|o) documento|vou criar (?:um|o) arquivo|"
         r"vou usar a ferramenta|vamos criar (?:um|o) documento|"
-        r"i will create (?:a|the) file|i will use the filesystem)\\b",
+        r"i will create (?:a|the) file|i will use the filesystem)\b",
         flags=re.IGNORECASE,
     )
     for index, paragraph in enumerate(paragraphs):
         if narration.search(paragraph.strip()):
-            text = "\\n\\n".join(paragraphs[:index]).strip()
+            text = "\n\n".join(paragraphs[:index]).strip()
             break
 
     if len(text) < 40 or re.fullmatch(
-        r"(?:pronto|feito|concluído|concluido|criei o resumo|arquivo criado|salvo com sucesso)[.!\\s]*",
+        r"(?:pronto|feito|concluído|concluido|criei o resumo|arquivo criado|salvo com sucesso)[.!\s]*",
         text,
         flags=re.IGNORECASE,
     ):
