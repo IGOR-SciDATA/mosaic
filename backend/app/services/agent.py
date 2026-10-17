@@ -398,6 +398,8 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
             isinstance(expected_content, str)
             and actual_bytes == expected_content.encode("utf-8")
         )
+        if not content_matches:
+            continue
         for result in reversed(list_tool_results(call.id)):
             if result.status == "completed" and isinstance(result.data, dict):
                 data = result.data
