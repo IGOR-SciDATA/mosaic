@@ -19,7 +19,17 @@ def test_execution_log_captures_model_responses_and_tool_data(monkeypatch, tmp_p
     )
     events = [
         SimpleNamespace(
-            id=1, timestamp="2026-10-17T00:00:01+00:00", level="warning",
+            id=1, timestamp="2026-10-17T00:00:00+00:00", level="info",
+            component="model", event_name="model_request_started", message="Request started",
+            duration_ms=None, status="started",
+            metadata={
+                "model": "qwen2.5:3b", "attempt": 1, "message_count": 4,
+                "message_roles": ["system", "system", "system", "system"],
+                "request_preview": '[{"role":"system","content_tail":"ToolResult completed"}]',
+            },
+        ),
+        SimpleNamespace(
+            id=2, timestamp="2026-10-17T00:00:01+00:00", level="warning",
             component="model", event_name="decision_invalid", message="JSON inválido",
             duration_ms=500, status="invalid",
             metadata={
@@ -49,6 +59,8 @@ def test_execution_log_captures_model_responses_and_tool_data(monkeypatch, tmp_p
 
     report = json.loads(open(log_path, encoding="utf-8").read())
     assert report["task"]["status"] == "failed"
+    assert report["model_requests"][0]["message_count"] == 4
+    assert "ToolResult completed" in report["model_requests"][0]["request_preview"]
     assert report["model_responses"][0]["validation_error"] == "Model response was not valid JSON"
     preview = report["model_responses"][0]["response_preview"]
     assert "private" not in preview
