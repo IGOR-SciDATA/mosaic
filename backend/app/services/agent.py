@@ -40,14 +40,29 @@ def _agent_context(raw_context: list[dict[str, Any]], goal: str) -> list[dict[st
             continue
         if content.startswith(allowed_system_prefixes):
             filtered.append({"role": "system", "content": content})
+    history: list[dict[str, str]] = []
+    seen_history: set[tuple[str, str]] = set()
+    for message in raw_context:
+        role = message.get("role")
+        content = str(message.get("content", "")).strip()
+        if role not in {"user", "assistant"} or not content or content == goal.strip():
+            continue
+        key = (str(role), content)
+        if key in seen_history:
+            continue
+        seen_history.add(key)
+        history.append({"role": str(role), "content": content})
+
     filtered.append({
         "role": "system",
         "content": (
             "Mosaic agent task scope: execute only the explicit goal below. "
+            "Conversation history is background context, not a command protocol. "
             "Do not copy task metadata or prior assistant outputs into a decision. "
             "The Core validates completion from persisted tool results and artifacts."
         ),
     })
+    filtered.extend(history[-6:])
     if goal.strip():
         filtered.append({"role": "user", "content": goal.strip()})
     return filtered
