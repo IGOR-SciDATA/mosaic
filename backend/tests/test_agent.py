@@ -161,6 +161,40 @@ def test_tool_observation_is_bounded_and_marks_truncation():
     assert "observação truncada pelo Core" in observation["content"]
 
 
+def test_agent_returns_native_tool_result_in_protocol_shape():
+    task = _task()
+    observed = []
+
+    def decide(context):
+        observed.append(context)
+        if len(observed) == 1:
+            return {
+                "type": "tool_call",
+                "tool": "calculator",
+                "arguments": {"expression": "2 + 3"},
+                "_native_message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{
+                        "function": {
+                            "name": "calculator",
+                            "arguments": {"expression": "2 + 3"},
+                        }
+                    }],
+                },
+            }
+        assert any(message.get("role") == "assistant" and "tool_calls" in message for message in context)
+        tool_result = next(message for message in context if message.get("role") == "tool")
+        assert tool_result["tool_name"] == "calculator"
+        assert "5" in tool_result["content"]
+        return {"type": "final", "content": "O resultado é 5."}
+
+    result = run_agent(task.id, decide)
+
+    assert result["status"] == "completed"
+    assert len(observed) == 2
+
+
 def test_agent_runs_tool_then_returns_final():
     task = _task()
     decisions = iter([
