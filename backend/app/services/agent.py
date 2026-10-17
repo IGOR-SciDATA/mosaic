@@ -10,7 +10,7 @@ from app.models.tool_result import ToolResult
 from app.models.tool_result_repository import list_tool_results
 from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_policy, resolve_tool_workspace
 
-DEFAULT_ITERATION_LIMIT = 5
+DEFAULT_ITERATION_LIMIT = 10
 TOOL_OBSERVATION_MAX_CHARS = 12_000
 
 
@@ -36,7 +36,7 @@ def _required_source_paths(goal: str) -> list[str]:
 
 
 def _verified_source_reads(task_id: int, conversation_id: int, goal: str) -> list[str]:
-    """Return named sources only when a successful filesystem read confirms their content."""
+    """Require complete line coverage for every explicitly named source file."""
     required = _required_source_paths(goal)
     if not required:
         return []
@@ -45,16 +45,43 @@ def _verified_source_reads(task_id: int, conversation_id: int, goal: str) -> lis
         if call.task_id == task_id and call.tool_name == "filesystem"
         and call.arguments.get("operation") == "read"
     ]
-    verified = set()
+    coverage: dict[str, dict[str, Any]] = {}
     for call in calls:
         for result in list_tool_results(call.id):
             if result.status != "completed" or not isinstance(result.data, dict):
                 continue
             data = result.data
             path = data.get("path")
-            if isinstance(path, str) and isinstance(data.get("content"), str) and data["content"].strip():
-                verified.add(Path(path).as_posix().casefold())
-    return [path for path in required if Path(path).as_posix().casefold() not in verified]
+            content = data.get("content")
+            total_lines = data.get("total_lines")
+            start_line = data.get("start_line")
+            end_line = data.get("end_line")
+            if not isinstance(path, str) or not isinstance(content, str) or not content.strip():
+                continue
+            if not isinstance(total_lines, int) or not isinstance(start_line, int) or not isinstance(end_line, int):
+                continue
+            key = Path(path).as_posix().casefold()
+            entry = coverage.setdefault(key, {"total_lines": total_lines, "ranges": []})
+            if entry["total_lines"] != total_lines:
+                continue
+            if start_line >= 1 and end_line >= start_line:
+                entry["ranges"].append((start_line, end_line))
+
+    missing = []
+    for source in required:
+        entry = coverage.get(Path(source).as_posix().casefold())
+        if entry is None or entry["total_lines"] <= 0:
+            missing.append(source)
+            continue
+        ranges = sorted(entry["ranges"])
+        next_line = 1
+        for start_line, end_line in ranges:
+            if start_line > next_line:
+                break
+            next_line = max(next_line, end_line + 1)
+        if next_line <= entry["total_lines"]:
+            missing.append(source)
+    return missing
 
 
 def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> dict[str, Any] | None:
