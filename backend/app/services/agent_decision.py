@@ -223,7 +223,7 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                     native_decision = generate_with_tools(
                         messages=messages,
                         model_name=model.model_name,
-                        configuration=model.configuration,
+                        configuration={**model.configuration, "temperature": 0, "think": False},
                         tools=native_tools,
                     )
                     if not isinstance(native_decision, dict):
@@ -235,7 +235,7 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                     raw = provider.generate(
                         messages=messages,
                         model_name=model.model_name,
-                        configuration={**model.configuration, "format": "json"},
+                        configuration={**model.configuration, "format": "json", "temperature": 0, "think": False},
                     )
             except Exception as exc:
                 _record_decision_event(
