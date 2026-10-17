@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from app.db.database import init_db
@@ -45,7 +47,7 @@ def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_
     call = create_tool_call(
         task.conversation_id,
         "filesystem",
-        {"operation": "create", "path": "Resumo.md", "content": "# Resumo\\n\\nConteúdo."},
+        {"operation": "create", "path": "Resumo.md", "content": "# Resumo\n\nConteúdo."},
         task_id=task.id,
     )
     tool_result = execute_tool_call(approve_tool_call(call))
