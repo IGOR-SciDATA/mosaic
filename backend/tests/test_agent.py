@@ -38,6 +38,30 @@ def test_agent_does_not_complete_file_creation_goal_without_verified_artifact():
     assert get_task(task.id).status == "failed"
 
 
+def test_agent_does_not_complete_summary_without_reading_named_source(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Source validation", str(workspace))
+    task = _task(
+        plan={"goal": "leia Documento.md e crie um novo arquivo .md com um resumo"},
+        project_id=project.id,
+    )
+    output_create = create_tool_call(
+        task.conversation_id,
+        "filesystem",
+        {"operation": "create", "path": "Resumo.md", "content": "# Resumo\\n\\nTexto sem fonte."},
+        task_id=task.id,
+    )
+    assert execute_tool_call(approve_tool_call(output_create)).status == "completed"
+
+    result = run_agent(
+        task.id,
+        lambda context: {"type": "final", "content": "Criei o resumo."},
+        iteration_limit=1,
+    )
+    assert result["status"] == "failed"
+    assert get_task(task.id).status == "failed"
+
+
 def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_path: Path):
     workspace = tmp_path / "workspace"
     project = create_project("Artifact validation", str(workspace))
