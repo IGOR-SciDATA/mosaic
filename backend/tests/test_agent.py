@@ -39,7 +39,7 @@ def test_agent_passes_tool_observation_to_next_decision():
         observed.append(list(context))
         if len(observed) == 1:
             return {"type": "tool_call", "tool": "calculator", "arguments": {"expression": "7 * 6"}}
-        assert any(message["role"] == "tool" and "42" in message["content"] for message in context)
+        assert any(message["role"] == "system" and "42" in message["content"] for message in context)
         return {"type": "final", "content": "42"}
     result = run_agent(task.id, decide)
     assert result["status"] == "completed"
