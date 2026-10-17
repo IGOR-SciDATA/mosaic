@@ -208,6 +208,45 @@ def test_existing_file_update_is_planned_as_read_transform_write():
     assert _artifact_operation(goal) == "write"
 
 
+def test_agent_updates_existing_file_only_after_approval(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Update existing file", str(workspace))
+    workspace.mkdir(parents=True, exist_ok=True)
+    readme = workspace / "README.md"
+    readme.write_text("# Projeto\n\nDescrição original.\n", encoding="utf-8")
+    task = _task(
+        plan={"goal": "atualize README.md para incluir uma seção de instalação"},
+        project_id=project.id,
+    )
+    updated_content = (
+        "# Projeto\n\nDescrição original.\n\n"
+        "## Instalação\n\nExecute pip install -r requirements.txt.\n"
+    )
+
+    result = run_agent(
+        task.id,
+        lambda context: {"type": "final", "content": updated_content},
+    )
+
+    assert result["status"] == "awaiting_approval"
+    call = next(
+        call for call in list_tool_calls(task.conversation_id)
+        if call.task_id == task.id and call.tool_name == "filesystem"
+        and call.arguments.get("operation") == "write"
+    )
+    assert call.arguments["path"] == "README.md"
+    assert call.arguments["overwrite"] is True
+    assert readme.read_text(encoding="utf-8") == "# Projeto\n\nDescrição original.\n"
+
+    assert execute_tool_call(approve_tool_call(call)).status == "completed"
+    update_task(task.id, status="executing")
+    completed = run_agent(task.id, lambda context: pytest.fail("Verified output must complete without another model call"))
+
+    assert completed["status"] == "completed"
+    assert completed["artifact"]["path"] == "README.md"
+    assert "## Instalação" in readme.read_text(encoding="utf-8")
+
+
 def test_agent_task_context_contains_only_current_task_tool_results(tmp_path: Path):
     workspace = tmp_path / "workspace"
     project = create_project("Task isolation", str(workspace))
