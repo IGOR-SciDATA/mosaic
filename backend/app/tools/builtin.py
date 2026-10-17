@@ -23,6 +23,7 @@ from app.tools.base import Tool
 
 MAX_FILE_BYTES = 1_000_000
 MAX_READ_LINES = 80
+MAX_READ_CHARS = 8_000
 MAX_LIST_ENTRIES = 500
 MAX_COMMAND_LENGTH = 2_000
 MAX_PROCESS_OUTPUT_BYTES = 200_000
@@ -111,7 +112,17 @@ class FilesystemTool(Tool):
             max_lines = arguments.get("max_lines", MAX_READ_LINES)
             if total_lines and start_line > total_lines:
                 raise ValueError("start_line exceeds the file line count")
-            selected_lines = lines[start_line - 1:start_line - 1 + max_lines]
+            selected_lines = []
+            chunk_chars = 0
+            for line in lines[start_line - 1:start_line - 1 + max_lines]:
+                if len(line) > MAX_READ_CHARS:
+                    if not selected_lines:
+                        raise ValueError("A single line exceeds the filesystem read chunk limit")
+                    break
+                if chunk_chars + len(line) > MAX_READ_CHARS:
+                    break
+                selected_lines.append(line)
+                chunk_chars += len(line)
             chunk = "".join(selected_lines)
             end_line = start_line + len(selected_lines) - 1
             truncated = end_line < total_lines
