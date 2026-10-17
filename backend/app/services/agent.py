@@ -402,7 +402,7 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
     return None
 
 def _artifact_output_path(goal: str) -> str:
-    """Resolve an explicit output filename after the output intent, else derive one."""
+    """Resolve an explicit output filename without mistaking a source path for the target."""
     output_verbs = (
         r"create|crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|"
         r"elabore|elaborar|prepare|preparar|write|save|generate|export|salve|salvar|"
@@ -412,19 +412,20 @@ def _artifact_output_path(goal: str) -> str:
     action = re.search(rf"\b(?:{output_verbs})\b", goal, flags=re.IGNORECASE)
     output_instruction = goal[action.end():] if action else goal
 
-    # Updates name the existing file directly: "update README.md".
-    direct_path = re.search(
-        r"(?<![A-Za-z0-9_./-])([A-Za-z0-9_./-]+\.md)\b",
-        output_instruction,
-        flags=re.IGNORECASE,
-    )
-    if direct_path:
-        candidate = Path(direct_path.group(1))
-        if candidate.name and candidate.suffix.lower() == ".md":
-            return candidate.as_posix()
+    # An update explicitly targets the named existing file.
+    if _goal_updates_existing_file(goal):
+        direct_path = re.search(
+            r"(?<![A-Za-z0-9_./-])([A-Za-z0-9_./-]+\.md)\b",
+            output_instruction,
+            flags=re.IGNORECASE,
+        )
+        if direct_path:
+            candidate = Path(direct_path.group(1))
+            if candidate.name and candidate.suffix.lower() == ".md":
+                return candidate.as_posix()
 
     named_output = re.search(
-        r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como|as)\s+"
+        r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como|as|to|para|em)\s+"
         r"(?:um|uma|a|o|the)?\s*['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.md)\b",
         output_instruction,
         flags=re.IGNORECASE,
@@ -442,6 +443,17 @@ def _artifact_output_path(goal: str) -> str:
     )
     if explicit_after_file:
         candidate = Path(explicit_after_file.group(1))
+        if candidate.name and candidate.suffix.lower() == ".md":
+            return candidate.as_posix()
+
+    # Also accept a filename immediately following the output verb: "crie Resumo.md".
+    leading_path = re.match(
+        r"\s+(?:(?:um|uma|a|o|the)\s+)?([A-Za-z0-9_][A-Za-z0-9_./-]*\.md)\b",
+        output_instruction,
+        flags=re.IGNORECASE,
+    )
+    if leading_path:
+        candidate = Path(leading_path.group(1))
         if candidate.name and candidate.suffix.lower() == ".md":
             return candidate.as_posix()
 
