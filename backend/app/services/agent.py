@@ -25,10 +25,14 @@ def _agent_context(
 ) -> list[dict[str, Any]]:
     """Build an objective-first context; include history only for explicit continuity requests."""
     allowed_system_prefixes = (
-        "Mosaic project state:",
         "Applicable project instructions",
         "Enabled project skills",
     )
+    project_state_requested = bool(re.search(
+        r"\b(?:project state|estado do projeto|status do projeto|situa[cç][aã]o atual do projeto)\b",
+        goal,
+        flags=re.IGNORECASE,
+    ))
     memory_requested = bool(re.search(
         r"\b(?:mem[oó]ria|lembr(?:a|e|ar|o)|recordar|hist[oó]rico anterior|contexto anterior|where we left off|recall)\b",
         goal,
@@ -53,6 +57,8 @@ def _agent_context(
             identity_kept = True
             continue
         if content.startswith(allowed_system_prefixes):
+            filtered.append({"role": "system", "content": content})
+        elif project_state_requested and content.startswith("Mosaic project state:"):
             filtered.append({"role": "system", "content": content})
         elif memory_requested and content.startswith("Mosaic memory:"):
             filtered.append({"role": "system", "content": content})
