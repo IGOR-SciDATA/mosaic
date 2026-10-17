@@ -15,7 +15,7 @@ _SECRET_KEY = re.compile(r"(token|secret|password|credential|authorization|api[_
 _INLINE_SECRET = re.compile(r"(?i)\b(api[_-]?key|token|password|secret|authorization)\s*[:=]\s*[^\s,;]+")
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.I | re.S)
 _MAX_TEXT = 1200
-_MAX_JSON_CHARS = 2_000
+_MAX_REPORT_CHARS = 250_000
 _MAX_EVENTS = 500
 _MAX_TOOL_CALLS = 100
 
@@ -46,6 +46,14 @@ def _safe_value(value: Any, depth: int = 0) -> Any:
     if value is None or isinstance(value, (bool, int, float)):
         return value
     return _safe_text(str(value), 500)
+
+
+def _bounded_value(value: Any, limit: int = 3000) -> Any:
+    safe_value = _safe_value(value)
+    encoded = json.dumps(safe_value, ensure_ascii=False, default=str)
+    if len(encoded) <= limit:
+        return safe_value
+    return {"truncated": True, "preview": _safe_text(encoded, limit - 100)}
 
 
 def _all_events(task_id: int) -> list[Any]:
@@ -82,7 +90,7 @@ def write_task_execution_log(task_id: int) -> str | None:
                     "created_at": result.created_at,
                 }
                 if result.data is not None:
-                    item["data"] = _safe_value(result.data)
+                    item["data"] = _bounded_value(result.data)
                 if result.error:
                     item["error"] = _safe_text(result.error)
                 results.append(item)
@@ -90,7 +98,7 @@ def write_task_execution_log(task_id: int) -> str | None:
                 "id": call.id,
                 "tool": call.tool_name,
                 "status": call.status,
-                "arguments": _safe_value(call.arguments),
+                "arguments": _bounded_value(call.arguments, 2000),
                 "created_at": call.created_at,
                 "updated_at": call.updated_at,
                 "results": results,
@@ -129,8 +137,8 @@ def write_task_execution_log(task_id: int) -> str | None:
             "created_at": task.created_at,
             "updated_at": task.updated_at,
             "goal": _safe_text(str((task.plan or {}).get("goal", ""))),
-            "plan": _safe_value(task.plan),
-            "result": _safe_value(task.result),
+            "plan": _bounded_value(task.plan, 5000),
+            "result": _bounded_value(task.result, 5000),
         },
         "model_responses": model_responses,
         "tool_calls": tool_calls,
@@ -157,12 +165,17 @@ def write_task_execution_log(task_id: int) -> str | None:
     log_path = log_dir / f"task-{task.id}.json"
     temporary_path = log_path.with_suffix(".json.tmp")
     encoded = json.dumps(report, ensure_ascii=False, indent=2, default=str)
-    if len(encoded) > _MAX_JSON_CHARS * max(1, len(events) // 10 + 1):
-        # Keep reports bounded even if many tool results are large.
+    if len(encoded) > _MAX_REPORT_CHARS:
+        # Keep the newest diagnostic evidence when a task produces excessive output.
         report["events"] = report["events"][-100:]
         report["model_responses"] = report["model_responses"][-50:]
         report["tool_calls"] = report["tool_calls"][-30:]
         report["truncated"]["report_size_guard"] = True
+        encoded = json.dumps(report, ensure_ascii=False, indent=2, default=str)
+    if len(encoded) > _MAX_REPORT_CHARS:
+        report["events"] = report["events"][-50:]
+        report["model_responses"] = report["model_responses"][-20:]
+        report["tool_calls"] = report["tool_calls"][-10:]
         encoded = json.dumps(report, ensure_ascii=False, indent=2, default=str)
     temporary_path.write_text(encoded + "\n", encoding="utf-8")
     temporary_path.replace(log_path)
