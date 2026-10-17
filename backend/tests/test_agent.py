@@ -5,6 +5,7 @@ import pytest
 
 from app.db.database import init_db
 from app.models.conversation_repository import create_conversation
+from app.models.message_repository import create_message
 from app.models.project_repository import create_project
 from app.models.repository import create_model
 from app.models.task_repository import create_task, get_task, update_task
@@ -25,6 +26,47 @@ def _conversation(project_id=None):
 def _task(plan=None, project_id=None):
     conversation = _conversation(project_id)
     return create_task(type="generic", mode="agent", conversation_id=conversation.id, project_id=project_id, plan=plan)
+
+def test_agent_auto_paginates_reads_and_uses_task_scoped_context(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Pagination", str(workspace))
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "Documento.md").write_text(
+        "\n".join(f"linha {number}" for number in range(1, 191)),
+        encoding="utf-8",
+    )
+    task = _task(plan={"goal": "leia Documento.md"}, project_id=project.id)
+    create_message(task.conversation_id, "user", "objetivo antigo que não deve ser repetido")
+    create_message(task.conversation_id, "assistant", "resposta antiga irrelevante")
+
+    observed_contexts = []
+
+    def decide(context):
+        observed_contexts.append(context)
+        if len(observed_contexts) == 1:
+            return {
+                "type": "tool_call",
+                "tool": "filesystem",
+                "arguments": {"operation": "read", "path": "Documento.md"},
+            }
+        assert [message["content"] for message in context if message.get("role") == "user"] == [
+            "leia Documento.md"
+        ]
+        assert not any("objetivo antigo" in message.get("content", "") for message in context)
+        assert any("linha 190" in message.get("content", "") for message in context)
+        read_calls = [
+            call for call in list_tool_calls(task.conversation_id)
+            if call.task_id == task.id and call.tool_name == "filesystem"
+            and call.arguments.get("operation") == "read"
+        ]
+        assert len(read_calls) == 3
+        return {"type": "final", "content": "Li o documento completo."}
+
+    result = run_agent(task.id, decide)
+
+    assert result["status"] == "completed"
+    assert len(observed_contexts) == 2
+
 
 def test_agent_does_not_complete_file_creation_goal_without_verified_artifact():
     task = _task(plan={"goal": "crie um novo arquivo .md com um resumo"})
