@@ -29,7 +29,7 @@ _FINAL_PREVIEW_LIMIT = 600
 _DIAGNOSTIC_PREVIEW_LIMIT = 1000
 
 
-def _diagnostic_preview(raw: str) -> str:
+def _diagnostic_preview(raw: str, limit: int = _DIAGNOSTIC_PREVIEW_LIMIT) -> str:
     """Keep a bounded provider-output excerpt without tagged private thinking or inline secrets."""
     preview = re.sub(r"<think>.*?</think>", "[model thinking omitted]", raw, flags=re.IGNORECASE | re.DOTALL)
     if re.search(r"<think>", preview, re.IGNORECASE):
@@ -39,7 +39,7 @@ def _diagnostic_preview(raw: str) -> str:
         r"\1=[REDACTED]",
         preview,
     )
-    return preview[:_DIAGNOSTIC_PREVIEW_LIMIT]
+    return preview[:limit]
 
 
 def _request_preview(messages: list[dict[str, str]]) -> str:
