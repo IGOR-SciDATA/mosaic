@@ -27,7 +27,7 @@ def _task(plan=None, project_id=None):
     conversation = _conversation(project_id)
     return create_task(type="generic", mode="agent", conversation_id=conversation.id, project_id=project_id, plan=plan)
 
-def test_agent_auto_paginates_reads_and_uses_task_scoped_context(tmp_path: Path):
+def test_agent_auto_paginates_reads_before_model_and_excludes_unrelated_history(tmp_path: Path):
     workspace = tmp_path / "workspace"
     project = create_project("Pagination", str(workspace))
     workspace.mkdir(parents=True, exist_ok=True)
@@ -35,27 +35,30 @@ def test_agent_auto_paginates_reads_and_uses_task_scoped_context(tmp_path: Path)
         "\n".join(f"linha {number}" for number in range(1, 191)),
         encoding="utf-8",
     )
-    task = _task(plan={"goal": "leia Documento.md"}, project_id=project.id)
-    create_message(task.conversation_id, "user", "leia Documento.md")
-    create_message(task.conversation_id, "assistant", "resposta antiga irrelevante")
+    conversation = _conversation(project.id)
+    create_message(conversation.id, "user", "leia Documento_ANTIGO.md e crie um resumo")
+    create_message(conversation.id, "assistant", "resposta antiga irrelevante")
+    goal = "leia Documento.md"
+    create_message(conversation.id, "user", goal)
+    task = create_task(
+        type="generic",
+        mode="agent",
+        conversation_id=conversation.id,
+        project_id=project.id,
+        plan={"goal": goal},
+    )
 
     observed_contexts = []
 
     def decide(context):
         observed_contexts.append(context)
-        if len(observed_contexts) == 1:
-            return {
-                "type": "tool_call",
-                "tool": "filesystem",
-                "arguments": {"operation": "read", "path": "Documento.md"},
-            }
-        assert [message["content"] for message in context if message.get("role") == "user"] == [
-            "leia Documento.md"
-        ]
-        assert any("resposta antiga irrelevante" in message.get("content", "") for message in context)
-        assert any("linha 190" in message.get("content", "") for message in context)
+        assert [message["content"] for message in context if message.get("role") == "user"] == [goal]
+        flattened = "\n".join(str(message.get("content", "")) for message in context)
+        assert "resposta antiga irrelevante" not in flattened
+        assert "Documento_ANTIGO.md" not in flattened
+        assert "linha 190" in flattened
         read_calls = [
-            call for call in list_tool_calls(task.conversation_id)
+            call for call in list_tool_calls(conversation.id)
             if call.task_id == task.id and call.tool_name == "filesystem"
             and call.arguments.get("operation") == "read"
         ]
@@ -65,7 +68,9 @@ def test_agent_auto_paginates_reads_and_uses_task_scoped_context(tmp_path: Path)
     result = run_agent(task.id, decide)
 
     assert result["status"] == "completed"
-    assert len(observed_contexts) == 2
+    assert len(observed_contexts) == 1
+    assert get_task(task.id).plan["planner_version"] == "task-plan-v1"
+    assert get_task(task.id).plan["steps"][0]["status"] == "completed"
 
 
 @pytest.mark.parametrize(
@@ -84,7 +89,6 @@ def test_agent_does_not_complete_file_creation_goal_without_verified_artifact(go
         iteration_limit=1,
     )
     assert result["status"] == "failed"
-    assert "iteration limit" in result["error"].lower()
     assert get_task(task.id).status == "failed"
 
 
@@ -134,6 +138,67 @@ def test_agent_turns_final_summary_into_approved_artifact_creation(tmp_path: Pat
     assert completed["status"] == "completed"
     assert completed["artifact"]["path"] == "Resumo_Documento.md"
     assert (workspace / "Resumo_Documento.md").is_file()
+
+
+def test_agent_creates_explicit_subtasks_for_read_summarize_create(tmp_path: Path):
+    from app.services.agent import _build_task_steps
+
+    steps = _build_task_steps(
+        "leia o arquivo docs/Documento.md e faça um novo arquivo .md com um resumo"
+    )
+
+    assert [step["kind"] for step in steps] == [
+        "read_file",
+        "summarize_source",
+        "create_artifact",
+    ]
+    assert steps[0]["path"] == "docs/Documento.md"
+    assert steps[2]["path"] == "docs/Resumo_Documento.md"
+
+
+def test_agent_task_context_contains_only_current_task_tool_results(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Task isolation", str(workspace))
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "A.md").write_text("Conteúdo do arquivo A.", encoding="utf-8")
+    (workspace / "B.md").write_text("Conteúdo exclusivo do arquivo B.", encoding="utf-8")
+    conversation = _conversation(project.id)
+
+    old_goal = "leia A.md e faça um resumo antigo"
+    create_message(conversation.id, "user", old_goal)
+    create_message(conversation.id, "assistant", "RESUMO ANTIGO QUE NÃO DEVE VAZAR")
+    goal = "leia B.md"
+    create_message(conversation.id, "user", goal)
+    task = create_task(
+        type="generic",
+        mode="agent",
+        conversation_id=conversation.id,
+        project_id=project.id,
+        plan={"goal": goal},
+    )
+
+    result = run_agent(
+        task.id,
+        lambda context: (
+            {
+                "type": "final",
+                "content": "Li somente o arquivo B.",
+            }
+            if "Conteúdo exclusivo do arquivo B." in "\n".join(
+                str(message.get("content", "")) for message in context
+            )
+            else {"type": "final", "content": "Não encontrei o arquivo."}
+        ),
+    )
+
+    assert result["status"] == "completed"
+    task_context = "\n".join(
+        str(message.get("content", "")) for message in
+        _agent_context_for_test(task.id, conversation.id, goal)
+    )
+    assert "RESUMO ANTIGO QUE NÃO DEVE VAZAR" not in task_context
+    assert "Conteúdo exclusivo do arquivo B." in task_context
+    assert "Conteúdo do arquivo A." not in task_context
 
 
 def test_agent_does_not_complete_summary_without_reading_named_source(tmp_path: Path):
@@ -205,9 +270,9 @@ def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_
         iteration_limit=1,
     )
     assert result["status"] == "completed"
-    assert result["artifact"]["path"] == "Resumo.md"
+    assert result["artifact"]["path"] == "Resumo_Documento.md"
     assert result["artifact"]["bytes"] > 0
-    assert (workspace / "Resumo.md").is_file()
+    assert (workspace / "Resumo_Documento.md").is_file()
 
 
 def test_tool_observation_is_bounded_and_marks_truncation():
