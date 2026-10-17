@@ -80,7 +80,8 @@ def test_provider_decider_retries_malformed_response_with_specific_feedback(monk
     retry_feedback = retry_messages[-1]["content"]
     assert "Unknown tool: tool_id" in retry_feedback
     assert "filesystem" in retry_feedback
-    assert '"operation":"read"' in retry_feedback or '"operation": "read"' in retry_feedback
+    assert "operation e path" in retry_feedback
+    assert "file_path" in retry_feedback
     assert any(event["event_name"] == "decision_retry" for event in events)
 
 
