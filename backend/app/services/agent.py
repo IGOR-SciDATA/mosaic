@@ -27,8 +27,8 @@ def _goal_requires_file_artifact(goal: str) -> bool:
 def _required_source_paths(goal: str) -> list[str]:
     """Extract an explicitly named source file following a read/analyze instruction."""
     match = re.search(
-        r"\\b(?:read|open|inspect|analy[sz]e|summari[sz]e|leia|ler|abra|analise|analisa|resuma|resumir)\\b"
-        r".{0,200}?([A-Za-z0-9_./-]+\\.[A-Za-z0-9_-]+)",
+        r"\b(?:read|open|inspect|analy[sz]e|summari[sz]e|leia|ler|abra|analise|analisa|resuma|resumir)\b"
+        r".{0,200}?([A-Za-z0-9_./-]+\.[A-Za-z0-9_-]+)",
         goal,
         flags=re.IGNORECASE | re.DOTALL,
     )
