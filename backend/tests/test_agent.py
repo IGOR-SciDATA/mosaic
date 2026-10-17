@@ -72,7 +72,7 @@ def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_
     source_create = create_tool_call(
         task.conversation_id,
         "filesystem",
-        {"operation": "create", "path": "Documento.md", "content": "# Documento\n\nConteúdo de origem."},
+        {"operation": "create", "path": "Documento.md", "content": "\n".join(f"linha {number}" for number in range(1, 101))},
         task_id=task.id,
     )
     assert execute_tool_call(approve_tool_call(source_create)).status == "completed"
@@ -82,7 +82,16 @@ def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_
         {"operation": "read", "path": "Documento.md"},
         task_id=task.id,
     )
-    assert execute_tool_call(approve_tool_call(source_read)).status == "completed"
+    first_read_result = execute_tool_call(approve_tool_call(source_read))
+    assert first_read_result.status == "completed"
+    source_read_next = create_tool_call(
+        task.conversation_id,
+        "filesystem",
+        {"operation": "read", "path": "Documento.md", "start_line": 81, "max_lines": 80},
+        task_id=task.id,
+    )
+    second_read_result = execute_tool_call(approve_tool_call(source_read_next))
+    assert second_read_result.status == "completed"
     output_create = create_tool_call(
         task.conversation_id,
         "filesystem",
