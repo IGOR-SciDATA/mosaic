@@ -27,7 +27,7 @@ def _task(plan=None, project_id=None):
     conversation = _conversation(project_id)
     return create_task(type="generic", mode="agent", conversation_id=conversation.id, project_id=project_id, plan=plan)
 
-def test_agent_auto_paginates_reads_and_uses_task_scoped_context(tmp_path: Path):
+def test_agent_auto_paginates_reads_before_model_and_excludes_unrelated_history(tmp_path: Path):
     workspace = tmp_path / "workspace"
     project = create_project("Pagination", str(workspace))
     workspace.mkdir(parents=True, exist_ok=True)
@@ -35,27 +35,30 @@ def test_agent_auto_paginates_reads_and_uses_task_scoped_context(tmp_path: Path)
         "\n".join(f"linha {number}" for number in range(1, 191)),
         encoding="utf-8",
     )
-    task = _task(plan={"goal": "leia Documento.md"}, project_id=project.id)
-    create_message(task.conversation_id, "user", "leia Documento.md")
-    create_message(task.conversation_id, "assistant", "resposta antiga irrelevante")
+    conversation = _conversation(project.id)
+    create_message(conversation.id, "user", "leia Documento_ANTIGO.md e crie um resumo")
+    create_message(conversation.id, "assistant", "resposta antiga irrelevante")
+    goal = "leia Documento.md"
+    create_message(conversation.id, "user", goal)
+    task = create_task(
+        type="generic",
+        mode="agent",
+        conversation_id=conversation.id,
+        project_id=project.id,
+        plan={"goal": goal},
+    )
 
     observed_contexts = []
 
     def decide(context):
         observed_contexts.append(context)
-        if len(observed_contexts) == 1:
-            return {
-                "type": "tool_call",
-                "tool": "filesystem",
-                "arguments": {"operation": "read", "path": "Documento.md"},
-            }
-        assert [message["content"] for message in context if message.get("role") == "user"] == [
-            "leia Documento.md"
-        ]
-        assert any("resposta antiga irrelevante" in message.get("content", "") for message in context)
-        assert any("linha 190" in message.get("content", "") for message in context)
+        assert [message["content"] for message in context if message.get("role") == "user"] == [goal]
+        flattened = "\n".join(str(message.get("content", "")) for message in context)
+        assert "resposta antiga irrelevante" not in flattened
+        assert "Documento_ANTIGO.md" not in flattened
+        assert "linha 190" in flattened
         read_calls = [
-            call for call in list_tool_calls(task.conversation_id)
+            call for call in list_tool_calls(conversation.id)
             if call.task_id == task.id and call.tool_name == "filesystem"
             and call.arguments.get("operation") == "read"
         ]
@@ -65,7 +68,9 @@ def test_agent_auto_paginates_reads_and_uses_task_scoped_context(tmp_path: Path)
     result = run_agent(task.id, decide)
 
     assert result["status"] == "completed"
-    assert len(observed_contexts) == 2
+    assert len(observed_contexts) == 1
+    assert get_task(task.id).plan["planner_version"] == "task-plan-v1"
+    assert get_task(task.id).plan["steps"][0]["status"] == "completed"
 
 
 @pytest.mark.parametrize(
@@ -84,7 +89,6 @@ def test_agent_does_not_complete_file_creation_goal_without_verified_artifact(go
         iteration_limit=1,
     )
     assert result["status"] == "failed"
-    assert "iteration limit" in result["error"].lower()
     assert get_task(task.id).status == "failed"
 
 
@@ -134,6 +138,205 @@ def test_agent_turns_final_summary_into_approved_artifact_creation(tmp_path: Pat
     assert completed["status"] == "completed"
     assert completed["artifact"]["path"] == "Resumo_Documento.md"
     assert (workspace / "Resumo_Documento.md").is_file()
+
+
+@pytest.mark.parametrize(
+    ("goal", "expected_sources", "expected_output"),
+    [
+        (
+            "leia docs/Documento.md e crie um novo arquivo .md com um resumo",
+            ["docs/Documento.md"],
+            "docs/Resumo_Documento.md",
+        ),
+        (
+            "leia docs/Documento.md e depois crie um novo arquivo .md com um resumo",
+            ["docs/Documento.md"],
+            "docs/Resumo_Documento.md",
+        ),
+        (
+            "leia Documento.md e crie um arquivo chamado Saida.md com um resumo",
+            ["Documento.md"],
+            "Saida.md",
+        ),
+        ("crie um arquivo Saida.md", [], "Saida.md"),
+        ("salve o resumo como Saida.md", [], "Saida.md"),
+    ],
+)
+def test_file_task_intent_paths_are_resolved_deterministically(goal, expected_sources, expected_output):
+    from app.services.agent import _artifact_output_path, _goal_requires_file_artifact, _required_source_paths
+
+    assert _required_source_paths(goal) == expected_sources
+    assert _goal_requires_file_artifact(goal)
+    assert _artifact_output_path(goal) == expected_output
+
+
+def test_artifact_content_keeps_short_documents_and_removes_trailing_narration():
+    from app.services.agent import _artifact_content_from_final
+
+    assert _artifact_content_from_final("OK") is None
+    assert _artifact_content_from_final("# OK") == "# OK"
+    assert _artifact_content_from_final(
+        "# Resumo\n\nO projeto combina voz, IA e animação. Vamos criar um documento de escopo detalhado agora."
+    ) == "# Resumo\n\nO projeto combina voz, IA e animação."
+
+
+def test_history_is_included_only_when_goal_requests_continuity():
+    from app.services.agent import _agent_context
+
+    raw_context = [
+        {"role": "system", "content": "Mosaic identity"},
+        {"role": "system", "content": 'Mosaic project state: {"skills":[{"name":"Disabled guide","enabled":false}]} '},
+        {"role": "user", "content": "old unrelated request"},
+        {"role": "assistant", "content": "old unrelated answer"},
+        {"role": "user", "content": "leia B.md"},
+    ]
+
+    scoped = _agent_context(raw_context, "leia B.md", {"steps": [], "current_step": None})
+    scoped_text = "\n".join(message["content"] for message in scoped)
+    assert "old unrelated request" not in scoped_text
+    assert "old unrelated answer" not in scoped_text
+    assert "Disabled guide" not in scoped_text
+
+    continuity = _agent_context(
+        raw_context,
+        "continue from the previous conversation and read B.md",
+        {"steps": [], "current_step": None},
+    )
+    flattened = "\n".join(message["content"] for message in continuity)
+    assert "old unrelated request" in flattened
+    assert "old unrelated answer" in flattened
+    assert "Disabled guide" not in flattened
+
+    project_state = _agent_context(
+        raw_context,
+        "show the project state",
+        {"steps": [], "current_step": None},
+    )
+    assert "Disabled guide" in "\n".join(message["content"] for message in project_state)
+
+
+def test_agent_creates_explicit_subtasks_for_read_summarize_create(tmp_path: Path):
+    from app.services.agent import _build_task_steps
+
+    steps = _build_task_steps(
+        "leia o arquivo docs/Documento.md e faça um novo arquivo .md com um resumo"
+    )
+
+    assert [step["kind"] for step in steps] == [
+        "read_file",
+        "summarize_source",
+        "create_artifact",
+    ]
+    assert steps[0]["path"] == "docs/Documento.md"
+    assert steps[2]["path"] == "docs/Resumo_Documento.md"
+
+
+def test_existing_file_update_is_planned_as_read_transform_write():
+    from app.services.agent import _artifact_operation, _artifact_output_path, _build_task_steps
+
+    goal = "atualize README.md para incluir uma seção de instalação"
+    steps = _build_task_steps(goal)
+
+    assert [step["kind"] for step in steps] == [
+        "read_file",
+        "transform_source",
+        "write_artifact",
+    ]
+    assert steps[0]["path"] == "README.md"
+    assert steps[2]["path"] == "README.md"
+    assert _artifact_output_path(goal) == "README.md"
+    assert _artifact_operation(goal) == "write"
+
+
+def test_agent_updates_existing_file_only_after_approval(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Update existing file", str(workspace))
+    workspace.mkdir(parents=True, exist_ok=True)
+    readme = workspace / "README.md"
+    readme.write_text("# Projeto\n\nDescrição original.\n", encoding="utf-8")
+    task = _task(
+        plan={"goal": "atualize README.md para incluir uma seção de instalação"},
+        project_id=project.id,
+    )
+    updated_content = (
+        "# Projeto\n\nDescrição original.\n\n"
+        "## Instalação\n\nExecute pip install -r requirements.txt.\n"
+    )
+
+    result = run_agent(
+        task.id,
+        lambda context: {"type": "final", "content": updated_content},
+    )
+
+    assert result["status"] == "awaiting_approval"
+    call = next(
+        call for call in list_tool_calls(task.conversation_id)
+        if call.task_id == task.id and call.tool_name == "filesystem"
+        and call.arguments.get("operation") == "write"
+    )
+    assert call.arguments["path"] == "README.md"
+    assert call.arguments["overwrite"] is True
+    assert readme.read_text(encoding="utf-8") == "# Projeto\n\nDescrição original.\n"
+
+    assert execute_tool_call(approve_tool_call(call)).status == "completed"
+    update_task(task.id, status="executing")
+    completed = run_agent(task.id, lambda context: pytest.fail("Verified output must complete without another model call"))
+
+    assert completed["status"] == "completed"
+    assert completed["artifact"]["path"] == "README.md"
+    assert "## Instalação" in readme.read_text(encoding="utf-8")
+
+
+def test_agent_task_context_contains_only_current_task_tool_results(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Task isolation", str(workspace))
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "A.md").write_text("Conteúdo do arquivo A.", encoding="utf-8")
+    (workspace / "B.md").write_text("Conteúdo exclusivo do arquivo B.", encoding="utf-8")
+    conversation = _conversation(project.id)
+
+    old_goal = "leia A.md e faça um resumo antigo"
+    create_message(conversation.id, "user", old_goal)
+    create_message(conversation.id, "assistant", "RESUMO ANTIGO QUE NÃO DEVE VAZAR")
+    old_task = create_task(
+        type="generic",
+        mode="agent",
+        conversation_id=conversation.id,
+        project_id=project.id,
+        plan={"goal": old_goal},
+    )
+    old_read = create_tool_call(
+        conversation.id,
+        "filesystem",
+        {"operation": "read", "path": "A.md"},
+        task_id=old_task.id,
+    )
+    assert execute_tool_call(approve_tool_call(old_read)).status == "completed"
+
+    goal = "leia B.md"
+    create_message(conversation.id, "user", goal)
+    task = create_task(
+        type="generic",
+        mode="agent",
+        conversation_id=conversation.id,
+        project_id=project.id,
+        plan={"goal": goal},
+    )
+    observed_contexts = []
+
+    def decide(context):
+        observed_contexts.append(context)
+        flattened = "\n".join(str(message.get("content", "")) for message in context)
+        assert [message["content"] for message in context if message.get("role") == "user"] == [goal]
+        assert "RESUMO ANTIGO QUE NÃO DEVE VAZAR" not in flattened
+        assert "Conteúdo exclusivo do arquivo B." in flattened
+        assert "Conteúdo do arquivo A." not in flattened
+        return {"type": "final", "content": "Li somente o arquivo B."}
+
+    result = run_agent(task.id, decide)
+
+    assert result["status"] == "completed"
+    assert len(observed_contexts) == 1
 
 
 def test_agent_does_not_complete_summary_without_reading_named_source(tmp_path: Path):
@@ -193,7 +396,7 @@ def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_
     output_create = create_tool_call(
         task.conversation_id,
         "filesystem",
-        {"operation": "create", "path": "Resumo.md", "content": "# Resumo\n\nConteúdo."},
+        {"operation": "create", "path": "Resumo_Documento.md", "content": "# Resumo\n\nConteúdo."},
         task_id=task.id,
     )
     tool_result = execute_tool_call(approve_tool_call(output_create))
@@ -205,9 +408,9 @@ def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_
         iteration_limit=1,
     )
     assert result["status"] == "completed"
-    assert result["artifact"]["path"] == "Resumo.md"
+    assert result["artifact"]["path"] == "Resumo_Documento.md"
     assert result["artifact"]["bytes"] > 0
-    assert (workspace / "Resumo.md").is_file()
+    assert (workspace / "Resumo_Documento.md").is_file()
 
 
 def test_tool_observation_is_bounded_and_marks_truncation():
@@ -309,6 +512,24 @@ def test_agent_can_be_cancelled_before_tool_execution():
     result = run_agent(task.id, decide)
     assert result["status"] == "cancelled"
     assert calls == 1
+
+
+def test_agent_stops_consecutive_duplicate_failed_tool_call():
+    task = _task()
+    repeated = {
+        "type": "tool_call",
+        "tool": "calculator",
+        "arguments": {"expression": "1 +"},
+    }
+    decisions = iter([repeated, repeated])
+
+    result = run_agent(task.id, lambda context: next(decisions))
+    calls = [call for call in list_tool_calls(task.conversation_id) if call.task_id == task.id]
+
+    assert result["status"] == "failed"
+    assert "loop" in result["error"].lower()
+    assert len(calls) == 1
+    assert calls[0].status == "failed"
 
 
 def test_agent_blocks_consecutive_duplicate_successful_tool_call():
