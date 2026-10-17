@@ -22,6 +22,7 @@ from app.tools.safe_http import safe_urlopen
 from app.tools.base import Tool
 
 MAX_FILE_BYTES = 1_000_000
+MAX_READ_LINES = 80
 MAX_LIST_ENTRIES = 500
 MAX_COMMAND_LENGTH = 2_000
 MAX_PROCESS_OUTPUT_BYTES = 200_000
@@ -71,6 +72,8 @@ class FilesystemTool(Tool):
             "path": {"type": "string", "minLength": 1, "maxLength": 2048},
             "content": {"type": "string", "maxLength": MAX_FILE_BYTES},
             "overwrite": {"type": "boolean"},
+            "start_line": {"type": "integer", "minimum": 1, "maximum": 1_000_000},
+            "max_lines": {"type": "integer", "minimum": 1, "maximum": 200},
         },
     }
     permission_policy = {"approval_required": True, "scope": "active_workspace"}
@@ -86,6 +89,8 @@ class FilesystemTool(Tool):
             raise ValueError(f"Argument content is not allowed for operation {operation}")
         if operation != "write" and "overwrite" in arguments:
             raise ValueError("Argument overwrite is only allowed for operation write")
+        if operation != "read" and ({"start_line", "max_lines"} & set(arguments)):
+            raise ValueError("Arguments start_line and max_lines are only allowed for operation read")
 
     def execute(self, arguments: dict[str, Any], *, workspace: Path | None = None, cancel_check: Callable[[], bool] | None = None) -> Any:
         root = _require_workspace(workspace)
@@ -99,7 +104,29 @@ class FilesystemTool(Tool):
                 raw = handle.read(MAX_FILE_BYTES + 1)
             if len(raw) > MAX_FILE_BYTES:
                 raise ValueError("File exceeds the read limit")
-            return {"operation": "read", "status": "success", "path": path.relative_to(root).as_posix(), "content": raw.decode("utf-8"), "bytes": len(raw)}
+            text = raw.decode("utf-8")
+            lines = text.splitlines(keepends=True)
+            total_lines = len(lines)
+            start_line = arguments.get("start_line", 1)
+            max_lines = arguments.get("max_lines", MAX_READ_LINES)
+            if total_lines and start_line > total_lines:
+                raise ValueError("start_line exceeds the file line count")
+            selected_lines = lines[start_line - 1:start_line - 1 + max_lines]
+            chunk = "".join(selected_lines)
+            end_line = start_line + len(selected_lines) - 1
+            truncated = end_line < total_lines
+            return {
+                "operation": "read",
+                "status": "success",
+                "path": path.relative_to(root).as_posix(),
+                "start_line": start_line,
+                "end_line": end_line,
+                "total_lines": total_lines,
+                "truncated": truncated,
+                "next_start_line": end_line + 1 if truncated else None,
+                "content": chunk,
+                "bytes": len(chunk.encode("utf-8")),
+            }
         if operation == "list":
             path = _workspace_path(root, arguments["path"], allow_root=True)
             if not path.is_dir():
