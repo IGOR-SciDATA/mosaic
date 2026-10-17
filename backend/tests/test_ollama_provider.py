@@ -183,6 +183,23 @@ def test_generate_passes_configured_request_timeout():
     assert observed == {"path": "/api/chat", "timeout_seconds": 45.0}
 
 
+def test_generate_uses_bounded_six_hundred_second_default_timeout():
+    provider = OllamaProvider()
+    observed = {}
+
+    def fake_post(path, payload, *, timeout_seconds):
+        observed["timeout_seconds"] = timeout_seconds
+        return {"message": {"role": "assistant", "content": "ok"}}
+
+    provider._post = fake_post
+    provider.generate(
+        messages=[{"role": "user", "content": "Responda"}],
+        model_name="qwen2.5:3b",
+        configuration={},
+    )
+    assert observed["timeout_seconds"] == 600.0
+
+
 def test_request_timeout_rejects_out_of_range_values():
     provider = OllamaProvider()
     try:
