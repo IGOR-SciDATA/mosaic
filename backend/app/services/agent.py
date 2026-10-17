@@ -394,10 +394,22 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
             continue
 
         expected_content = call.arguments.get("content")
-        content_matches = (
-            isinstance(expected_content, str)
-            and actual_bytes == expected_content.encode("utf-8")
-        )
+        content_matches = False
+        if isinstance(expected_content, str):
+            try:
+                actual_text = actual_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                actual_text = None
+            expected_text = expected_content.replace("\\r\\n", "\\n").replace("\\r", "\\n")
+            normalized_actual = (
+                actual_text.replace("\\r\\n", "\\n").replace("\\r", "\\n")
+                if actual_text is not None else None
+            )
+            # Legacy Windows text-mode writes may differ only by CRLF translation.
+            content_matches = (
+                actual_bytes == expected_content.encode("utf-8")
+                or (normalized_actual is not None and normalized_actual == expected_text)
+            )
         if not content_matches:
             continue
         for result in reversed(list_tool_results(call.id)):
