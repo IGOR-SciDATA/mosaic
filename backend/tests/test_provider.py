@@ -48,10 +48,7 @@ def test_ollama_generate_sends_model_messages_and_configuration(monkeypatch) -> 
 
 
 def test_ollama_stream_yields_content_chunks(monkeypatch) -> None:
-    body = b'{"message":{"content":"Ol"}}
-{"message":{"content":"á"}}
-{"done":true}
-'
+    body = b'{"message":{"content":"Ol"}}\n{"message":{"content":"á"}}\n{"done":true}\n'
     monkeypatch.setattr(
         "app.providers.ollama.request.urlopen",
         lambda request: FakeResponse(body),
@@ -62,10 +59,7 @@ def test_ollama_stream_yields_content_chunks(monkeypatch) -> None:
 
 
 def test_ollama_stream_handles_empty_content_chunks(monkeypatch) -> None:
-    body = b'{"message":{}}
-{"message":{"content":"ok"}}
-{"done":true}
-'
+    body = b'{"message":{}}\n{"message":{"content":"ok"}}\n{"done":true}\n'
     monkeypatch.setattr(
         "app.providers.ollama.request.urlopen",
         lambda request: FakeResponse(body),
@@ -73,7 +67,6 @@ def test_ollama_stream_handles_empty_content_chunks(monkeypatch) -> None:
 
     provider = OllamaProvider("http://ollama.test")
     assert list(provider.stream([{"role": "user", "content": "Olá"}], "qwen3:3b", {})) == ["ok"]
-
 
 
 def test_ollama_thinking_flag_can_be_configured(monkeypatch) -> None:
