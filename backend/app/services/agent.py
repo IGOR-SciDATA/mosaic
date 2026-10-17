@@ -14,6 +14,137 @@ DEFAULT_ITERATION_LIMIT = 10
 TOOL_OBSERVATION_MAX_CHARS = 12_000
 
 
+MAX_AUTOMATIC_READ_CHUNKS = 100
+
+
+def _agent_context(raw_context: list[dict[str, Any]], goal: str) -> list[dict[str, Any]]:
+    """Keep task execution context small and scoped instead of replaying the whole chat transcript."""
+    allowed_system_prefixes = (
+        "Mosaic project state:",
+        "Applicable project instructions",
+        "Enabled project skills",
+        "Mosaic memory",
+        "Mosaic tool observation [",
+    )
+    filtered: list[dict[str, Any]] = []
+    identity_kept = False
+    for message in raw_context:
+        role = message.get("role")
+        content = str(message.get("content", ""))
+        if role != "system":
+            continue
+        if not identity_kept:
+            filtered.append({"role": "system", "content": content})
+            identity_kept = True
+            continue
+        if content.startswith(allowed_system_prefixes):
+            filtered.append({"role": "system", "content": content})
+    filtered.append({
+        "role": "system",
+        "content": (
+            "Mosaic agent task scope: execute only the explicit goal below. "
+            "Do not copy task metadata or prior assistant outputs into a decision. "
+            "The Core validates completion from persisted tool results and artifacts."
+        ),
+    })
+    if goal.strip():
+        filtered.append({"role": "user", "content": goal.strip()})
+    return filtered
+
+
+def _native_tool_result(tool_name: str, result: ToolResult) -> dict[str, Any]:
+    """Return an Ollama-compatible tool result paired with the assistant tool-call message."""
+    if result.status == "completed":
+        payload: Any = result.data
+    else:
+        payload = {"error": result.error or "Tool execution failed"}
+    return {
+        "role": "tool",
+        "tool_name": tool_name,
+        "content": __import__("json").dumps(payload, ensure_ascii=False, default=str),
+    }
+
+
+def _append_tool_exchange(
+    context: list[dict[str, Any]],
+    tool_name: str,
+    tool_call_id: int,
+    result: ToolResult,
+    native_message: dict[str, Any] | None,
+) -> None:
+    if native_message is not None:
+        context.append(native_message)
+        context.append(_native_tool_result(tool_name, result))
+    else:
+        context.append(_tool_context(tool_call_id, result))
+
+
+def _auto_paginate_read(
+    task_id: int,
+    conversation_id: int,
+    context: list[dict[str, Any]],
+    initial_result: ToolResult,
+    *,
+    native_protocol: bool,
+) -> None:
+    """Fetch remaining chunks in Core code; do not spend model turns on deterministic pagination."""
+    result = initial_result
+    chunks = 0
+    while (
+        result.status == "completed"
+        and isinstance(result.data, dict)
+        and result.data.get("operation") == "read"
+        and result.data.get("truncated") is True
+    ):
+        if chunks >= MAX_AUTOMATIC_READ_CHUNKS:
+            context.append({
+                "role": "system",
+                "content": "Mosaic read guard: automatic pagination limit reached; source may be incomplete. Do not summarize it as complete.",
+            })
+            return
+        data = result.data
+        next_line = data.get("next_start_line")
+        path = data.get("path")
+        if not isinstance(next_line, int) or next_line <= data.get("end_line", 0) or not isinstance(path, str):
+            context.append({
+                "role": "system",
+                "content": "Mosaic read guard: pagination metadata is invalid; source may be incomplete.",
+            })
+            return
+        arguments = {
+            "operation": "read",
+            "path": path,
+            "start_line": next_line,
+            "max_lines": 80,
+        }
+        try:
+            policy = resolve_tool_policy("filesystem", arguments)
+            if policy["approval_required"]:
+                raise ValueError("Read-only pagination unexpectedly requires approval")
+            call = create_tool_call(conversation_id, "filesystem", arguments, task_id=task_id)
+            approved = approve_tool_call(call)
+            result = execute_tool_call(approved)
+        except Exception as exc:
+            context.append({
+                "role": "system",
+                "content": f"Mosaic automatic read failed at line {next_line}: {type(exc).__name__}: {exc}",
+            })
+            return
+
+        if native_protocol:
+            context.append({
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"function": {"name": "filesystem", "arguments": arguments}}],
+            })
+            context.append(_native_tool_result("filesystem", result))
+        else:
+            context.append(_tool_context(call.id, result))
+        chunks += 1
+        if result.status != "completed":
+            return
+
+
 def _goal_requires_file_artifact(goal: str) -> bool:
     """Detect explicit file-creation requests that require a verified artifact."""
     return bool(re.search(
@@ -160,7 +291,8 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, str]]], dict[str, A
     if task.conversation_id is None:
         raise ValueError("Agent task requires a conversation")
 
-    context = build_context(task.conversation_id)
+    goal = str((task.plan or {}).get("goal", "")).strip()
+    context = _agent_context(build_context(task.conversation_id), goal)
     update_task(task_id, status="executing")
 
     for iteration in range(1, iteration_limit + 1):
@@ -281,7 +413,18 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, str]]], dict[str, A
             })
             continue
 
-        context.append(_tool_context(call.id, tool_result))
+        native_message = decision.get("_native_message")
+        if not isinstance(native_message, dict):
+            native_message = None
+        _append_tool_exchange(context, tool_name, call.id, tool_result, native_message)
+        if tool_name == "filesystem" and arguments.get("operation") == "read":
+            _auto_paginate_read(
+                task_id,
+                task.conversation_id,
+                context,
+                tool_result,
+                native_protocol=native_message is not None,
+            )
 
     result = {"error": "Agent iteration limit reached", "iterations": iteration_limit}
     update_task(task_id, status="failed", result=result)
