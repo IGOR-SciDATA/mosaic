@@ -180,14 +180,17 @@ def test_history_is_included_only_when_goal_requests_continuity():
 
     raw_context = [
         {"role": "system", "content": "Mosaic identity"},
+        {"role": "system", "content": 'Mosaic project state: {"skills":[{"name":"Disabled guide","enabled":false}]} '},
         {"role": "user", "content": "old unrelated request"},
         {"role": "assistant", "content": "old unrelated answer"},
         {"role": "user", "content": "leia B.md"},
     ]
 
     scoped = _agent_context(raw_context, "leia B.md", {"steps": [], "current_step": None})
-    assert "old unrelated request" not in "\n".join(message["content"] for message in scoped)
-    assert "old unrelated answer" not in "\n".join(message["content"] for message in scoped)
+    scoped_text = "\n".join(message["content"] for message in scoped)
+    assert "old unrelated request" not in scoped_text
+    assert "old unrelated answer" not in scoped_text
+    assert "Disabled guide" not in scoped_text
 
     continuity = _agent_context(
         raw_context,
@@ -197,6 +200,14 @@ def test_history_is_included_only_when_goal_requests_continuity():
     flattened = "\n".join(message["content"] for message in continuity)
     assert "old unrelated request" in flattened
     assert "old unrelated answer" in flattened
+    assert "Disabled guide" not in flattened
+
+    project_state = _agent_context(
+        raw_context,
+        "show the project state",
+        {"steps": [], "current_step": None},
+    )
+    assert "Disabled guide" in "\n".join(message["content"] for message in project_state)
 
 
 def test_agent_creates_explicit_subtasks_for_read_summarize_create(tmp_path: Path):
