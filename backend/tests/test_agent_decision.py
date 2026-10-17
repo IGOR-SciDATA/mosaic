@@ -73,7 +73,8 @@ def test_provider_decider_retries_one_malformed_response_and_records_safe_events
 
     assert decision == {"type": "final", "content": "Resumo criado."}
     assert [event["event_name"] for event in events].count("model_request_started") == 2
-    assert any(event["event_name"] == "decision_invalid" for event in events)
+    invalid = next(event for event in events if event["event_name"] == "decision_invalid")
+    assert invalid["metadata"]["response_preview"] == "I will do that now, here's the answer."
     assert any(event["event_name"] == "decision_retry" for event in events)
     parsed = next(event for event in events if event["event_name"] == "decision_parsed")
     assert parsed["metadata"]["output_preview"] == "Resumo criado."
