@@ -68,8 +68,16 @@ def test_agent_auto_paginates_reads_and_uses_task_scoped_context(tmp_path: Path)
     assert len(observed_contexts) == 2
 
 
-def test_agent_does_not_complete_file_creation_goal_without_verified_artifact():
-    task = _task(plan={"goal": "crie um novo arquivo .md com um resumo"})
+@pytest.mark.parametrize(
+    "goal",
+    [
+        "crie um novo arquivo .md com um resumo",
+        "faça um novo arquivo .md com um resumo do que está escrito",
+        "fazer um novo arquivo Markdown com um resumo",
+    ],
+)
+def test_agent_does_not_complete_file_creation_goal_without_verified_artifact(goal: str):
+    task = _task(plan={"goal": goal})
     result = run_agent(
         task.id,
         lambda context: {"type": "final", "content": "Criei o resumo."},
