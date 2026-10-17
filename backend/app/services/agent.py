@@ -451,7 +451,7 @@ def _artifact_content_from_final(content: str) -> str | None:
     confirmation_only = re.compile(
         r"(?:ok|sim|feito|pronto|conclu[ií]do|criei o resumo|arquivo criado|"
         r"salvo com sucesso|resumo pronto|vou criar o arquivo|vou criar o documento)"
-        r"[.!\\s]*",
+        r"[.!\s]*",
         flags=re.IGNORECASE,
     )
     if confirmation_only.fullmatch(text):
