@@ -2,24 +2,65 @@ import pytest
 
 from app.db.database import init_db
 from app.models.conversation_repository import create_conversation
+from app.models.project_repository import create_project
 from app.models.repository import create_model
 from app.models.task_repository import create_task, get_task, update_task
-from app.models.tool_call_repository import get_tool_call, list_tool_calls
+from app.models.tool_call_repository import create_tool_call, get_tool_call, list_tool_calls
 from app.models.tool_result_repository import list_tool_results
 from app.services.agent import run_agent
+from app.services.tools import approve_tool_call, execute_tool_call
 
 @pytest.fixture(autouse=True)
 def test_database(monkeypatch, tmp_path):
     monkeypatch.setattr("app.db.database.DATABASE_PATH", tmp_path / "test.db")
     init_db()
 
-def _conversation():
+def _conversation(project_id=None):
     model = create_model("Test", "ollama", "test:model")
-    return create_conversation("Agent", model.id)
+    return create_conversation("Agent", model.id, project_id=project_id)
 
-def _task():
-    conversation = _conversation()
-    return create_task(type="generic", mode="agent", conversation_id=conversation.id)
+def _task(plan=None, project_id=None):
+    conversation = _conversation(project_id)
+    return create_task(type="generic", mode="agent", conversation_id=conversation.id, project_id=project_id, plan=plan)
+
+def test_agent_does_not_complete_file_creation_goal_without_verified_artifact():
+    task = _task(plan={"goal": "leia Documento.md e crie um novo arquivo .md com um resumo"})
+    result = run_agent(
+        task.id,
+        lambda context: {"type": "final", "content": "Criei o resumo."},
+        iteration_limit=1,
+    )
+    assert result["status"] == "failed"
+    assert "iteration limit" in result["error"].lower()
+    assert get_task(task.id).status == "failed"
+
+
+def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Artifact validation", str(workspace))
+    task = _task(
+        plan={"goal": "leia Documento.md e crie um novo arquivo .md com um resumo"},
+        project_id=project.id,
+    )
+    call = create_tool_call(
+        task.conversation_id,
+        "filesystem",
+        {"operation": "create", "path": "Resumo.md", "content": "# Resumo\\n\\nConteúdo."},
+        task_id=task.id,
+    )
+    tool_result = execute_tool_call(approve_tool_call(call))
+    assert tool_result.status == "completed"
+
+    result = run_agent(
+        task.id,
+        lambda context: {"type": "final", "content": "Criei o resumo."},
+        iteration_limit=1,
+    )
+    assert result["status"] == "completed"
+    assert result["artifact"]["path"] == "Resumo.md"
+    assert result["artifact"]["bytes"] > 0
+    assert (workspace / "Resumo.md").is_file()
+
 
 def test_agent_runs_tool_then_returns_final():
     task = _task()
