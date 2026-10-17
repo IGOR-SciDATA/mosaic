@@ -149,6 +149,11 @@ def test_agent_turns_final_summary_into_approved_artifact_creation(tmp_path: Pat
             "docs/Resumo_Documento.md",
         ),
         (
+            "leia docs/Documento.md e depois crie um novo arquivo .md com um resumo",
+            ["docs/Documento.md"],
+            "docs/Resumo_Documento.md",
+        ),
+        (
             "leia Documento.md e crie um arquivo chamado Saida.md com um resumo",
             ["Documento.md"],
             "Saida.md",
