@@ -201,13 +201,22 @@ def _auto_paginate_read(
             return
 
 
+def _goal_updates_existing_file(goal: str) -> bool:
+    return bool(re.search(
+        r"\b(?:update|edit|modify|replace|overwrite|atualize|atualizar|edite|editar|"
+        r"modifique|modificar|substitua|substituir|altere|alterar)\b",
+        goal,
+        flags=re.IGNORECASE,
+    ))
+
+
 def _goal_requires_file_artifact(goal: str) -> bool:
-    """Detect explicit output-file intent, including 'save as <name>.md' formulations."""
+    """Detect explicit output-file intent, including updates to named workspace files."""
     creation_verbs = (
-        r"create|make|build|write|save|generate|export|compose|"
-        r"crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|"
-        r"elabore|elaborar|prepare|preparar|salve|salvar|escreva|escrever|"
-        r"gere|gerar|exporte|exportar"
+        r"create|make|build|write|save|generate|export|compose|update|edit|modify|replace|overwrite|"
+        r"crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|elabore|elaborar|prepare|preparar|"
+        r"salve|salvar|escreva|escrever|gere|gerar|exporte|exportar|atualize|atualizar|edite|editar|"
+        r"modifique|modificar|substitua|substituir|altere|alterar"
     )
     mentions_file = re.search(
         rf"\b(?:{creation_verbs})\b.{{0,160}}\b(?:file|document|arquivo|documento)\b",
@@ -222,10 +231,14 @@ def _goal_requires_file_artifact(goal: str) -> bool:
     return bool(mentions_file or saves_named_markdown)
 
 
+
+
 def _required_source_paths(goal: str) -> list[str]:
-    """Extract named source files from the read/analyze portion of a task goal."""
+    """Extract named source files from the read/analyze/edit portion of a task goal."""
     match = re.search(
-        r"\b(?:read|open|inspect|analy[sz]e|summari[sz]e|leia|ler|abra|analise|analisa|resuma|resumir)\b"
+        r"\b(?:read|open|inspect|analy[sz]e|summari[sz]e|edit|modify|update|replace|"
+        r"leia|ler|abra|analise|analisa|resuma|resumir|edite|editar|modifique|modificar|"
+        r"atualize|atualizar|altere|alterar|substitua|substituir)\b"
         r"(.{0,500})",
         goal,
         flags=re.IGNORECASE | re.DOTALL,
@@ -237,7 +250,9 @@ def _required_source_paths(goal: str) -> list[str]:
     clause = re.split(
         r"\b(?:and|e)\s+(?:create|crie|criar|faça|faca|fazer|produza|produzir|"
         r"write|save|generate|export|salve|salvar|escreva|escrever|gere|gerar|"
-        r"exporte|exportar|monte|montar|elabore|elaborar|prepare|preparar)\b",
+        r"exporte|exportar|monte|montar|elabore|elaborar|prepare|preparar|"
+        r"update|edit|modify|replace|overwrite|atualize|atualizar|edite|editar|"
+        r"modifique|modificar|substitua|substituir|altere|alterar)\b",
         clause,
         maxsplit=1,
         flags=re.IGNORECASE,
@@ -355,15 +370,26 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
     return None
 
 def _artifact_output_path(goal: str) -> str:
-    """Resolve an explicit output filename after the creation intent, else derive one."""
-    creation = re.search(
-        r"\b(?:create|crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|"
+    """Resolve an explicit output filename after the output intent, else derive one."""
+    output_verbs = (
+        r"create|crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|"
         r"elabore|elaborar|prepare|preparar|write|save|generate|export|salve|salvar|"
-        r"escreva|escrever|gere|gerar|exporte|exportar)\b",
-        goal,
+        r"escreva|escrever|gere|gerar|exporte|exportar|update|edit|modify|replace|overwrite|"
+        r"atualize|atualizar|edite|editar|modifique|modificar|substitua|substituir|altere|alterar"
+    )
+    action = re.search(rf"\b(?:{output_verbs})\b", goal, flags=re.IGNORECASE)
+    output_instruction = goal[action.end():] if action else goal
+
+    # Updates name the existing file directly: "update README.md".
+    direct_path = re.search(
+        r"(?<![A-Za-z0-9_./-])([A-Za-z0-9_./-]+\.md)\b",
+        output_instruction,
         flags=re.IGNORECASE,
     )
-    output_instruction = goal[creation.end():] if creation else goal
+    if direct_path:
+        candidate = Path(direct_path.group(1))
+        if candidate.name and candidate.suffix.lower() == ".md":
+            return candidate.as_posix()
 
     named_output = re.search(
         r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como|as)\s+"
@@ -392,6 +418,13 @@ def _artifact_output_path(goal: str) -> str:
         source = Path(sources[0])
         return (source.parent / f"Resumo_{source.stem}.md").as_posix()
     return "Resumo.md"
+
+
+def _artifact_operation(goal: str) -> str:
+    """Use write only for explicit edits/updates; otherwise create a new file."""
+    return "write" if _goal_updates_existing_file(goal) else "create"
+
+
 
 
 def _artifact_content_from_final(content: str) -> str | None:
