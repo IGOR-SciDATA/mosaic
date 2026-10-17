@@ -296,7 +296,7 @@ def _tool_context(tool_call_id: int, result: ToolResult) -> dict[str, str]:
         ),
     }
 
-def run_agent(task_id: int, decide: Callable[[list[dict[str, str]]], dict[str, Any]], *, iteration_limit: int = DEFAULT_ITERATION_LIMIT) -> dict[str, Any]:
+def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, Any]], *, iteration_limit: int = DEFAULT_ITERATION_LIMIT) -> dict[str, Any]:
     if iteration_limit <= 0:
         raise ValueError("iteration_limit must be greater than zero")
     task = get_task(task_id)
