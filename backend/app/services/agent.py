@@ -1,4 +1,5 @@
 from collections.abc import Callable
+import json
 from pathlib import Path
 import re
 from typing import Any
@@ -61,7 +62,7 @@ def _native_tool_result(tool_name: str, result: ToolResult) -> dict[str, Any]:
     return {
         "role": "tool",
         "tool_name": tool_name,
-        "content": __import__("json").dumps(payload, ensure_ascii=False, default=str),
+        "content": json.dumps(payload, ensure_ascii=False, default=str),
     }
 
 
