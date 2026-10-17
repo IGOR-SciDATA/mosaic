@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.agent_decision import parse_agent_decision
+from app.services.agent_decision import _diagnostic_preview, parse_agent_decision
 
 
 def test_parse_final_decision():
@@ -109,3 +109,11 @@ def test_provider_decider_does_not_retry_more_than_once(monkeypatch):
         adapter.create_provider_decider(task.id)([])
 
     assert provider.calls == 2
+
+
+
+def test_diagnostic_preview_keeps_response_tail_and_redacts_thinking_and_secrets():
+    preview = _diagnostic_preview("A" * 800 + " tail=secret-value", limit=100)
+    assert len(preview) <= 100
+    assert "AAAA" in preview
+    assert "tail=[REDACTED]" in preview
