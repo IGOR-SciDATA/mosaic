@@ -93,6 +93,12 @@ class FilesystemTool(Tool):
         if operation != "read" and ({"start_line", "max_lines"} & set(arguments)):
             raise ValueError("Arguments start_line and max_lines are only allowed for operation read")
 
+    def policy_for(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Allow harmless workspace reads without approval; keep side effects gated."""
+        if arguments.get("operation") in {"read", "list"}:
+            return {**self.permission_policy, "approval_required": False}
+        return self.permission_policy
+
     def execute(self, arguments: dict[str, Any], *, workspace: Path | None = None, cancel_check: Callable[[], bool] | None = None) -> Any:
         root = _require_workspace(workspace)
         operation = arguments["operation"]
