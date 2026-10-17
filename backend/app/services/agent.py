@@ -202,13 +202,24 @@ def _auto_paginate_read(
 
 
 def _goal_requires_file_artifact(goal: str) -> bool:
-    """Detect explicit file-creation requests that require a verified artifact."""
-    return bool(re.search(
-        r"\b(?:create|save|write|generate|export|crie|criar|salve|salvar|escreva|escrever|gere|gerar|exporte|exportar|faça|faca|fazer|produza|produzir|monte|montar|elabore|elaborar|prepare|preparar)\b"
-        r".{0,120}\b(?:file|document|arquivo|documento)\b",
+    """Detect explicit output-file intent, including 'save as <name>.md' formulations."""
+    creation_verbs = (
+        r"create|make|build|write|save|generate|export|compose|"
+        r"crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|"
+        r"elabore|elaborar|prepare|preparar|salve|salvar|escreva|escrever|"
+        r"gere|gerar|exporte|exportar"
+    )
+    mentions_file = re.search(
+        rf"\b(?:{creation_verbs})\b.{{0,160}}\b(?:file|document|arquivo|documento)\b",
         goal,
         flags=re.IGNORECASE | re.DOTALL,
-    ))
+    )
+    saves_named_markdown = re.search(
+        rf"\b(?:{creation_verbs})\b.{{0,160}}\b[A-Za-z0-9_./-]+\.md\b",
+        goal,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return bool(mentions_file or saves_named_markdown)
 
 
 def _required_source_paths(goal: str) -> list[str]:
