@@ -76,6 +76,8 @@ def test_provider_decider_retries_malformed_response_with_specific_feedback(monk
         "arguments": {"operation": "read", "path": "Documento.md"},
     }
     assert len(requests) == 2
+    assert requests[0]["configuration"]["temperature"] == 0
+    assert requests[0]["configuration"]["think"] is False
     retry_messages = requests[1]["messages"]
     retry_feedback = retry_messages[-1]["content"]
     assert "Unknown tool: tool_id" in retry_feedback
