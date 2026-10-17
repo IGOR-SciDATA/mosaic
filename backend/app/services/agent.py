@@ -433,30 +433,28 @@ def _artifact_operation(goal: str) -> str:
 
 
 def _artifact_content_from_final(content: str) -> str | None:
-    """Accept substantive final content, removing obvious agent narration at the end."""
+    """Extract document content from a final response, dropping trailing tool-use narration."""
     text = content.strip()
     if not text:
         return None
 
-    # Some small local models append a narration of their intended tool use after
-    # producing the actual document. Do not persist that narration as document content.
-    paragraphs = re.split(r"\n\s*\n", text)
     narration = re.compile(
-        r"^(?:para criar (?:um|o) documento|vou criar (?:um|o) arquivo|"
+        r"(?:\n\s*\n|\s+)(?:para criar (?:um|o) documento|vou criar (?:um|o) arquivo|"
         r"vou usar a ferramenta|vamos criar (?:um|o) documento|"
-        r"i will create (?:a|the) file|i will use the filesystem)\b",
+        r"i will create (?:a|the) file|i will use the filesystem)\b.*$",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    text = narration.sub("", text).strip()
+    if not text:
+        return None
+
+    confirmation_only = re.compile(
+        r"(?:ok|sim|feito|pronto|conclu[ií]do|criei o resumo|arquivo criado|"
+        r"salvo com sucesso|resumo pronto|vou criar o arquivo|vou criar o documento)"
+        r"[.!\\s]*",
         flags=re.IGNORECASE,
     )
-    for index, paragraph in enumerate(paragraphs):
-        if narration.search(paragraph.strip()):
-            text = "\n\n".join(paragraphs[:index]).strip()
-            break
-
-    if len(text) < 40 or re.fullmatch(
-        r"(?:pronto|feito|concluído|concluido|criei o resumo|arquivo criado|salvo com sucesso)[.!\s]*",
-        text,
-        flags=re.IGNORECASE,
-    ):
+    if confirmation_only.fullmatch(text):
         return None
     return text
 
