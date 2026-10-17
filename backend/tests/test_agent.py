@@ -9,8 +9,8 @@ from app.models.message_repository import create_message
 from app.models.project_repository import create_project
 from app.models.repository import create_model
 from app.models.task_repository import create_task, get_task, update_task
-from app.models.tool_call_repository import create_tool_call, get_tool_call, list_tool_calls
-from app.models.tool_result_repository import list_tool_results
+from app.models.tool_call_repository import create_tool_call, get_tool_call, list_tool_calls, update_tool_call
+from app.models.tool_result_repository import create_tool_result, list_tool_results
 from app.services.agent import _tool_context, run_agent
 from app.services.tools import approve_tool_call, execute_tool_call
 
@@ -344,6 +344,45 @@ def test_agent_task_context_contains_only_current_task_tool_results(tmp_path: Pa
 
     assert result["status"] == "completed"
     assert len(observed_contexts) == 1
+
+
+def test_agent_recovers_artifact_after_post_write_verification_error(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Artifact recovery", str(workspace))
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "Documento.md").write_text("# Documento\n\nFonte completa.\n", encoding="utf-8")
+    goal = "Leia Documento.md e faça um novo arquivo .md com um resumo do que está escrito."
+    task = _task(plan={"goal": goal}, project_id=project.id)
+    content = "# Resumo\n\nO documento apresenta a proposta e os objetivos do projeto.\n"
+    output_path = workspace / "Resumo_Documento.md"
+    output_path.write_bytes(content.replace("\n", "\r\n").encode("utf-8"))
+
+    call = create_tool_call(
+        task.conversation_id,
+        "filesystem",
+        {"operation": "create", "path": "Resumo_Documento.md", "content": content},
+        task_id=task.id,
+    )
+    approve_tool_call(call)
+    update_tool_call(call.id, status="executing")
+    update_tool_call(call.id, status="failed")
+    create_tool_result(
+        call.id,
+        "failed",
+        error="OSError: Written file could not be verified",
+    )
+
+    def unexpected_model_call(context):
+        raise AssertionError("Recovery must finish without another model inference")
+
+    result = run_agent(task.id, unexpected_model_call)
+
+    assert result["status"] == "completed"
+    assert result["iterations"] == 0
+    assert result["artifact"]["path"] == "Resumo_Documento.md"
+    assert result["artifact"]["recovered_after_verification_error"] is True
+    assert get_task(task.id).status == "completed"
+    assert get_task(task.id).plan["steps"][-1]["status"] == "completed"
 
 
 def test_agent_does_not_complete_summary_without_reading_named_source(tmp_path: Path):

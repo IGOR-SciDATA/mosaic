@@ -170,6 +170,17 @@ def test_filesystem_write_requires_explicit_overwrite(tmp_path: Path) -> None:
     assert (workspace / "notes" / "one.txt").read_text(encoding="utf-8") == "second"
 
 
+def test_filesystem_create_preserves_exact_utf8_bytes_and_newlines(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    content = "# Resumo\n\nSão Paulo — versão 1.\n"
+    result = FilesystemTool().execute(
+        {"operation": "create", "path": "Resumo.md", "content": content},
+        workspace=workspace,
+    )
+    assert result["written"] is True
+    assert (workspace / "Resumo.md").read_bytes() == content.encode("utf-8")
+
+
 def test_filesystem_execution_uses_project_workspace(tmp_path: Path) -> None:
     workspace = tmp_path / "project-workspace"
     project = create_project("test", str(workspace))
