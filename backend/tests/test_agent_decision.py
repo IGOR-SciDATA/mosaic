@@ -37,3 +37,74 @@ def test_tool_call_requires_registered_tool_and_valid_schema():
 def test_tool_call_rejects_unknown_fields():
     with pytest.raises(ValueError, match="unsupported fields"):
         parse_agent_decision('{"type":"tool_call","tool":"calculator","arguments":{"expression":"1+1"},"extra":true}')
+
+
+def test_provider_decider_retries_one_malformed_response_and_records_safe_events(monkeypatch):
+    from types import SimpleNamespace
+
+    import app.services.agent_decision as adapter
+
+    task = SimpleNamespace(id=7, conversation_id=3, project_id=2)
+    conversation = SimpleNamespace(model_id=4)
+    model = SimpleNamespace(
+        enabled=True, provider="ollama", model_name="test:model", configuration={}
+    )
+    monkeypatch.setattr(adapter, "get_task", lambda task_id: task)
+    monkeypatch.setattr(adapter, "get_conversation", lambda conversation_id: conversation)
+    monkeypatch.setattr(adapter, "get_model", lambda model_id: model)
+
+    responses = iter([
+        "I will do that now, here's the answer.",
+        '{"type":"final","content":"Resumo criado."}',
+    ])
+
+    class FakeProvider:
+        def generate(self, **kwargs):
+            return next(responses)
+
+    monkeypatch.setattr(adapter, "OllamaProvider", FakeProvider)
+    events = []
+    monkeypatch.setattr(
+        adapter, "create_task_event",
+        lambda **kwargs: events.append(kwargs),
+    )
+
+    decision = adapter.create_provider_decider(task.id)([{"role": "user", "content": "Resuma"}])
+
+    assert decision == {"type": "final", "content": "Resumo criado."}
+    assert [event["event_name"] for event in events].count("model_request_started") == 2
+    assert any(event["event_name"] == "decision_invalid" for event in events)
+    assert any(event["event_name"] == "decision_retry" for event in events)
+    parsed = next(event for event in events if event["event_name"] == "decision_parsed")
+    assert parsed["metadata"]["output_preview"] == "Resumo criado."
+    assert all("I will do that" not in str(event["metadata"]) for event in events)
+
+
+def test_provider_decider_does_not_retry_more_than_once(monkeypatch):
+    from types import SimpleNamespace
+
+    import app.services.agent_decision as adapter
+
+    task = SimpleNamespace(id=7, conversation_id=3, project_id=2)
+    monkeypatch.setattr(adapter, "get_task", lambda task_id: task)
+    monkeypatch.setattr(adapter, "get_conversation", lambda conversation_id: SimpleNamespace(model_id=4))
+    monkeypatch.setattr(
+        adapter, "get_model",
+        lambda model_id: SimpleNamespace(enabled=True, provider="ollama", model_name="test:model", configuration={}),
+    )
+
+    class FakeProvider:
+        calls = 0
+
+        def generate(self, **kwargs):
+            self.calls += 1
+            return "not JSON"
+
+    provider = FakeProvider()
+    monkeypatch.setattr(adapter, "OllamaProvider", lambda: provider)
+    monkeypatch.setattr(adapter, "create_task_event", lambda **kwargs: None)
+
+    with pytest.raises(ValueError, match="valid JSON"):
+        adapter.create_provider_decider(task.id)([])
+
+    assert provider.calls == 2
