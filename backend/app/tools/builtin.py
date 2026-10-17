@@ -75,6 +75,18 @@ class FilesystemTool(Tool):
     }
     permission_policy = {"approval_required": True, "scope": "active_workspace"}
 
+    def validate(self, arguments: dict[str, Any]) -> None:
+        """Validate operation-specific arguments before policy or execution."""
+        super().validate(arguments)
+        operation = arguments["operation"]
+
+        if operation in {"create", "write"} and "content" not in arguments:
+            raise ValueError(f"Missing required argument(s): content for operation {operation}")
+        if operation not in {"create", "write"} and "content" in arguments:
+            raise ValueError(f"Argument content is not allowed for operation {operation}")
+        if operation != "write" and "overwrite" in arguments:
+            raise ValueError("Argument overwrite is only allowed for operation write")
+
     def execute(self, arguments: dict[str, Any], *, workspace: Path | None = None, cancel_check: Callable[[], bool] | None = None) -> Any:
         root = _require_workspace(workspace)
         operation = arguments["operation"]

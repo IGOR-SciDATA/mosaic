@@ -99,6 +99,26 @@ def test_filesystem_rejects_traversal_and_symlink_escape(tmp_path: Path) -> None
         tool.execute({"operation": "read", "path": "escape.txt"}, workspace=workspace)
 
 
+def test_filesystem_schema_requires_content_for_create_and_write() -> None:
+    tool = FilesystemTool()
+    for operation in ("create", "write"):
+        with pytest.raises(ValueError, match="content"):
+            tool.validate({"operation": operation, "path": "summary.md"})
+
+
+@pytest.mark.parametrize("operation", ["read", "list", "mkdir"])
+def test_filesystem_schema_rejects_content_for_non_write_operations(operation: str) -> None:
+    tool = FilesystemTool()
+    with pytest.raises(ValueError, match="content is not allowed"):
+        tool.validate({"operation": operation, "path": "summary.md", "content": "unexpected"})
+
+
+def test_filesystem_schema_only_allows_overwrite_for_write() -> None:
+    tool = FilesystemTool()
+    with pytest.raises(ValueError, match="overwrite is only allowed"):
+        tool.validate({"operation": "create", "path": "summary.md", "content": "summary", "overwrite": True})
+
+
 def test_filesystem_write_requires_explicit_overwrite(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     tool = FilesystemTool()
