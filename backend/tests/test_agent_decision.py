@@ -87,6 +87,50 @@ def test_provider_decider_retries_malformed_response_with_specific_feedback(monk
     assert any(event["event_name"] == "decision_retry" for event in events)
 
 
+def test_provider_decider_uses_json_only_when_current_subtask_disallows_tools(monkeypatch):
+    from types import SimpleNamespace
+
+    import app.services.agent_decision as adapter
+
+    task = SimpleNamespace(id=9, conversation_id=5, project_id=2)
+    monkeypatch.setattr(adapter, "get_task", lambda task_id: task)
+    monkeypatch.setattr(adapter, "get_conversation", lambda conversation_id: SimpleNamespace(model_id=4))
+    monkeypatch.setattr(
+        adapter,
+        "get_model",
+        lambda model_id: SimpleNamespace(
+            enabled=True, provider="ollama", model_name="test:model", configuration={}
+        ),
+    )
+
+    class FakeProvider:
+        def __init__(self):
+            self.generate_calls = []
+            self.native_calls = []
+
+        def generate(self, **kwargs):
+            self.generate_calls.append(kwargs)
+            return '{"type":"final","content":"Resumo pronto."}'
+
+        def generate_with_tools(self, **kwargs):
+            self.native_calls.append(kwargs)
+            raise AssertionError("Native tools must not be offered in a content-only subtask")
+
+    provider = FakeProvider()
+    monkeypatch.setattr(adapter, "OllamaProvider", lambda: provider)
+    monkeypatch.setattr(adapter, "create_task_event", lambda **kwargs: None)
+
+    decision = adapter.create_provider_decider(task.id)([
+        {"role": "system", "content": "Mosaic allowed tools: none"},
+        {"role": "user", "content": "Resuma a fonte."},
+    ])
+
+    assert decision == {"type": "final", "content": "Resumo pronto."}
+    assert len(provider.generate_calls) == 1
+    assert provider.native_calls == []
+    assert provider.generate_calls[0]["configuration"]["format"] == "json"
+
+
 def test_provider_decider_does_not_retry_more_than_once(monkeypatch):
     from types import SimpleNamespace
 
