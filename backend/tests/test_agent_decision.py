@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.agent_decision import parse_agent_decision
+from app.services.agent_decision import _diagnostic_preview, parse_agent_decision
 
 
 def test_parse_final_decision():
@@ -73,7 +73,8 @@ def test_provider_decider_retries_one_malformed_response_and_records_safe_events
 
     assert decision == {"type": "final", "content": "Resumo criado."}
     assert [event["event_name"] for event in events].count("model_request_started") == 2
-    assert any(event["event_name"] == "decision_invalid" for event in events)
+    invalid = next(event for event in events if event["event_name"] == "decision_invalid")
+    assert invalid["metadata"]["response_preview"] == "I will do that now, here's the answer."
     assert any(event["event_name"] == "decision_retry" for event in events)
     parsed = next(event for event in events if event["event_name"] == "decision_parsed")
     assert parsed["metadata"]["output_preview"] == "Resumo criado."
@@ -108,3 +109,11 @@ def test_provider_decider_does_not_retry_more_than_once(monkeypatch):
         adapter.create_provider_decider(task.id)([])
 
     assert provider.calls == 2
+
+
+
+def test_diagnostic_preview_keeps_response_tail_and_redacts_thinking_and_secrets():
+    preview = _diagnostic_preview("A" * 800 + " token=secret-value", limit=100)
+    assert len(preview) <= 100
+    assert "AAAA" in preview
+    assert "token=[REDACTED]" in preview

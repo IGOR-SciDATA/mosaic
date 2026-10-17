@@ -26,6 +26,35 @@ Do not claim an operation succeeded until a ToolResult confirms it."""
 
 _MAX_DECISION_ATTEMPTS = 2
 _FINAL_PREVIEW_LIMIT = 600
+_DIAGNOSTIC_PREVIEW_LIMIT = 1000
+
+
+def _diagnostic_preview(raw: str, limit: int = _DIAGNOSTIC_PREVIEW_LIMIT) -> str:
+    """Keep a bounded provider-output excerpt without tagged private thinking or inline secrets."""
+    preview = re.sub(r"<think>.*?</think>", "[model thinking omitted]", raw, flags=re.IGNORECASE | re.DOTALL)
+    if re.search(r"<think>", preview, re.IGNORECASE):
+        preview = "[incomplete model thinking block omitted]"
+    preview = re.sub(
+        r"(?i)\b(api[_-]?key|token|password|secret|authorization)\s*[:=]\s*[^\s,;]+",
+        r"\1=[REDACTED]",
+        preview,
+    )
+    if len(preview) <= limit:
+        return preview
+    marker = "\n...[middle truncated for diagnostics]...\n"
+    available = max(0, limit - len(marker))
+    head_size = available // 2
+    tail_size = available - head_size
+    return preview[:head_size] + marker + (preview[-tail_size:] if tail_size else "")
+
+
+def _request_preview(messages: list[dict[str, str]]) -> str:
+    """Summarize the actual provider input without persisting full prompts or file contents."""
+    tail = []
+    for message in messages[-4:]:
+        body = str(message.get("content", ""))
+        tail.append({"role": message.get("role"), "content_tail": body[-260:]})
+    return _diagnostic_preview(json.dumps(tail, ensure_ascii=False), 900)
 
 
 def parse_agent_decision(raw: str) -> dict[str, Any]:
@@ -133,7 +162,13 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, str]]], di
             _record_decision_event(
                 task, "model_request_started",
                 f"Solicitação ao modelo iniciada (tentativa {attempt}/{_MAX_DECISION_ATTEMPTS}).",
-                status="started", metadata={"model": model.model_name, "attempt": attempt},
+                status="started", metadata={
+                    "model": model.model_name,
+                    "attempt": attempt,
+                    "request_preview": _request_preview(messages),
+                    "message_count": len(messages),
+                    "message_roles": [message.get("role") for message in messages[-10:]],
+                },
             )
             try:
                 raw = provider.generate(
@@ -162,7 +197,13 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, str]]], di
                 _record_decision_event(
                     task, "decision_invalid", "A resposta do modelo não passou na validação da decisão.",
                     level="warning", status="invalid",
-                    metadata={"attempt": attempt, "error": str(exc), "response_chars": len(raw)},
+                    metadata={
+                        "model": model.model_name,
+                        "attempt": attempt,
+                        "error": str(exc),
+                        "response_chars": len(raw),
+                        "response_preview": _diagnostic_preview(raw),
+                    },
                 )
                 if attempt < _MAX_DECISION_ATTEMPTS:
                     _record_decision_event(
@@ -174,7 +215,12 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, str]]], di
                 raise
 
             decision_type = decision["type"]
-            metadata: dict[str, Any] = {"attempt": attempt, "decision_type": decision_type}
+            metadata: dict[str, Any] = {
+                "model": model.model_name,
+                "attempt": attempt,
+                "decision_type": decision_type,
+                "response_preview": _diagnostic_preview(raw),
+            }
             if decision_type == "tool_call":
                 metadata["tool"] = decision["tool"]
                 summary = f"Decisão validada: chamada da ferramenta {decision['tool']}."
