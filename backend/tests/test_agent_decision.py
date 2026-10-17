@@ -110,7 +110,7 @@ def test_provider_decider_uses_json_only_when_current_subtask_disallows_tools(mo
 
         def generate(self, **kwargs):
             self.generate_calls.append(kwargs)
-            return '{"type":"final","content":"Resumo pronto."}'
+            return "# Resumo\n\nConteúdo gerado a partir da fonte."
 
         def generate_with_tools(self, **kwargs):
             self.native_calls.append(kwargs)
@@ -125,10 +125,18 @@ def test_provider_decider_uses_json_only_when_current_subtask_disallows_tools(mo
         {"role": "user", "content": "Resuma a fonte."},
     ])
 
-    assert decision == {"type": "final", "content": "Resumo pronto."}
+    assert decision == {
+        "type": "final",
+        "content": "# Resumo\n\nConteúdo gerado a partir da fonte.",
+    }
     assert len(provider.generate_calls) == 1
     assert provider.native_calls == []
-    assert provider.generate_calls[0]["configuration"]["format"] == "json"
+    assert "format" not in provider.generate_calls[0]["configuration"]
+    assert any(
+        "PRODUÇÃO DE CONTEÚDO" in message["content"]
+        for message in provider.generate_calls[0]["messages"]
+        if message.get("role") == "system"
+    )
 
 
 def test_provider_decider_does_not_retry_more_than_once(monkeypatch):
