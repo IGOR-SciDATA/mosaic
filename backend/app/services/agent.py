@@ -681,7 +681,7 @@ def _allowed_tools_for_step(plan: dict[str, Any] | None) -> set[str] | None:
     step = _current_task_step(plan)
     if step is None:
         return None
-    if step.get("kind") in {"summarize_source", "answer_from_source", "draft_content", "create_artifact"}:
+    if step.get("kind") in {"summarize_source", "transform_source", "answer_from_source", "draft_content", "create_artifact", "write_artifact"}:
         return set()
     return None
 
