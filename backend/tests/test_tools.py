@@ -172,7 +172,7 @@ def test_filesystem_write_requires_explicit_overwrite(tmp_path: Path) -> None:
 
 def test_filesystem_create_preserves_exact_utf8_bytes_and_newlines(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
-    content = "# Resumo\\n\\nSão Paulo — versão 1.\\n"
+    content = "# Resumo\n\nSão Paulo — versão 1.\n"
     result = FilesystemTool().execute(
         {"operation": "create", "path": "Resumo.md", "content": content},
         workspace=workspace,
