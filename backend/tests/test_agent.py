@@ -395,7 +395,7 @@ def test_agent_does_not_complete_summary_without_reading_named_source(tmp_path: 
     output_create = create_tool_call(
         task.conversation_id,
         "filesystem",
-        {"operation": "create", "path": "Resumo.md", "content": "# Resumo\n\nTexto sem fonte."},
+        {"operation": "create", "path": "Resumo.md", "content": "# Resumo\\n\\nTexto sem fonte."},
         task_id=task.id,
     )
     assert execute_tool_call(approve_tool_call(output_create)).status == "completed"
