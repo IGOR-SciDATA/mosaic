@@ -181,6 +181,23 @@ def test_agent_creates_explicit_subtasks_for_read_summarize_create(tmp_path: Pat
     assert steps[2]["path"] == "docs/Resumo_Documento.md"
 
 
+def test_existing_file_update_is_planned_as_read_transform_write():
+    from app.services.agent import _artifact_operation, _artifact_output_path, _build_task_steps
+
+    goal = "atualize README.md para incluir uma seção de instalação"
+    steps = _build_task_steps(goal)
+
+    assert [step["kind"] for step in steps] == [
+        "read_file",
+        "transform_source",
+        "write_artifact",
+    ]
+    assert steps[0]["path"] == "README.md"
+    assert steps[2]["path"] == "README.md"
+    assert _artifact_output_path(goal) == "README.md"
+    assert _artifact_operation(goal) == "write"
+
+
 def test_agent_task_context_contains_only_current_task_tool_results(tmp_path: Path):
     workspace = tmp_path / "workspace"
     project = create_project("Task isolation", str(workspace))
