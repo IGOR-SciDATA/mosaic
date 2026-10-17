@@ -27,7 +27,7 @@ def _task(plan=None, project_id=None):
     return create_task(type="generic", mode="agent", conversation_id=conversation.id, project_id=project_id, plan=plan)
 
 def test_agent_does_not_complete_file_creation_goal_without_verified_artifact():
-    task = _task(plan={"goal": "leia Documento.md e crie um novo arquivo .md com um resumo"})
+    task = _task(plan={"goal": "crie um novo arquivo .md com um resumo"})
     result = run_agent(
         task.id,
         lambda context: {"type": "final", "content": "Criei o resumo."},
@@ -45,13 +45,27 @@ def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_
         plan={"goal": "leia Documento.md e crie um novo arquivo .md com um resumo"},
         project_id=project.id,
     )
-    call = create_tool_call(
+    source_create = create_tool_call(
+        task.conversation_id,
+        "filesystem",
+        {"operation": "create", "path": "Documento.md", "content": "# Documento\n\nConteúdo de origem."},
+        task_id=task.id,
+    )
+    assert execute_tool_call(approve_tool_call(source_create)).status == "completed"
+    source_read = create_tool_call(
+        task.conversation_id,
+        "filesystem",
+        {"operation": "read", "path": "Documento.md"},
+        task_id=task.id,
+    )
+    assert execute_tool_call(approve_tool_call(source_read)).status == "completed"
+    output_create = create_tool_call(
         task.conversation_id,
         "filesystem",
         {"operation": "create", "path": "Resumo.md", "content": "# Resumo\n\nConteúdo."},
         task_id=task.id,
     )
-    tool_result = execute_tool_call(approve_tool_call(call))
+    tool_result = execute_tool_call(approve_tool_call(output_create))
     assert tool_result.status == "completed"
 
     result = run_agent(
