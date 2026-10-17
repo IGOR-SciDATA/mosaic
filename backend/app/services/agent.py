@@ -164,7 +164,7 @@ def _auto_paginate_read(
 def _goal_requires_file_artifact(goal: str) -> bool:
     """Detect explicit file-creation requests that require a verified artifact."""
     return bool(re.search(
-        r"\b(?:create|save|write|generate|export|crie|criar|salve|salvar|escreva|escrever|gere|gerar|exporte|exportar)\b"
+        r"\b(?:create|save|write|generate|export|crie|criar|salve|salvar|escreva|escrever|gere|gerar|exporte|exportar|faça|faca|fazer|produza|produzir|monte|montar|elabore|elaborar|prepare|preparar)\b"
         r".{0,120}\b(?:file|document|arquivo|documento)\b",
         goal,
         flags=re.IGNORECASE | re.DOTALL,
