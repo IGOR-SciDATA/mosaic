@@ -54,10 +54,11 @@ class OllamaProvider(ModelProvider):
         calls = message.get("tool_calls") or []
         if calls:
             if not isinstance(calls, list) or len(calls) != 1:
-                raise ValueError("Ollama must return exactly one tool call per agent turn")
-            function = calls[0].get("function", {}) if isinstance(calls[0], dict) else {}
-            name = function.get("name") if isinstance(function, dict) else None
-            arguments = function.get("arguments", {}) if isinstance(function, dict) else None
+                name, arguments = "", {}
+            else:
+                function = calls[0].get("function", {}) if isinstance(calls[0], dict) else {}
+                name = function.get("name") if isinstance(function, dict) else None
+                arguments = function.get("arguments", {}) if isinstance(function, dict) else None
             if isinstance(arguments, str):
                 try:
                     arguments = json.loads(arguments)
@@ -71,16 +72,18 @@ class OllamaProvider(ModelProvider):
                 for key in ("role", "content", "tool_calls")
                 if key in message
             }
+            if "content" in assistant_message:
+                assistant_message["content"] = self._normalize_answer(
+                    str(assistant_message["content"] or ""), model_name
+                )
             return {
                 "type": "tool_call",
-                "tool": name,
+                "tool": name if isinstance(name, str) else "",
                 "arguments": arguments,
                 "_native_message": assistant_message,
             }
 
         content = self._normalize_answer(str(message.get("content", "")), model_name)
-        if not content:
-            raise ValueError("Ollama returned neither a tool call nor final content")
         return {"type": "final", "content": content}
 
     def stream(
