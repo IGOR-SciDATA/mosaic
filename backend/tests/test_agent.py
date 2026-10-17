@@ -140,6 +140,31 @@ def test_agent_turns_final_summary_into_approved_artifact_creation(tmp_path: Pat
     assert (workspace / "Resumo_Documento.md").is_file()
 
 
+@pytest.mark.parametrize(
+    ("goal", "expected_sources", "expected_output"),
+    [
+        (
+            "leia docs/Documento.md e crie um novo arquivo .md com um resumo",
+            ["docs/Documento.md"],
+            "docs/Resumo_Documento.md",
+        ),
+        (
+            "leia Documento.md e crie um arquivo chamado Saida.md com um resumo",
+            ["Documento.md"],
+            "Saida.md",
+        ),
+        ("crie um arquivo Saida.md", [], "Saida.md"),
+        ("salve o resumo como Saida.md", [], "Saida.md"),
+    ],
+)
+def test_file_task_intent_paths_are_resolved_deterministically(goal, expected_sources, expected_output):
+    from app.services.agent import _artifact_output_path, _goal_requires_file_artifact, _required_source_paths
+
+    assert _required_source_paths(goal) == expected_sources
+    assert _goal_requires_file_artifact(goal)
+    assert _artifact_output_path(goal) == expected_output
+
+
 def test_agent_creates_explicit_subtasks_for_read_summarize_create(tmp_path: Path):
     from app.services.agent import _build_task_steps
 
