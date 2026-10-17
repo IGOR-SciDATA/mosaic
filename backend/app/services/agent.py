@@ -26,7 +26,11 @@ def _goal_requires_file_artifact(goal: str) -> bool:
 
 def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> dict[str, Any] | None:
     """Return metadata only when a successful filesystem result points to a real non-empty file."""
-    markdown_requested = bool(re.search(r"(?:\bmarkdown\b|\.md(?:\b|$))", goal, flags=re.IGNORECASE))
+    markdown_requested = bool(re.search(
+        r"\bmarkdown\b|\b(?:new|novo|nova)\s+(?:file|arquivo|document|documento)\s+\.md\b",
+        goal,
+        flags=re.IGNORECASE,
+    ))
     new_file_requested = bool(re.search(
         r"\b(?:new|novo|nova)\s+(?:file|arquivo|documento)\b",
         goal,
