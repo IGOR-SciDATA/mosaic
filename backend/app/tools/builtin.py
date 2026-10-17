@@ -182,12 +182,15 @@ class FilesystemTool(Tool):
             encoded = content.encode("utf-8")
             temporary = path.with_name(f".{path.name}.mosaic-tmp")
             try:
-                with temporary.open("x", encoding="utf-8") as handle:
-                    handle.write(content)
+                # Write bytes, not text: Windows text mode translates LF to CRLF,
+                # making the subsequent UTF-8 byte-length check fail after the
+                # destination has already been replaced.
+                with temporary.open("xb") as handle:
+                    handle.write(encoded)
                 if path.exists() and (operation == "create" or not overwrite):
                     raise FileExistsError("File already exists; set overwrite=true to replace it")
                 os.replace(temporary, path)
-                if not path.is_file() or path.stat().st_size != len(encoded):
+                if not path.is_file() or path.read_bytes() != encoded:
                     raise OSError("Written file could not be verified")
             finally:
                 if temporary.exists():
