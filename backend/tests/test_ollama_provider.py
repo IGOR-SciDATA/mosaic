@@ -20,6 +20,61 @@ def _chunk(content="", *, done=False, thinking=None):
     return {"message": message, "done": done}
 
 
+def test_generate_with_tools_uses_native_ollama_tool_calls():
+    provider = OllamaProvider()
+    observed = {}
+    assistant_message = {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+            "function": {
+                "name": "filesystem",
+                "arguments": {"operation": "read", "path": "Documento.md"},
+            }
+        }],
+    }
+
+    def fake_post(path, payload, *, timeout_seconds):
+        observed["path"] = path
+        observed["payload"] = payload
+        observed["timeout_seconds"] = timeout_seconds
+        return {"message": assistant_message}
+
+    provider._post = fake_post
+    tools = [{
+        "type": "function",
+        "function": {
+            "name": "filesystem",
+            "description": "Read workspace files",
+            "parameters": {
+                "type": "object",
+                "required": ["operation", "path"],
+                "properties": {
+                    "operation": {"type": "string", "enum": ["read"]},
+                    "path": {"type": "string"},
+                },
+                "additionalProperties": False,
+            },
+        },
+    }]
+
+    result = provider.generate_with_tools(
+        messages=[{"role": "user", "content": "Leia Documento.md"}],
+        model_name="qwen2.5:3b",
+        configuration={"request_timeout_seconds": 45, "format": "json"},
+        tools=tools,
+    )
+
+    assert result["type"] == "tool_call"
+    assert result["tool"] == "filesystem"
+    assert result["arguments"] == {"operation": "read", "path": "Documento.md"}
+    assert result["_native_message"] == assistant_message
+    assert observed["path"] == "/api/chat"
+    assert observed["timeout_seconds"] == 45.0
+    assert observed["payload"]["tools"] == tools
+    assert "format" not in observed["payload"]
+
+
 def test_generate_extracts_qwen3_answer_after_thinking_marker():
     provider = OllamaProvider()
     provider._post = lambda path, payload, **kwargs: {
