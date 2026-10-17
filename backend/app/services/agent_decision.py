@@ -35,8 +35,8 @@ def _diagnostic_preview(raw: str) -> str:
     if re.search(r"<think>", preview, re.IGNORECASE):
         preview = "[incomplete model thinking block omitted]"
     preview = re.sub(
-        r"(?i)\\b(api[_-]?key|token|password|secret|authorization)\\s*[:=]\\s*[^\\s,;]+",
-        r"\\1=[REDACTED]",
+        r"(?i)\b(api[_-]?key|token|password|secret|authorization)\s*[:=]\s*[^\s,;]+",
+        r"\1=[REDACTED]",
         preview,
     )
     return preview[:_DIAGNOSTIC_PREVIEW_LIMIT]
