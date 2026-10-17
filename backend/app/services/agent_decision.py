@@ -251,12 +251,13 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                     "message_count": len(messages),
                     "message_roles": [message.get("role") for message in messages[-10:]],
                     "registered_tools": [item["name"] for item in tool_catalog],
+                    "available_tools": [item["name"] for item in active_tool_catalog],
                 },
             )
             native_message = None
             try:
                 generate_with_tools = getattr(provider, "generate_with_tools", None)
-                if callable(generate_with_tools):
+                if callable(generate_with_tools) and active_tool_catalog:
                     native_decision = generate_with_tools(
                         messages=messages,
                         model_name=model.model_name,
@@ -268,7 +269,8 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                     native_message = native_decision.pop("_native_message", None)
                     raw = json.dumps(native_decision, ensure_ascii=False)
                 else:
-                    # Compatibility for test doubles and providers without native tool support.
+                    # With no tools allowed, use JSON-only generation so the provider
+                    # cannot offer a tool the current subtask is forbidden to execute.
                     raw = provider.generate(
                         messages=messages,
                         model_name=model.model_name,
