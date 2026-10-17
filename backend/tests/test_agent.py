@@ -350,10 +350,10 @@ def test_agent_recovers_artifact_after_post_write_verification_error(tmp_path: P
     workspace = tmp_path / "workspace"
     project = create_project("Artifact recovery", str(workspace))
     workspace.mkdir(parents=True, exist_ok=True)
-    (workspace / "Documento.md").write_text("# Documento\\n\\nFonte completa.\\n", encoding="utf-8")
+    (workspace / "Documento.md").write_text("# Documento\n\nFonte completa.\n", encoding="utf-8")
     goal = "Leia Documento.md e faça um novo arquivo .md com um resumo do que está escrito."
     task = _task(plan={"goal": goal}, project_id=project.id)
-    content = "# Resumo\\n\\nO documento apresenta a proposta e os objetivos do projeto.\\n"
+    content = "# Resumo\n\nO documento apresenta a proposta e os objetivos do projeto.\n"
     output_path = workspace / "Resumo_Documento.md"
     output_path.write_bytes(content.encode("utf-8"))
 
@@ -395,7 +395,7 @@ def test_agent_does_not_complete_summary_without_reading_named_source(tmp_path: 
     output_create = create_tool_call(
         task.conversation_id,
         "filesystem",
-        {"operation": "create", "path": "Resumo.md", "content": "# Resumo\\n\\nTexto sem fonte."},
+        {"operation": "create", "path": "Resumo.md", "content": "# Resumo\n\nTexto sem fonte."},
         task_id=task.id,
     )
     assert execute_tool_call(approve_tool_call(output_create)).status == "completed"
