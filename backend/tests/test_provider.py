@@ -24,7 +24,7 @@ class FakeResponse:
 def test_ollama_generate_sends_model_messages_and_configuration(monkeypatch) -> None:
     captured = {}
 
-    def fake_urlopen(request):
+    def fake_urlopen(request, timeout=None):
         captured["request"] = request
         return FakeResponse(json.dumps({"message": {"content": "Olá"}}).encode())
 
@@ -51,7 +51,7 @@ def test_ollama_stream_yields_content_chunks(monkeypatch) -> None:
     body = b'{"message":{"content":"Ol"}}\n{"message":{"content":"\\u00e1"}}\n{"done":true}\n'
     monkeypatch.setattr(
         "app.providers.ollama.request.urlopen",
-        lambda request: FakeResponse(body),
+        lambda request, timeout=None: FakeResponse(body),
     )
 
     provider = OllamaProvider("http://ollama.test")
@@ -62,7 +62,7 @@ def test_ollama_stream_handles_empty_content_chunks(monkeypatch) -> None:
     body = b'{"message":{}}\n{"message":{"content":"ok"}}\n{"done":true}\n'
     monkeypatch.setattr(
         "app.providers.ollama.request.urlopen",
-        lambda request: FakeResponse(body),
+        lambda request, timeout=None: FakeResponse(body),
     )
 
     provider = OllamaProvider("http://ollama.test")
@@ -72,7 +72,7 @@ def test_ollama_stream_handles_empty_content_chunks(monkeypatch) -> None:
 def test_ollama_thinking_flag_can_be_configured(monkeypatch) -> None:
     captured = {}
 
-    def fake_urlopen(request):
+    def fake_urlopen(request, timeout=None):
         captured["payload"] = json.loads(request.data.decode())
         return FakeResponse(b'{"message":{"content":"Resposta direta"},"done":true}\n')
 
