@@ -42,6 +42,15 @@ def _diagnostic_preview(raw: str) -> str:
     return preview[:_DIAGNOSTIC_PREVIEW_LIMIT]
 
 
+def _request_preview(messages: list[dict[str, str]]) -> str:
+    """Summarize the actual provider input without persisting full prompts or file contents."""
+    tail = []
+    for message in messages[-4:]:
+        body = str(message.get("content", ""))
+        tail.append({"role": message.get("role"), "content_tail": body[-260:]})
+    return _diagnostic_preview(json.dumps(tail, ensure_ascii=False), 900)
+
+
 def parse_agent_decision(raw: str) -> dict[str, Any]:
     """Parse and validate the provider-neutral outer decision envelope."""
     text = raw.strip()
@@ -147,7 +156,13 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, str]]], di
             _record_decision_event(
                 task, "model_request_started",
                 f"Solicitação ao modelo iniciada (tentativa {attempt}/{_MAX_DECISION_ATTEMPTS}).",
-                status="started", metadata={"model": model.model_name, "attempt": attempt},
+                status="started", metadata={
+                    "model": model.model_name,
+                    "attempt": attempt,
+                    "request_preview": _request_preview(messages),
+                    "message_count": len(messages),
+                    "message_roles": [message.get("role") for message in messages[-10:]],
+                },
             )
             try:
                 raw = provider.generate(
