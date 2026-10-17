@@ -119,6 +119,43 @@ def test_filesystem_schema_only_allows_overwrite_for_write() -> None:
         tool.validate({"operation": "create", "path": "summary.md", "content": "summary", "overwrite": True})
 
 
+def test_filesystem_read_returns_bounded_line_chunks(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    source = workspace / "Documento.md"
+    source.write_text("\\n".join(f"linha {number}" for number in range(1, 101)), encoding="utf-8")
+    tool = FilesystemTool()
+
+    first = tool.execute({"operation": "read", "path": "Documento.md"}, workspace=workspace)
+    assert first["start_line"] == 1
+    assert first["end_line"] == 80
+    assert first["total_lines"] == 100
+    assert first["truncated"] is True
+    assert first["next_start_line"] == 81
+    assert "linha 80" in first["content"]
+    assert "linha 81" not in first["content"]
+
+    second = tool.execute(
+        {"operation": "read", "path": "Documento.md", "start_line": 81, "max_lines": 80},
+        workspace=workspace,
+    )
+    assert second["start_line"] == 81
+    assert second["end_line"] == 100
+    assert second["truncated"] is False
+    assert second["next_start_line"] is None
+    assert "linha 100" in second["content"]
+
+
+def test_filesystem_rejects_chunk_arguments_for_non_read_operations() -> None:
+    with pytest.raises(ValueError, match="only allowed for operation read"):
+        FilesystemTool().validate({
+            "operation": "create",
+            "path": "summary.md",
+            "content": "summary",
+            "start_line": 2,
+        })
+
+
 def test_filesystem_write_requires_explicit_overwrite(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     tool = FilesystemTool()
