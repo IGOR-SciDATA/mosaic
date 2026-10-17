@@ -155,7 +155,7 @@ def _record_decision_event(task: Any, event_name: str, message: str, **kwargs: A
         pass
 
 
-def create_provider_decider(task_id: int) -> Callable[[list[dict[str, str]]], dict[str, Any]]:
+def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], dict[str, Any]]:
     """Build a real ModelProvider-backed decision function for one persisted Task."""
     task = get_task(task_id)
     if task is None:
@@ -187,7 +187,7 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, str]]], di
     ]
     provider = OllamaProvider()
 
-    def decide(context: list[dict[str, str]]) -> dict[str, Any]:
+    def decide(context: list[dict[str, Any]]) -> dict[str, Any]:
         base_messages = [
             {"role": "system", "content": _DECISION_INSTRUCTIONS},
             *context,
