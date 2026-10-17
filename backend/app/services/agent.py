@@ -337,7 +337,7 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
                 continue
             if markdown_requested and Path(relative_path).suffix.lower() != ".md":
                 continue
-            if new_file_requested and data.get("created") is not True:
+            if (new_file_requested or call.arguments.get("operation") == "create") and data.get("created") is not True:
                 continue
             try:
                 root = resolve_tool_workspace(call)
