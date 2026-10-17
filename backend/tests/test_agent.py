@@ -145,7 +145,14 @@ def test_agent_passes_tool_observation_to_next_decision():
 
 def test_agent_stops_for_approval_required_tool():
     task = _task()
-    result = run_agent(task.id, lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "read", "path": "README.md"}})
+    result = run_agent(
+        task.id,
+        lambda context: {
+            "type": "tool_call",
+            "tool": "filesystem",
+            "arguments": {"operation": "create", "path": "Resumo.md", "content": "# Resumo"},
+        },
+    )
     assert result["status"] == "awaiting_approval"
     assert get_task(task.id).status == "awaiting_approval"
     call = get_tool_call(result["tool_call_id"])
