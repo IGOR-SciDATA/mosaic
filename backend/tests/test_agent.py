@@ -498,6 +498,24 @@ def test_agent_can_be_cancelled_before_tool_execution():
     assert calls == 1
 
 
+def test_agent_stops_consecutive_duplicate_failed_tool_call():
+    task = _task()
+    repeated = {
+        "type": "tool_call",
+        "tool": "calculator",
+        "arguments": {"expression": "1 +"},
+    }
+    decisions = iter([repeated, repeated])
+
+    result = run_agent(task.id, lambda context: next(decisions))
+    calls = [call for call in list_tool_calls(task.conversation_id) if call.task_id == task.id]
+
+    assert result["status"] == "failed"
+    assert "loop" in result["error"].lower()
+    assert len(calls) == 1
+    assert calls[0].status == "failed"
+
+
 def test_agent_blocks_consecutive_duplicate_successful_tool_call():
     task = _task()
     decisions = iter([
