@@ -61,10 +61,11 @@ class OllamaProvider(ModelProvider):
             if isinstance(arguments, str):
                 try:
                     arguments = json.loads(arguments)
-                except json.JSONDecodeError as exc:
-                    raise ValueError("Ollama returned invalid JSON tool arguments") from exc
-            if not isinstance(name, str) or not name or not isinstance(arguments, dict):
-                raise ValueError("Ollama returned an invalid native tool call")
+                except json.JSONDecodeError:
+                    # Leave malformed arguments for the decision validator so the agent can retry.
+                    pass
+            if not isinstance(name, str) or not name:
+                name = ""
             assistant_message = {
                 key: message[key]
                 for key in ("role", "content", "tool_calls")
