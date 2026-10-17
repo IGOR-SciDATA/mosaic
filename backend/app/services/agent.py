@@ -600,6 +600,27 @@ def _tool_context(tool_call_id: int, result: ToolResult) -> dict[str, str]:
         ),
     }
 
+def _current_task_step(plan: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(plan, dict):
+        return None
+    steps = plan.get("steps", [])
+    current_id = plan.get("current_step")
+    return next(
+        (step for step in steps if isinstance(step, dict) and step.get("id") == current_id),
+        None,
+    )
+
+
+def _allowed_tools_for_step(plan: dict[str, Any] | None) -> set[str] | None:
+    """Return an empty set for content-only steps; None means normal agent tool choice."""
+    step = _current_task_step(plan)
+    if step is None:
+        return None
+    if step.get("kind") in {"summarize_source", "answer_from_source", "draft_content", "create_artifact"}:
+        return set()
+    return None
+
+
 def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, Any]], *, iteration_limit: int = DEFAULT_ITERATION_LIMIT) -> dict[str, Any]:
     if iteration_limit <= 0:
         raise ValueError("iteration_limit must be greater than zero")
@@ -610,10 +631,58 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
         raise ValueError("Task must use agent mode")
     if task.conversation_id is None:
         raise ValueError("Agent task requires a conversation")
+    if task.status == "cancelled":
+        return {"status": "cancelled", "iterations": 0}
+    if task.status not in {"pending", "executing"}:
+        raise ValueError(f"Task is not executable: {task.status}")
 
     goal = str((task.plan or {}).get("goal", "")).strip()
-    context = _agent_context(build_context(task.conversation_id), goal)
-    update_task(task_id, status="executing")
+    plan = _ensure_task_plan(task_id)
+    if task.status == "pending":
+        update_task(task_id, status="executing")
+
+    # Explicit source paths are deterministic work, not a tool-choice quiz for the model.
+    # Read them through the normal ToolCall/ToolResult path and paginate in Core code.
+    source_context: list[dict[str, Any]] = []
+    missing_sources = _prepare_task_sources(
+        task_id,
+        task.conversation_id,
+        goal,
+        source_context,
+    )
+    if missing_sources:
+        error = "Não foi possível ler integralmente o(s) arquivo(s) solicitado(s): " + ", ".join(missing_sources)
+        current = get_task(task_id)
+        if current is not None and current.status == "executing":
+            update_task(task_id, status="failed", result={"error": error, "iterations": 0})
+        return {"status": "failed", "error": error, "iterations": 0}
+
+    plan = dict((get_task(task_id).plan or plan))
+    if _goal_requires_file_artifact(goal):
+        artifact = _verified_file_artifact(task_id, task.conversation_id, goal)
+        if artifact is not None:
+            _set_all_task_steps_completed(task_id)
+            result = {
+                "output": f"Arquivo criado e verificado: {artifact['path']}",
+                "iterations": 0,
+                "artifact": artifact,
+            }
+            update_task(task_id, status="completed", result=result)
+            return {"status": "completed", **result}
+
+    # Resuming a generic task after an approved tool should continue its current step.
+    current_step = _current_task_step(plan)
+    if current_step is not None and current_step.get("status") in {"pending", "awaiting_approval"}:
+        plan = _set_task_step_status(task_id, str(current_step["id"]), "in_progress")
+
+    # Rebuild only the stable project guidance and this Task's persisted observations.
+    # No prior user/assistant turns are copied into the model prompt.
+    context = _agent_context(
+        build_context(task.conversation_id),
+        goal,
+        plan,
+    )
+    context.extend(_persisted_task_observations(task_id, task.conversation_id))
 
     for iteration in range(1, iteration_limit + 1):
         current = get_task(task_id)
@@ -627,7 +696,7 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
         try:
             decision = decide(context)
         except Exception as exc:
-            update_task(task_id, status="failed", result={"error": str(exc)})
+            update_task(task_id, status="failed", result={"error": str(exc), "iterations": iteration})
             return {"status": "failed", "error": str(exc), "iterations": iteration}
 
         current = get_task(task_id)
@@ -639,79 +708,86 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
             raise ValueError(f"Task is not executable: {current.status}")
 
         decision_type = decision.get("type")
+        allowed_tools = _allowed_tools_for_step(current.plan)
+        if decision_type == "tool_call" and allowed_tools is not None and decision.get("tool") not in allowed_tools:
+            context.append({
+                "role": "system",
+                "content": (
+                    "Mosaic step guard: a subtarefa atual só precisa produzir conteúdo e não permite chamadas de ferramenta. "
+                    "Não tente executar uma ação nesta etapa; retorne o conteúdo final solicitado."
+                ),
+            })
+            continue
+
         if decision_type == "final":
             goal = str((current.plan or {}).get("goal", ""))
             if _goal_requires_file_artifact(goal):
                 missing_sources = _verified_source_reads(task_id, current.conversation_id, goal)
                 if missing_sources:
-                    context.append({
-                        "role": "system",
-                        "content": (
-                            "Mosaic completion guard: a tarefa pede análise/leitura de arquivo(s), mas o Core não "
-                            "encontrou ToolResult de leitura bem-sucedida com conteúdo para: "
-                            + ", ".join(missing_sources)
-                            + ". Leia a fonte com filesystem operation=read antes de produzir o resumo. "
-                            "Não use conhecimento prévio como substituto do documento."
-                        ),
-                    })
-                    continue
+                    error = "Não foi possível verificar a leitura completa da fonte: " + ", ".join(missing_sources)
+                    update_task(task_id, status="failed", result={"error": error, "iterations": iteration})
+                    return {"status": "failed", "error": error, "iterations": iteration}
+
                 artifact = _verified_file_artifact(task_id, current.conversation_id, goal)
                 if artifact is not None:
+                    _set_all_task_steps_completed(task_id)
                     result = {"output": decision.get("content", ""), "iterations": iteration, "artifact": artifact}
                     update_task(task_id, status="completed", result=result)
                     return {"status": "completed", **result}
 
-                # The model has already produced the document content. Asking it to
-                # repeat the same decision caused an observed loop, so the Core turns
-                # that content into the explicitly requested filesystem action.
                 artifact_content = _artifact_content_from_final(str(decision.get("content", "")))
-                if artifact_content is not None:
-                    decision = {
-                        "type": "tool_call",
-                        "tool": "filesystem",
-                        "arguments": {
-                            "operation": "create",
-                            "path": _artifact_output_path(goal),
-                            "content": artifact_content,
-                        },
-                    }
-                    decision_type = "tool_call"
-                else:
-                    context.append({
-                        "role": "system",
-                        "content": (
-                            "Mosaic completion guard: a resposta final não contém conteúdo de documento suficiente "
-                            "para criar o artefato solicitado. Produza o conteúdo do arquivo, sem narrar ações futuras, "
-                            "ou retorne um bloqueio concreto."
-                        ),
-                    })
-                    continue
+                if artifact_content is None:
+                    error = "O modelo não produziu conteúdo suficiente para o arquivo solicitado."
+                    update_task(task_id, status="failed", result={"error": error, "iterations": iteration})
+                    return {"status": "failed", "error": error, "iterations": iteration}
+
+                step = _current_task_step(current.plan)
+                if step is not None and step.get("kind") in {"summarize_source", "draft_content"}:
+                    _set_task_step_status(task_id, str(step["id"]), "completed")
+                _set_task_step_status(
+                    task_id,
+                    "create_artifact",
+                    "awaiting_approval",
+                    path=_artifact_output_path(goal),
+                )
+                decision = {
+                    "type": "tool_call",
+                    "tool": "filesystem",
+                    "arguments": {
+                        "operation": "create",
+                        "path": _artifact_output_path(goal),
+                        "content": artifact_content,
+                    },
+                }
+                decision_type = "tool_call"
             else:
+                step = _current_task_step(current.plan)
+                if step is not None:
+                    _set_task_step_status(task_id, str(step["id"]), "completed")
+                _set_all_task_steps_completed(task_id)
                 result = {"output": decision.get("content", ""), "iterations": iteration}
                 update_task(task_id, status="completed", result=result)
                 return {"status": "completed", **result}
+
         if decision_type != "tool_call":
             error = f"Invalid agent decision type: {decision_type}"
-            update_task(task_id, status="failed", result={"error": error})
+            update_task(task_id, status="failed", result={"error": error, "iterations": iteration})
             return {"status": "failed", "error": error, "iterations": iteration}
 
         tool_name = decision.get("tool")
         arguments = decision.get("arguments", {})
         if not isinstance(tool_name, str) or not tool_name:
             error = "Agent tool_call requires tool"
-            update_task(task_id, status="failed", result={"error": error})
+            update_task(task_id, status="failed", result={"error": error, "iterations": iteration})
             return {"status": "failed", "error": error, "iterations": iteration}
 
         try:
             policy = resolve_tool_policy(tool_name, arguments)
         except Exception as exc:
             error = f"Tool request rejected: {type(exc).__name__}: {exc}"
-            update_task(task_id, status="failed", result={"error": error})
+            update_task(task_id, status="failed", result={"error": error, "iterations": iteration})
             return {"status": "failed", "error": error, "iterations": iteration}
 
-        # Guard against a model loop that proposes the same successful operation
-        # twice in a row. The check uses persisted ToolCalls so it also works after
-        # approval/resume, while allowing the same operation after an intervening step.
         prior_calls = [
             item for item in list_tool_calls(task.conversation_id)
             if item.task_id == task_id
@@ -735,6 +811,17 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
         call = create_tool_call(task.conversation_id, tool_name, arguments, task_id=task_id)
         try:
             if policy["approval_required"]:
+                if tool_name == "filesystem" and arguments.get("operation") in {"create", "write"} and _goal_requires_file_artifact(goal):
+                    _set_task_step_status(
+                        task_id,
+                        "create_artifact",
+                        "awaiting_approval",
+                        path=arguments.get("path"),
+                    )
+                else:
+                    step = _current_task_step(current.plan)
+                    if step is not None:
+                        _set_task_step_status(task_id, str(step["id"]), "awaiting_approval")
                 update_task(task_id, status="awaiting_approval", result={"tool_call_id": call.id, "iterations": iteration})
                 return {"status": "awaiting_approval", "tool_call_id": call.id, "iterations": iteration}
             approved = approve_tool_call(call)
@@ -766,3 +853,4 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
     result = {"error": "Agent iteration limit reached", "iterations": iteration_limit}
     update_task(task_id, status="failed", result=result)
     return {"status": "failed", **result}
+
