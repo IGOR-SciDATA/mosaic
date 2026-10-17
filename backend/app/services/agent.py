@@ -277,6 +277,54 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
     return None
 
 
+def _artifact_output_path(goal: str) -> str:
+    """Choose a deterministic, non-source filename for a requested summary artifact."""
+    named_output = re.search(
+        r"\\b(?:called|named|chamado|chamada|com\s+o\s+nome)\\s+[\\"']?([A-Za-z0-9_./-]+\\.md)\\b",
+        goal,
+        flags=re.IGNORECASE,
+    )
+    if named_output:
+        candidate = Path(named_output.group(1))
+        if candidate.name and candidate.suffix.lower() == ".md":
+            return candidate.as_posix()
+
+    sources = _required_source_paths(goal)
+    if sources:
+        source = Path(sources[0])
+        return (source.parent / f"Resumo_{source.stem}.md").as_posix()
+    return "Resumo.md"
+
+
+def _artifact_content_from_final(content: str) -> str | None:
+    """Accept substantive final content, removing obvious agent narration at the end."""
+    text = content.strip()
+    if not text:
+        return None
+
+    # Some small local models append a narration of their intended tool use after
+    # producing the actual document. Do not persist that narration as document content.
+    paragraphs = re.split(r"\\n\\s*\\n", text)
+    narration = re.compile(
+        r"^(?:para criar (?:um|o) documento|vou criar (?:um|o) arquivo|"
+        r"vou usar a ferramenta|vamos criar (?:um|o) documento|"
+        r"i will create (?:a|the) file|i will use the filesystem)\\b",
+        flags=re.IGNORECASE,
+    )
+    for index, paragraph in enumerate(paragraphs):
+        if narration.search(paragraph.strip()):
+            text = "\\n\\n".join(paragraphs[:index]).strip()
+            break
+
+    if len(text) < 40 or re.fullmatch(
+        r"(?:pronto|feito|concluído|concluido|criei o resumo|arquivo criado|salvo com sucesso)[.!\\s]*",
+        text,
+        flags=re.IGNORECASE,
+    ):
+        return None
+    return text
+
+
 def _tool_context(tool_call_id: int, result: ToolResult) -> dict[str, str]:
     if result.status == "completed":
         content = f"ToolResult {tool_call_id}: {result.data}"
@@ -352,23 +400,40 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                     })
                     continue
                 artifact = _verified_file_artifact(task_id, current.conversation_id, goal)
-                if artifact is None:
+                if artifact is not None:
+                    result = {"output": decision.get("content", ""), "iterations": iteration, "artifact": artifact}
+                    update_task(task_id, status="completed", result=result)
+                    return {"status": "completed", **result}
+
+                # The model has already produced the document content. Asking it to
+                # repeat the same decision caused an observed loop, so the Core turns
+                # that content into the explicitly requested filesystem action.
+                artifact_content = _artifact_content_from_final(str(decision.get("content", "")))
+                if artifact_content is not None:
+                    decision = {
+                        "type": "tool_call",
+                        "tool": "filesystem",
+                        "arguments": {
+                            "operation": "create",
+                            "path": _artifact_output_path(goal),
+                            "content": artifact_content,
+                        },
+                    }
+                    decision_type = "tool_call"
+                else:
                     context.append({
                         "role": "system",
                         "content": (
-                            "Mosaic completion guard: a tarefa solicita criar um arquivo, mas o Core ainda não "
-                            "verificou um arquivo novo, legível e não vazio no workspace. A resposta final foi "
-                            "rejeitada como conclusão prematura. Consulte os ToolResults existentes; se necessário, "
-                            "crie o arquivo usando filesystem com operation=create, path e content. Não afirme "
-                            "conclusão até receber o resultado confirmado."
+                            "Mosaic completion guard: a resposta final não contém conteúdo de documento suficiente "
+                            "para criar o artefato solicitado. Produza o conteúdo do arquivo, sem narrar ações futuras, "
+                            "ou retorne um bloqueio concreto."
                         ),
                     })
                     continue
-                result = {"output": decision.get("content", ""), "iterations": iteration, "artifact": artifact}
             else:
                 result = {"output": decision.get("content", ""), "iterations": iteration}
-            update_task(task_id, status="completed", result=result)
-            return {"status": "completed", **result}
+                update_task(task_id, status="completed", result=result)
+                return {"status": "completed", **result}
         if decision_type != "tool_call":
             error = f"Invalid agent decision type: {decision_type}"
             update_task(task_id, status="failed", result={"error": error})
