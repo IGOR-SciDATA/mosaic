@@ -261,12 +261,7 @@ def _goal_requires_file_artifact(goal: str) -> bool:
         goal,
         flags=re.IGNORECASE | re.DOTALL,
     )
-    creates_markdown = re.search(
-        rf"\b(?:{creation_verbs})\b.{{0,160}}\bmarkdown\b",
-        goal,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    return bool(mentions_file or saves_named_markdown or creates_markdown)
+    return bool(mentions_file or saves_named_markdown)
 
 
 
