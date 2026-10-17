@@ -39,7 +39,13 @@ def _diagnostic_preview(raw: str, limit: int = _DIAGNOSTIC_PREVIEW_LIMIT) -> str
         r"\1=[REDACTED]",
         preview,
     )
-    return preview[:limit]
+    if len(preview) <= limit:
+        return preview
+    marker = "\\n...[middle truncated for diagnostics]...\\n"
+    available = max(0, limit - len(marker))
+    head_size = available // 2
+    tail_size = available - head_size
+    return preview[:head_size] + marker + (preview[-tail_size:] if tail_size else "")
 
 
 def _request_preview(messages: list[dict[str, str]]) -> str:
