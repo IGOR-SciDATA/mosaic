@@ -344,11 +344,20 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
     return None
 
 def _artifact_output_path(goal: str) -> str:
-    """Resolve an explicit output filename, otherwise derive one from the source."""
+    """Resolve an explicit output filename after the creation intent, else derive one."""
+    creation = re.search(
+        r"\b(?:create|crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|"
+        r"elabore|elaborar|prepare|preparar|write|save|generate|export|salve|salvar|"
+        r"escreva|escrever|gere|gerar|exporte|exportar)\b",
+        goal,
+        flags=re.IGNORECASE,
+    )
+    output_instruction = goal[creation.end():] if creation else goal
+
     named_output = re.search(
         r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como|as)\s+"
         r"(?:um|uma|a|o|the)?\s*['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.md)\b",
-        goal,
+        output_instruction,
         flags=re.IGNORECASE,
     )
     if named_output:
@@ -359,7 +368,7 @@ def _artifact_output_path(goal: str) -> str:
     explicit_after_file = re.search(
         r"\b(?:arquivo|file|documento|document)\s+(?:(?:novo|nova|new)\s+)?"
         r"['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.md)\b",
-        goal,
+        output_instruction,
         flags=re.IGNORECASE,
     )
     if explicit_after_file:
@@ -372,6 +381,7 @@ def _artifact_output_path(goal: str) -> str:
         source = Path(sources[0])
         return (source.parent / f"Resumo_{source.stem}.md").as_posix()
     return "Resumo.md"
+
 
 def _artifact_content_from_final(content: str) -> str | None:
     """Accept substantive final content, removing obvious agent narration at the end."""
