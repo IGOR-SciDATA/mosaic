@@ -898,6 +898,19 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
         ]
         if (
             prior_calls
+            and prior_calls[-1].status == "failed"
+            and prior_calls[-1].tool_name == tool_name
+            and prior_calls[-1].arguments == arguments
+        ):
+            error = (
+                f"A mesma chamada {tool_name} falhou duas vezes com argumentos idênticos. "
+                "A tarefa foi interrompida para evitar um loop; revise o erro da ferramenta e corrija a ação."
+            )
+            update_task(task_id, status="failed", result={"error": error, "iterations": iteration})
+            return {"status": "failed", "error": error, "iterations": iteration}
+
+        if (
+            prior_calls
             and prior_calls[-1].status == "completed"
             and prior_calls[-1].tool_name == tool_name
             and prior_calls[-1].arguments == arguments
