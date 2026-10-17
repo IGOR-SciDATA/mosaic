@@ -176,29 +176,21 @@ def test_agent_task_context_contains_only_current_task_tool_results(tmp_path: Pa
         project_id=project.id,
         plan={"goal": goal},
     )
+    observed_contexts = []
 
-    result = run_agent(
-        task.id,
-        lambda context: (
-            {
-                "type": "final",
-                "content": "Li somente o arquivo B.",
-            }
-            if "Conteúdo exclusivo do arquivo B." in "\n".join(
-                str(message.get("content", "")) for message in context
-            )
-            else {"type": "final", "content": "Não encontrei o arquivo."}
-        ),
-    )
+    def decide(context):
+        observed_contexts.append(context)
+        flattened = "\n".join(str(message.get("content", "")) for message in context)
+        assert [message["content"] for message in context if message.get("role") == "user"] == [goal]
+        assert "RESUMO ANTIGO QUE NÃO DEVE VAZAR" not in flattened
+        assert "Conteúdo exclusivo do arquivo B." in flattened
+        assert "Conteúdo do arquivo A." not in flattened
+        return {"type": "final", "content": "Li somente o arquivo B."}
+
+    result = run_agent(task.id, decide)
 
     assert result["status"] == "completed"
-    task_context = "\n".join(
-        str(message.get("content", "")) for message in
-        _agent_context_for_test(task.id, conversation.id, goal)
-    )
-    assert "RESUMO ANTIGO QUE NÃO DEVE VAZAR" not in task_context
-    assert "Conteúdo exclusivo do arquivo B." in task_context
-    assert "Conteúdo do arquivo A." not in task_context
+    assert len(observed_contexts) == 1
 
 
 def test_agent_does_not_complete_summary_without_reading_named_source(tmp_path: Path):
