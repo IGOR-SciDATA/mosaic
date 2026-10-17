@@ -26,6 +26,20 @@ Do not claim an operation succeeded until a ToolResult confirms it."""
 
 _MAX_DECISION_ATTEMPTS = 2
 _FINAL_PREVIEW_LIMIT = 600
+_DIAGNOSTIC_PREVIEW_LIMIT = 1000
+
+
+def _diagnostic_preview(raw: str) -> str:
+    """Keep a bounded provider-output excerpt without tagged private thinking or inline secrets."""
+    preview = re.sub(r"<think>.*?</think>", "[model thinking omitted]", raw, flags=re.IGNORECASE | re.DOTALL)
+    if re.search(r"<think>", preview, re.IGNORECASE):
+        preview = "[incomplete model thinking block omitted]"
+    preview = re.sub(
+        r"(?i)\\b(api[_-]?key|token|password|secret|authorization)\\s*[:=]\\s*[^\\s,;]+",
+        r"\\1=[REDACTED]",
+        preview,
+    )
+    return preview[:_DIAGNOSTIC_PREVIEW_LIMIT]
 
 
 def parse_agent_decision(raw: str) -> dict[str, Any]:
@@ -162,7 +176,13 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, str]]], di
                 _record_decision_event(
                     task, "decision_invalid", "A resposta do modelo não passou na validação da decisão.",
                     level="warning", status="invalid",
-                    metadata={"attempt": attempt, "error": str(exc), "response_chars": len(raw)},
+                    metadata={
+                        "model": model.model_name,
+                        "attempt": attempt,
+                        "error": str(exc),
+                        "response_chars": len(raw),
+                        "response_preview": _diagnostic_preview(raw),
+                    },
                 )
                 if attempt < _MAX_DECISION_ATTEMPTS:
                     _record_decision_event(
@@ -174,7 +194,12 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, str]]], di
                 raise
 
             decision_type = decision["type"]
-            metadata: dict[str, Any] = {"attempt": attempt, "decision_type": decision_type}
+            metadata: dict[str, Any] = {
+                "model": model.model_name,
+                "attempt": attempt,
+                "decision_type": decision_type,
+                "response_preview": _diagnostic_preview(raw),
+            }
             if decision_type == "tool_call":
                 metadata["tool"] = decision["tool"]
                 summary = f"Decisão validada: chamada da ferramenta {decision['tool']}."
