@@ -6,3 +6,5 @@ dist/
 *.pyc
 backend/data/*.db
 .env
+
+backend/data/task-logs/
