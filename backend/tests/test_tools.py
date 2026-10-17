@@ -99,6 +99,63 @@ def test_filesystem_rejects_traversal_and_symlink_escape(tmp_path: Path) -> None
         tool.execute({"operation": "read", "path": "escape.txt"}, workspace=workspace)
 
 
+def test_filesystem_schema_requires_content_for_create_and_write() -> None:
+    tool = FilesystemTool()
+    for operation in ("create", "write"):
+        with pytest.raises(ValueError, match="content"):
+            tool.validate({"operation": operation, "path": "summary.md"})
+
+
+@pytest.mark.parametrize("operation", ["read", "list", "mkdir"])
+def test_filesystem_schema_rejects_content_for_non_write_operations(operation: str) -> None:
+    tool = FilesystemTool()
+    with pytest.raises(ValueError, match="content is not allowed"):
+        tool.validate({"operation": operation, "path": "summary.md", "content": "unexpected"})
+
+
+def test_filesystem_schema_only_allows_overwrite_for_write() -> None:
+    tool = FilesystemTool()
+    with pytest.raises(ValueError, match="overwrite is only allowed"):
+        tool.validate({"operation": "create", "path": "summary.md", "content": "summary", "overwrite": True})
+
+
+def test_filesystem_read_returns_bounded_line_chunks(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    source = workspace / "Documento.md"
+    source.write_text("\n".join(f"linha {number}" for number in range(1, 101)), encoding="utf-8")
+    tool = FilesystemTool()
+
+    first = tool.execute({"operation": "read", "path": "Documento.md"}, workspace=workspace)
+    assert first["start_line"] == 1
+    assert first["end_line"] == 80
+    assert first["total_lines"] == 100
+    assert first["truncated"] is True
+    assert first["next_start_line"] == 81
+    assert "linha 80" in first["content"]
+    assert "linha 81" not in first["content"]
+
+    second = tool.execute(
+        {"operation": "read", "path": "Documento.md", "start_line": 81, "max_lines": 80},
+        workspace=workspace,
+    )
+    assert second["start_line"] == 81
+    assert second["end_line"] == 100
+    assert second["truncated"] is False
+    assert second["next_start_line"] is None
+    assert "linha 100" in second["content"]
+
+
+def test_filesystem_rejects_chunk_arguments_for_non_read_operations() -> None:
+    with pytest.raises(ValueError, match="only allowed for operation read"):
+        FilesystemTool().validate({
+            "operation": "create",
+            "path": "summary.md",
+            "content": "summary",
+            "start_line": 2,
+        })
+
+
 def test_filesystem_write_requires_explicit_overwrite(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     tool = FilesystemTool()
@@ -276,14 +333,23 @@ def test_new_work_items_cannot_start_in_terminal_or_approved_states() -> None:
 
 
 
-def test_core_policy_requires_approval_for_external_requests() -> None:
+def test_core_policy_requires_approval_for_side_effects_but_not_local_reads() -> None:
     calculator = resolve_tool_policy("calculator", {"expression": "1 + 1"})
     search = resolve_tool_policy("search", {"query": "Mosaic project"})
     fetch = resolve_tool_policy("web_fetch", {"url": "https://example.com"})
+    filesystem_read = resolve_tool_policy("filesystem", {"operation": "read", "path": "Documento.md"})
+    filesystem_list = resolve_tool_policy("filesystem", {"operation": "list", "path": "."})
+    filesystem_create = resolve_tool_policy(
+        "filesystem",
+        {"operation": "create", "path": "Resumo.md", "content": "# Resumo"},
+    )
 
     assert calculator["approval_required"] is False
     assert search["approval_required"] is True
     assert fetch["approval_required"] is True
+    assert filesystem_read["approval_required"] is False
+    assert filesystem_list["approval_required"] is False
+    assert filesystem_create["approval_required"] is True
 
 
 

@@ -10,6 +10,10 @@ class Tool(ABC):
     input_schema: dict[str, Any]
     permission_policy: dict[str, Any]
 
+    def policy_for(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Resolve the tool's policy for a validated operation."""
+        return self.permission_policy
+
     @abstractmethod
     def execute(
         self,

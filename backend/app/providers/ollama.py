@@ -6,6 +6,9 @@ from urllib import error, request
 from app.providers.base import ModelProvider
 
 
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 600
+
+
 class OllamaProvider(ModelProvider):
     _THINKING_END = "</think>"
 
@@ -19,7 +22,8 @@ class OllamaProvider(ModelProvider):
         configuration: dict[str, Any],
     ) -> str:
         payload = self._request_payload(messages, model_name, configuration, stream=False)
-        response = self._post("/api/chat", payload)
+        timeout_seconds = self._request_timeout(configuration)
+        response = self._post("/api/chat", payload, timeout_seconds=timeout_seconds)
 
         try:
             content = response["message"]["content"]
@@ -42,15 +46,12 @@ class OllamaProvider(ModelProvider):
             method="POST",
         )
 
-        # Qwen3 can include its thinking text in message.content despite think=False.
-        # Buffer that model's output until its end marker so internal text is never
-        # sent to the UI. Other Ollama models retain normal token-by-token streaming.
         inline_thinking = self._uses_inline_thinking(model_name)
         answer_started = not inline_thinking
         pending = ""
 
         try:
-            with request.urlopen(req) as response:
+            with request.urlopen(req, timeout=self._request_timeout(configuration)) as response:
                 for raw_line in response:
                     if not raw_line.strip():
                         continue
@@ -81,9 +82,6 @@ class OllamaProvider(ModelProvider):
                     if chunk.get("done"):
                         break
 
-            # Graceful fallback for responses that do not use the inline marker.
-            # This preserves compatibility, although no provider can infer a final
-            # answer from an unknown format that never separates thinking from text.
             if not answer_started and pending:
                 yield pending.strip()
         except error.HTTPError as exc:
@@ -92,20 +90,32 @@ class OllamaProvider(ModelProvider):
         except error.URLError as exc:
             raise RuntimeError(f"Could not connect to Ollama: {exc.reason}") from exc
 
+    @staticmethod
+    def _request_timeout(configuration: dict[str, Any]) -> float:
+        """Resolve a bounded per-request network timeout from model configuration."""
+        raw_timeout = configuration.get(
+            "request_timeout_seconds",
+            DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
+        try:
+            timeout = float(raw_timeout)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("request_timeout_seconds must be a number between 1 and 600") from exc
+        if not 1 <= timeout <= 600:
+            raise ValueError("request_timeout_seconds must be between 1 and 600")
+        return timeout
+
     @classmethod
     def _normalize_answer(cls, content: str, model_name: str) -> str:
         # Thinking tags are an output-format detail, not a model identity.
-        # If a provider returns tagged reasoning inline, persist only the final answer.
         if cls._THINKING_END in content:
             content = content.split(cls._THINKING_END, 1)[1]
         elif content.lstrip().startswith("<think>"):
-            # A truncated thinking block has no safe final answer to display.
             return ""
         return content.strip()
 
     @staticmethod
     def _uses_inline_thinking(model_name: str) -> bool:
-        # Keep model-specific output handling inside the Ollama adapter.
         return model_name.strip().lower().split(":", 1)[0] == "qwen3"
 
     @staticmethod
@@ -119,13 +129,8 @@ class OllamaProvider(ModelProvider):
             "model": model_name,
             "messages": messages,
             "stream": stream,
-            # Thinking-capable models (e.g. Qwen3) may emit reasoning separately
-            # from message.content. Mosaic expects a user-facing answer by default.
             "think": configuration.get("think", False),
         }
-
-        # Ollama's constrained JSON mode is opt-in so normal chat stays natural.
-        # The agent decision adapter enables it for every structured decision.
         if configuration.get("format") == "json":
             payload["format"] = "json"
 
@@ -136,10 +141,15 @@ class OllamaProvider(ModelProvider):
         }
         if options:
             payload["options"] = options
-
         return payload
 
-    def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _post(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    ) -> dict[str, Any]:
         req = request.Request(
             f"{self.base_url}{path}",
             data=json.dumps(payload).encode("utf-8"),
@@ -148,7 +158,7 @@ class OllamaProvider(ModelProvider):
         )
 
         try:
-            with request.urlopen(req) as response:
+            with request.urlopen(req, timeout=timeout_seconds) as response:
                 return json.loads(response.read().decode("utf-8"))
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")

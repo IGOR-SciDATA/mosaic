@@ -59,7 +59,8 @@ def resolve_tool_policy(tool_name: str, arguments: dict[str, Any]) -> dict[str, 
     if tool is None:
         raise ValueError(f"Unknown tool: {tool_name}")
     tool.validate(arguments)
-    policy = tool.permission_policy
+    policy_resolver = getattr(tool, "policy_for", None)
+    policy = policy_resolver(arguments) if callable(policy_resolver) else tool.permission_policy
     approval_required = policy.get("approval_required")
     if not isinstance(approval_required, bool):
         raise ValueError(f"Tool {tool_name} has no valid approval policy")
