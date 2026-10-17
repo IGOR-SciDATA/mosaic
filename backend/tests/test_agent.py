@@ -57,6 +57,13 @@ def test_agent_auto_paginates_reads_before_model_and_excludes_unrelated_history(
         assert "resposta antiga irrelevante" not in flattened
         assert "Documento_ANTIGO.md" not in flattened
         assert "linha 190" in flattened
+        # Evidence is presented before the active goal; the goal must be the final
+        # message so the model acts on the evidence instead of copying tool metadata.
+        assert context[-1] == {"role": "user", "content": goal}
+        assert context[-2]["role"] == "system"
+        assert "linha 190" in context[-2]["content"]
+        assert "ToolResult" not in context[-2]["content"]
+        assert "'operation': 'read'" not in context[-2]["content"]
         read_calls = [
             call for call in list_tool_calls(conversation.id)
             if call.task_id == task.id and call.tool_name == "filesystem"

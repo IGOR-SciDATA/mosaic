@@ -11,6 +11,14 @@ from app.providers.ollama import OllamaProvider
 from app.tools import registry
 
 
+_CONTENT_ONLY_INSTRUCTIONS = """A etapa atual é PRODUÇÃO DE CONTEÚDO, não seleção de ações.
+Retorne diretamente o conteúdo completo solicitado (texto ou Markdown) para esta etapa.
+Não retorne JSON, envelope de decisão, chamadas de ferramenta, metadados de ToolResult ou explicações sobre o que pretende fazer.
+Use as evidências dos arquivos fornecidas no contexto para executar a transformação solicitada.
+O Core, não você, salvará e verificará o arquivo na etapa seguinte.
+Comece diretamente pelo título ou pelo primeiro parágrafo do conteúdo final."""
+
+
 _DECISION_INSTRUCTIONS = """Você é o agente executor do Mosaic. Use as ferramentas nativas disponibilizadas pela API quando precisar agir.
 O Core executa as ferramentas, valida os argumentos, controla permissões e devolve os resultados. Você nunca executa ferramentas diretamente.
 
@@ -103,7 +111,7 @@ def _retry_feedback(error: ValueError, catalog: list[dict[str, Any]]) -> str:
             "A decisão anterior foi rejeitada pelo validador do Mosaic.",
             f"Erro de validação: {message}.",
             "Nenhuma ferramenta está habilitada para a subtarefa atual.",
-            "Retorne somente a resposta final com o conteúdo solicitado; não invente chamadas de ferramenta.",
+            "Retorne o conteúdo final diretamente como texto puro/Markdown. Não produza JSON nem chamadas de ferramenta.",
         ])
     feedback = [
         "A decisão anterior foi rejeitada pelo validador do Mosaic.",
@@ -225,8 +233,10 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
             and str(message.get("content", "")).strip().startswith("Mosaic allowed tools:")
             for message in context
         )
+        content_only = tools_restricted and not active_tool_catalog
         base_messages = [
             {"role": "system", "content": _DECISION_INSTRUCTIONS},
+            *([{"role": "system", "content": _CONTENT_ONLY_INSTRUCTIONS}] if content_only else []),
             *context,
         ]
         messages = list(base_messages)
@@ -257,7 +267,15 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
             native_message = None
             try:
                 generate_with_tools = getattr(provider, "generate_with_tools", None)
-                if callable(generate_with_tools) and active_tool_catalog:
+                if content_only:
+                    # This is a content-generation stage. Do not ask Ollama for JSON:
+                    # the model should return the actual artifact body, not an agent envelope.
+                    raw = provider.generate(
+                        messages=messages,
+                        model_name=model.model_name,
+                        configuration={**model.configuration, "temperature": 0, "think": False},
+                    )
+                elif callable(generate_with_tools) and active_tool_catalog:
                     native_decision = generate_with_tools(
                         messages=messages,
                         model_name=model.model_name,
@@ -291,6 +309,31 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                 status="completed", duration_ms=duration_ms,
                 metadata={"model": model.model_name, "attempt": attempt, "response_chars": len(raw)},
             )
+            if content_only:
+                content = raw.strip()
+                if not content:
+                    last_validation_error = ValueError("Content-only response requires non-empty content")
+                    _record_decision_event(
+                        task, "decision_invalid", "A etapa de conteúdo retornou uma resposta vazia.",
+                        level="warning", status="invalid",
+                        metadata={"model": model.model_name, "attempt": attempt, "error": str(last_validation_error)},
+                    )
+                    if attempt < _MAX_DECISION_ATTEMPTS:
+                        continue
+                    raise last_validation_error
+                decision = {"type": "final", "content": content}
+                _record_decision_event(
+                    task, "decision_parsed", "Conteúdo final produzido para a etapa atual.",
+                    status="valid",
+                    metadata={
+                        "model": model.model_name,
+                        "attempt": attempt,
+                        "decision_type": "final",
+                        "output_preview": content[:_FINAL_PREVIEW_LIMIT],
+                    },
+                )
+                return decision
+
             try:
                 decision = parse_agent_decision(raw)
                 if (
