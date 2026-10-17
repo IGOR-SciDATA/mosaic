@@ -82,7 +82,7 @@ def _agent_context(
                     f"{current_step.get('instruction', '')}"
                 ),
             })
-            if current_step.get("kind") in {"summarize_source", "answer_from_source", "draft_content", "create_artifact"}:
+            if current_step.get("kind") in {"summarize_source", "transform_source", "answer_from_source", "draft_content", "create_artifact", "write_artifact"}:
                 filtered.append({
                     "role": "system",
                     "content": "Mosaic allowed tools: none",
@@ -472,19 +472,30 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
         })
 
     if sources and creates_artifact:
+        updating = _goal_updates_existing_file(goal)
         steps.extend([
             {
-                "id": "summarize_source",
-                "kind": "summarize_source",
+                "id": "transform_source" if updating else "summarize_source",
+                "kind": "transform_source" if updating else "summarize_source",
                 "status": "pending",
-                "instruction": "Produce the requested document content using the complete source evidence. Do not call tools or claim the output file already exists.",
+                "instruction": (
+                    "Produce the complete updated file content using the source and the requested changes. "
+                    "Do not call tools or claim the file has already been saved."
+                    if updating else
+                    "Produce the requested document content using the complete source evidence. "
+                    "Do not call tools or claim the output file already exists."
+                ),
             },
             {
                 "id": "create_artifact",
-                "kind": "create_artifact",
+                "kind": "write_artifact" if updating else "create_artifact",
                 "path": _artifact_output_path(goal),
                 "status": "pending",
-                "instruction": "The Core will create the output file from the generated content and validate it after approval.",
+                "instruction": (
+                    "The Core will write the updated file after approval."
+                    if updating else
+                    "The Core will create the output file from the generated content and validate it after approval."
+                ),
             },
         ])
     elif sources:
@@ -804,14 +815,18 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                     "awaiting_approval",
                     path=_artifact_output_path(goal),
                 )
+                operation = _artifact_operation(goal)
+                output_arguments = {
+                    "operation": operation,
+                    "path": _artifact_output_path(goal),
+                    "content": artifact_content,
+                }
+                if operation == "write":
+                    output_arguments["overwrite"] = True
                 decision = {
                     "type": "tool_call",
                     "tool": "filesystem",
-                    "arguments": {
-                        "operation": "create",
-                        "path": _artifact_output_path(goal),
-                        "content": artifact_content,
-                    },
+                    "arguments": output_arguments,
                 }
                 decision_type = "tool_call"
             else:
