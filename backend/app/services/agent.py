@@ -402,6 +402,185 @@ def _artifact_content_from_final(content: str) -> str | None:
     return text
 
 
+def _build_task_steps(goal: str) -> list[dict[str, Any]]:
+    """Decompose common file workflows deterministically without another model call."""
+    sources = _required_source_paths(goal)
+    creates_artifact = _goal_requires_file_artifact(goal)
+    steps: list[dict[str, Any]] = []
+
+    for index, source in enumerate(sources, start=1):
+        steps.append({
+            "id": f"read_source_{index}",
+            "kind": "read_file",
+            "path": source,
+            "status": "pending",
+            "instruction": f"Read the complete source file {source}.",
+        })
+
+    if sources and creates_artifact:
+        steps.extend([
+            {
+                "id": "summarize_source",
+                "kind": "summarize_source",
+                "status": "pending",
+                "instruction": "Produce the requested document content using the complete source evidence. Do not call tools or claim the output file already exists.",
+            },
+            {
+                "id": "create_artifact",
+                "kind": "create_artifact",
+                "path": _artifact_output_path(goal),
+                "status": "pending",
+                "instruction": "The Core will create the output file from the generated content and validate it after approval.",
+            },
+        ])
+    elif sources:
+        steps.append({
+            "id": "answer_from_source",
+            "kind": "answer_from_source",
+            "status": "pending",
+            "instruction": "Answer the user's request using the complete source evidence. Do not call tools unless the Core starts a new explicit step.",
+        })
+    elif creates_artifact:
+        steps.extend([
+            {
+                "id": "draft_content",
+                "kind": "draft_content",
+                "status": "pending",
+                "instruction": "Produce the requested file content, without claiming that it has already been saved.",
+            },
+            {
+                "id": "create_artifact",
+                "kind": "create_artifact",
+                "path": _artifact_output_path(goal),
+                "status": "pending",
+                "instruction": "The Core will create the output file from the generated content and validate it after approval.",
+            },
+        ])
+    else:
+        steps.append({
+            "id": "execute_goal",
+            "kind": "execute_goal",
+            "status": "pending",
+            "instruction": "Choose the appropriate registered tool when the goal requires an action; otherwise answer directly.",
+        })
+    return steps
+
+
+def _ensure_task_plan(task_id: int) -> dict[str, Any]:
+    """Persist a small, inspectable subtask plan in the existing Task.plan JSON field."""
+    task = get_task(task_id)
+    if task is None:
+        raise ValueError("Task not found")
+    goal = str((task.plan or {}).get("goal", "")).strip()
+    plan = dict(task.plan or {})
+    if plan.get("planner_version") == "task-plan-v1" and isinstance(plan.get("steps"), list):
+        return plan
+
+    plan["goal"] = goal
+    plan["planner_version"] = "task-plan-v1"
+    plan["steps"] = _build_task_steps(goal)
+    plan["current_step"] = plan["steps"][0]["id"] if plan["steps"] else None
+    update_task(task_id, plan=plan)
+    return plan
+
+
+def _set_task_step_status(
+    task_id: int,
+    step_id: str,
+    status: str,
+    **metadata: Any,
+) -> dict[str, Any]:
+    """Persist subtask progress without adding database tables or lifecycle states."""
+    task = get_task(task_id)
+    if task is None:
+        raise ValueError("Task not found")
+    plan = dict(task.plan or {})
+    steps = plan.get("steps", [])
+    matched = False
+    for step in steps:
+        if isinstance(step, dict) and step.get("id") == step_id:
+            step["status"] = status
+            step.update(metadata)
+            matched = True
+            break
+    if not matched:
+        return plan
+    current = next(
+        (
+            step for step in steps
+            if isinstance(step, dict) and step.get("status") not in {"completed", "skipped"}
+        ),
+        None,
+    )
+    plan["current_step"] = current.get("id") if current else None
+    update_task(task_id, plan=plan)
+    return plan
+
+
+def _set_all_task_steps_completed(task_id: int) -> dict[str, Any]:
+    task = get_task(task_id)
+    if task is None:
+        raise ValueError("Task not found")
+    plan = dict(task.plan or {})
+    for step in plan.get("steps", []):
+        if isinstance(step, dict):
+            step["status"] = "completed"
+    plan["current_step"] = None
+    update_task(task_id, plan=plan)
+    return plan
+
+
+def _prepare_task_sources(
+    task_id: int,
+    conversation_id: int,
+    goal: str,
+    context: list[dict[str, Any]],
+) -> list[str]:
+    """Read explicitly requested source files through the Core before asking the model."""
+    sources = _required_source_paths(goal)
+    for index, source in enumerate(sources, start=1):
+        step_id = f"read_source_{index}"
+        missing = _verified_source_reads(task_id, conversation_id, f"leia {source}")
+        if not missing:
+            _set_task_step_status(task_id, step_id, "completed")
+            continue
+
+        _set_task_step_status(task_id, step_id, "in_progress")
+        arguments = {"operation": "read", "path": source}
+        try:
+            policy = resolve_tool_policy("filesystem", arguments)
+            if policy["approval_required"]:
+                raise ValueError("Read-only filesystem operation unexpectedly requires approval")
+            call = create_tool_call(conversation_id, "filesystem", arguments, task_id=task_id)
+            approved = approve_tool_call(call)
+            result = execute_tool_call(approved)
+            context.append(_tool_context(call.id, result))
+            if result.status == "completed":
+                _auto_paginate_read(
+                    task_id,
+                    conversation_id,
+                    context,
+                    result,
+                    native_protocol=False,
+                )
+        except Exception as exc:
+            context.append({
+                "role": "system",
+                "content": (
+                    f"Mosaic source-read failure for {source}: {type(exc).__name__}: {exc}. "
+                    "Do not summarize or claim the source was read."
+                ),
+            })
+
+        missing = _verified_source_reads(task_id, conversation_id, f"leia {source}")
+        if missing:
+            _set_task_step_status(task_id, step_id, "failed", error=f"Source could not be read completely: {source}")
+            return missing
+        _set_task_step_status(task_id, step_id, "completed")
+
+    return []
+
+
 def _tool_context(tool_call_id: int, result: ToolResult) -> dict[str, str]:
     if result.status == "completed":
         content = f"ToolResult {tool_call_id}: {result.data}"
