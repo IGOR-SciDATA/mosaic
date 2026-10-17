@@ -355,7 +355,7 @@ def test_agent_recovers_artifact_after_post_write_verification_error(tmp_path: P
     task = _task(plan={"goal": goal}, project_id=project.id)
     content = "# Resumo\n\nO documento apresenta a proposta e os objetivos do projeto.\n"
     output_path = workspace / "Resumo_Documento.md"
-    output_path.write_bytes(content.encode("utf-8"))
+    output_path.write_bytes(content.replace("\n", "\r\n").encode("utf-8"))
 
     call = create_tool_call(
         task.conversation_id,
