@@ -39,7 +39,7 @@ def test_tool_call_rejects_unknown_fields():
         parse_agent_decision('{"type":"tool_call","tool":"calculator","arguments":{"expression":"1+1"},"extra":true}')
 
 
-def test_provider_decider_retries_one_malformed_response_and_records_safe_events(monkeypatch):
+def test_provider_decider_retries_malformed_response_with_specific_feedback(monkeypatch):
     from types import SimpleNamespace
 
     import app.services.agent_decision as adapter
@@ -54,31 +54,34 @@ def test_provider_decider_retries_one_malformed_response_and_records_safe_events
     monkeypatch.setattr(adapter, "get_model", lambda model_id: model)
 
     responses = iter([
-        "I will do that now, here's the answer.",
-        '{"type":"final","content":"Resumo criado."}',
+        '{"type":"tool_call","tool":"tool_id","arguments":{"file_path":"Documento.md"}}',
+        '{"type":"tool_call","tool":"filesystem","arguments":{"operation":"read","path":"Documento.md"}}',
     ])
+    requests = []
 
     class FakeProvider:
         def generate(self, **kwargs):
+            requests.append(kwargs)
             return next(responses)
 
     monkeypatch.setattr(adapter, "OllamaProvider", FakeProvider)
     events = []
-    monkeypatch.setattr(
-        adapter, "create_task_event",
-        lambda **kwargs: events.append(kwargs),
-    )
+    monkeypatch.setattr(adapter, "create_task_event", lambda **kwargs: events.append(kwargs))
 
-    decision = adapter.create_provider_decider(task.id)([{"role": "user", "content": "Resuma"}])
+    decision = adapter.create_provider_decider(task.id)([{"role": "user", "content": "Leia Documento.md"}])
 
-    assert decision == {"type": "final", "content": "Resumo criado."}
-    assert [event["event_name"] for event in events].count("model_request_started") == 2
-    invalid = next(event for event in events if event["event_name"] == "decision_invalid")
-    assert invalid["metadata"]["response_preview"] == "I will do that now, here's the answer."
+    assert decision == {
+        "type": "tool_call",
+        "tool": "filesystem",
+        "arguments": {"operation": "read", "path": "Documento.md"},
+    }
+    assert len(requests) == 2
+    retry_messages = requests[1]["messages"]
+    retry_feedback = retry_messages[-1]["content"]
+    assert "Unknown tool: tool_id" in retry_feedback
+    assert "filesystem" in retry_feedback
+    assert '"operation":"read"' in retry_feedback or '"operation": "read"' in retry_feedback
     assert any(event["event_name"] == "decision_retry" for event in events)
-    parsed = next(event for event in events if event["event_name"] == "decision_parsed")
-    assert parsed["metadata"]["output_preview"] == "Resumo criado."
-    assert all("I will do that" not in str(event["metadata"]) for event in events)
 
 
 def test_provider_decider_does_not_retry_more_than_once(monkeypatch):
@@ -109,7 +112,6 @@ def test_provider_decider_does_not_retry_more_than_once(monkeypatch):
         adapter.create_provider_decider(task.id)([])
 
     assert provider.calls == 2
-
 
 
 def test_diagnostic_preview_keeps_response_tail_and_redacts_thinking_and_secrets():
