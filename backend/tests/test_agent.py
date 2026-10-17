@@ -165,6 +165,16 @@ def test_file_task_intent_paths_are_resolved_deterministically(goal, expected_so
     assert _artifact_output_path(goal) == expected_output
 
 
+def test_artifact_content_keeps_short_documents_and_removes_trailing_narration():
+    from app.services.agent import _artifact_content_from_final
+
+    assert _artifact_content_from_final("OK") is None
+    assert _artifact_content_from_final("# OK") == "# OK"
+    assert _artifact_content_from_final(
+        "# Resumo\n\nO projeto combina voz, IA e animação. Vamos criar um documento de escopo detalhado agora."
+    ) == "# Resumo\n\nO projeto combina voz, IA e animação."
+
+
 def test_agent_creates_explicit_subtasks_for_read_summarize_create(tmp_path: Path):
     from app.services.agent import _build_task_steps
 
