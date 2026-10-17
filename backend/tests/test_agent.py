@@ -175,6 +175,30 @@ def test_artifact_content_keeps_short_documents_and_removes_trailing_narration()
     ) == "# Resumo\n\nO projeto combina voz, IA e animação."
 
 
+def test_history_is_included_only_when_goal_requests_continuity():
+    from app.services.agent import _agent_context
+
+    raw_context = [
+        {"role": "system", "content": "Mosaic identity"},
+        {"role": "user", "content": "old unrelated request"},
+        {"role": "assistant", "content": "old unrelated answer"},
+        {"role": "user", "content": "leia B.md"},
+    ]
+
+    scoped = _agent_context(raw_context, "leia B.md", {"steps": [], "current_step": None})
+    assert "old unrelated request" not in "\n".join(message["content"] for message in scoped)
+    assert "old unrelated answer" not in "\n".join(message["content"] for message in scoped)
+
+    continuity = _agent_context(
+        raw_context,
+        "continue from the previous conversation and read B.md",
+        {"steps": [], "current_step": None},
+    )
+    flattened = "\n".join(message["content"] for message in continuity)
+    assert "old unrelated request" in flattened
+    assert "old unrelated answer" in flattened
+
+
 def test_agent_creates_explicit_subtasks_for_read_summarize_create(tmp_path: Path):
     from app.services.agent import _build_task_steps
 
