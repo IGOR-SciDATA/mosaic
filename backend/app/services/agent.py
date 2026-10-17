@@ -354,14 +354,14 @@ def _verified_source_reads(task_id: int, conversation_id: int, goal: str) -> lis
 
 
 def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> dict[str, Any] | None:
-    """Verify that the exact expected output artifact was created by this task."""
+    """Verify an artifact from a successful result or reconcile a known post-write error."""
     markdown_requested = bool(re.search(
-        r"\bmarkdown\b|\b(?:new|novo|nova)\s+(?:file|arquivo|document|documento)\s+\.md\b",
+        r"\\bmarkdown\\b|\\b(?:new|novo|nova)\\s+(?:file|arquivo|document|documento)\\s+\\.md\\b",
         goal,
         flags=re.IGNORECASE,
     ))
     new_file_requested = bool(re.search(
-        r"\b(?:new|novo|nova)\s+(?:file|arquivo|documento)\b",
+        r"\\b(?:new|novo|nova)\\s+(?:file|arquivo|documento)\\b",
         goal,
         flags=re.IGNORECASE,
     ))
@@ -371,35 +371,64 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
         if call.task_id == task_id and call.tool_name == "filesystem"
     ]
     for call in reversed(calls):
-        if call.arguments.get("operation") not in {"create", "write"}:
+        operation = call.arguments.get("operation")
+        if operation not in {"create", "write"}:
             continue
+        relative_path = call.arguments.get("path")
+        if not isinstance(relative_path, str) or not relative_path.strip():
+            continue
+        normalized_path = Path(relative_path).as_posix().casefold()
+        if normalized_path != expected_path:
+            continue
+        if markdown_requested and Path(relative_path).suffix.lower() != ".md":
+            continue
+
+        try:
+            root = resolve_tool_workspace(call)
+            candidate = (root / relative_path).resolve(strict=True)
+            candidate.relative_to(root)
+            if not candidate.is_file() or candidate.stat().st_size <= 0:
+                continue
+            actual_bytes = candidate.read_bytes()
+        except (OSError, RuntimeError, ValueError):
+            continue
+
+        expected_content = call.arguments.get("content")
+        content_matches = (
+            isinstance(expected_content, str)
+            and actual_bytes == expected_content.encode("utf-8")
+        )
         for result in reversed(list_tool_results(call.id)):
-            if result.status != "completed" or not isinstance(result.data, dict):
-                continue
-            data = result.data
-            relative_path = data.get("path")
-            if not isinstance(relative_path, str) or not relative_path.strip():
-                continue
-            normalized_path = Path(relative_path).as_posix().casefold()
-            if normalized_path != expected_path:
-                continue
-            if markdown_requested and Path(relative_path).suffix.lower() != ".md":
-                continue
-            if (new_file_requested or call.arguments.get("operation") == "create") and data.get("created") is not True:
-                continue
-            try:
-                root = resolve_tool_workspace(call)
-                candidate = (root / relative_path).resolve(strict=True)
-                candidate.relative_to(root)
-                if not candidate.is_file() or candidate.stat().st_size <= 0:
+            if result.status == "completed" and isinstance(result.data, dict):
+                data = result.data
+                result_path = data.get("path")
+                if not isinstance(result_path, str):
                     continue
-            except (OSError, RuntimeError, ValueError):
-                continue
-            return {
-                "path": candidate.relative_to(root).as_posix(),
-                "bytes": candidate.stat().st_size,
-                "operation": data.get("operation"),
-            }
+                if Path(result_path).as_posix().casefold() != expected_path:
+                    continue
+                if (new_file_requested or operation == "create") and data.get("created") is not True:
+                    continue
+                return {
+                    "path": candidate.relative_to(root).as_posix(),
+                    "bytes": len(actual_bytes),
+                    "operation": data.get("operation", operation),
+                }
+
+            # A write may have taken effect before a later verification step raised.
+            # Recover only this known ambiguous error, and only if the destination
+            # bytes exactly match the content persisted in the original ToolCall.
+            if (
+                result.status == "failed"
+                and isinstance(result.error, str)
+                and "Written file could not be verified" in result.error
+                and content_matches
+            ):
+                return {
+                    "path": candidate.relative_to(root).as_posix(),
+                    "bytes": len(actual_bytes),
+                    "operation": operation,
+                    "recovered_after_verification_error": True,
+                }
     return None
 
 def _artifact_output_path(goal: str) -> str:
