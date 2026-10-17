@@ -6,7 +6,7 @@ from urllib import error, request
 from app.providers.base import ModelProvider
 
 
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 120
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 600
 
 
 class OllamaProvider(ModelProvider):
