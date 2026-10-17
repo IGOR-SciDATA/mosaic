@@ -356,12 +356,12 @@ def _verified_source_reads(task_id: int, conversation_id: int, goal: str) -> lis
 def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> dict[str, Any] | None:
     """Verify an artifact from a successful result or reconcile a known post-write error."""
     markdown_requested = bool(re.search(
-        r"\\bmarkdown\\b|\\b(?:new|novo|nova)\\s+(?:file|arquivo|document|documento)\\s+\\.md\\b",
+        r"\bmarkdown\b|\b(?:new|novo|nova)\s+(?:file|arquivo|document|documento)\s+\.md\b",
         goal,
         flags=re.IGNORECASE,
     ))
     new_file_requested = bool(re.search(
-        r"\\b(?:new|novo|nova)\\s+(?:file|arquivo|documento)\\b",
+        r"\b(?:new|novo|nova)\s+(?:file|arquivo|documento)\b",
         goal,
         flags=re.IGNORECASE,
     ))
