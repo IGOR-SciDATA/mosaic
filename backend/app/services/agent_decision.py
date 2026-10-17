@@ -191,7 +191,8 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, str]]], di
         base_messages = [
             {"role": "system", "content": _DECISION_INSTRUCTIONS},
             *context,
-        ]        messages = list(base_messages)
+        ]
+        messages = list(base_messages)
         last_validation_error: ValueError | None = None
         for attempt in range(1, _MAX_DECISION_ATTEMPTS + 1):
             if attempt > 1 and last_validation_error is not None:
