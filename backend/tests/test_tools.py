@@ -123,7 +123,7 @@ def test_filesystem_read_returns_bounded_line_chunks(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     source = workspace / "Documento.md"
-    source.write_text("\\n".join(f"linha {number}" for number in range(1, 101)), encoding="utf-8")
+    source.write_text("\n".join(f"linha {number}" for number in range(1, 101)), encoding="utf-8")
     tool = FilesystemTool()
 
     first = tool.execute({"operation": "read", "path": "Documento.md"}, workspace=workspace)
