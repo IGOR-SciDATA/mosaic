@@ -24,6 +24,39 @@ def _goal_requires_file_artifact(goal: str) -> bool:
     ))
 
 
+def _required_source_paths(goal: str) -> list[str]:
+    """Extract an explicitly named source file following a read/analyze instruction."""
+    match = re.search(
+        r"\\b(?:read|open|inspect|analy[sz]e|summari[sz]e|leia|ler|abra|analise|analisa|resuma|resumir)\\b"
+        r".{0,200}?([A-Za-z0-9_./-]+\\.[A-Za-z0-9_-]+)",
+        goal,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return [match.group(1)] if match else []
+
+
+def _verified_source_reads(task_id: int, conversation_id: int, goal: str) -> list[str]:
+    """Return named sources only when a successful filesystem read confirms their content."""
+    required = _required_source_paths(goal)
+    if not required:
+        return []
+    calls = [
+        call for call in list_tool_calls(conversation_id)
+        if call.task_id == task_id and call.tool_name == "filesystem"
+        and call.arguments.get("operation") == "read"
+    ]
+    verified = set()
+    for call in calls:
+        for result in list_tool_results(call.id):
+            if result.status != "completed" or not isinstance(result.data, dict):
+                continue
+            data = result.data
+            path = data.get("path")
+            if isinstance(path, str) and isinstance(data.get("content"), str) and data["content"].strip():
+                verified.add(Path(path).as_posix().casefold())
+    return [path for path in required if Path(path).as_posix().casefold() not in verified]
+
+
 def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> dict[str, Any] | None:
     """Return metadata only when a successful filesystem result points to a real non-empty file."""
     markdown_requested = bool(re.search(
@@ -130,6 +163,19 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, str]]], dict[str, A
         if decision_type == "final":
             goal = str((current.plan or {}).get("goal", ""))
             if _goal_requires_file_artifact(goal):
+                missing_sources = _verified_source_reads(task_id, current.conversation_id, goal)
+                if missing_sources:
+                    context.append({
+                        "role": "system",
+                        "content": (
+                            "Mosaic completion guard: a tarefa pede análise/leitura de arquivo(s), mas o Core não "
+                            "encontrou ToolResult de leitura bem-sucedida com conteúdo para: "
+                            + ", ".join(missing_sources)
+                            + ". Leia a fonte com filesystem operation=read antes de produzir o resumo. "
+                            "Não use conhecimento prévio como substituto do documento."
+                        ),
+                    })
+                    continue
                 artifact = _verified_file_artifact(task_id, current.conversation_id, goal)
                 if artifact is None:
                     context.append({
