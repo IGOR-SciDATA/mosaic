@@ -104,6 +104,16 @@ def write_task_execution_log(task_id: int) -> str | None:
                 "results": results,
             })
 
+    model_requests = [{
+        "event_id": event.id,
+        "timestamp": event.timestamp,
+        "model": (event.metadata or {}).get("model"),
+        "attempt": (event.metadata or {}).get("attempt"),
+        "message_count": (event.metadata or {}).get("message_count"),
+        "message_roles": (event.metadata or {}).get("message_roles"),
+        "request_preview": _safe_text((event.metadata or {}).get("request_preview", "")),
+    } for event in events if event.component == "model" and event.event_name == "model_request_started"]
+
     model_responses = []
     for event in events:
         if event.component != "model":
@@ -140,6 +150,7 @@ def write_task_execution_log(task_id: int) -> str | None:
             "plan": _bounded_value(task.plan, 5000),
             "result": _bounded_value(task.result, 5000),
         },
+        "model_requests": model_requests,
         "model_responses": model_responses,
         "tool_calls": tool_calls,
         "events": [{
@@ -168,12 +179,14 @@ def write_task_execution_log(task_id: int) -> str | None:
     if len(encoded) > _MAX_REPORT_CHARS:
         # Keep the newest diagnostic evidence when a task produces excessive output.
         report["events"] = report["events"][-100:]
+        report["model_requests"] = report["model_requests"][-50:]
         report["model_responses"] = report["model_responses"][-50:]
         report["tool_calls"] = report["tool_calls"][-30:]
         report["truncated"]["report_size_guard"] = True
         encoded = json.dumps(report, ensure_ascii=False, indent=2, default=str)
     if len(encoded) > _MAX_REPORT_CHARS:
         report["events"] = report["events"][-50:]
+        report["model_requests"] = report["model_requests"][-20:]
         report["model_responses"] = report["model_responses"][-20:]
         report["tool_calls"] = report["tool_calls"][-10:]
         encoded = json.dumps(report, ensure_ascii=False, indent=2, default=str)
