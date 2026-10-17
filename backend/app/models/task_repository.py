@@ -211,6 +211,39 @@ def update_task(
             status=new_status, metadata={"previous_status": current.status, "status": new_status},
             level="error" if new_status == "failed" else "warning" if new_status == "cancelled" else "info",
         )
+
+        if new_status in {"completed", "failed", "cancelled"}:
+            # Diagnostics are best-effort and must never reverse or break a Task transition.
+            try:
+                from app.services.task_execution_log import write_task_execution_log
+
+                log_path = write_task_execution_log(task_id)
+                if log_path:
+                    create_task_event(
+                        task_id=task_id,
+                        conversation_id=updated.conversation_id if updated else current.conversation_id,
+                        project_id=updated.project_id if updated else current.project_id,
+                        component="diagnostics",
+                        event_name="task.execution_log_written",
+                        message="Relatório de diagnóstico da execução salvo.",
+                        status="completed",
+                        metadata={"path": log_path},
+                    )
+            except Exception as exc:
+                try:
+                    create_task_event(
+                        task_id=task_id,
+                        conversation_id=updated.conversation_id if updated else current.conversation_id,
+                        project_id=updated.project_id if updated else current.project_id,
+                        component="diagnostics",
+                        event_name="task.execution_log_failed",
+                        message="Não foi possível salvar o relatório de diagnóstico.",
+                        level="warning",
+                        status="failed",
+                        metadata={"error_type": type(exc).__name__},
+                    )
+                except Exception:
+                    pass
     return updated
 
 
