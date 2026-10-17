@@ -281,7 +281,7 @@ def _required_source_paths(goal: str) -> list[str]:
 
     clause = match.group(1)
     clause = re.split(
-        r"\b(?:and|e)\s+(?:create|crie|criar|faça|faca|fazer|produza|produzir|"
+        r"\b(?:(?:and|e)\s+)?(?:(?:then|depois)\s+)?(?:create|crie|criar|faça|faca|fazer|produza|produzir|"
         r"write|save|generate|export|salve|salvar|escreva|escrever|gere|gerar|"
         r"exporte|exportar|monte|montar|elabore|elaborar|prepare|preparar|"
         r"update|edit|modify|replace|overwrite|atualize|atualizar|edite|editar|"
