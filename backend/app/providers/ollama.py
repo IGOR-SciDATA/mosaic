@@ -17,7 +17,7 @@ class OllamaProvider(ModelProvider):
 
     def generate(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         model_name: str,
         configuration: dict[str, Any],
     ) -> str:
@@ -88,7 +88,7 @@ class OllamaProvider(ModelProvider):
 
     def stream(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         model_name: str,
         configuration: dict[str, Any],
     ) -> Iterable[str]:
@@ -174,7 +174,7 @@ class OllamaProvider(ModelProvider):
 
     @staticmethod
     def _request_payload(
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         model_name: str,
         configuration: dict[str, Any],
         stream: bool,
