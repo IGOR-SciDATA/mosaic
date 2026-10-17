@@ -55,7 +55,7 @@ def test_ollama_stream_yields_content_chunks(monkeypatch) -> None:
     )
 
     provider = OllamaProvider("http://ollama.test")
-    assert list(provider.stream([{"role": "user", "content": "Olá"}], "qwen3:3b", {})) == ["Ol", "á"]
+    assert list(provider.stream([{"role": "user", "content": "Olá"}], "llama3:8b", {})) == ["Ol", "á"]
 
 
 def test_ollama_stream_handles_empty_content_chunks(monkeypatch) -> None:
