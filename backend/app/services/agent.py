@@ -3,7 +3,7 @@ from typing import Any
 
 from app.context.manager import build_context
 from app.models.task_repository import get_task, update_task
-from app.models.tool_call_repository import create_tool_call
+from app.models.tool_call_repository import create_tool_call, list_tool_calls
 from app.models.tool_result import ToolResult
 from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_policy
 
@@ -86,6 +86,29 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, str]]], dict[str, A
             error = f"Tool request rejected: {type(exc).__name__}: {exc}"
             update_task(task_id, status="failed", result={"error": error})
             return {"status": "failed", "error": error, "iterations": iteration}
+
+        # Guard against a model loop that proposes the same successful operation
+        # twice in a row. The check uses persisted ToolCalls so it also works after
+        # approval/resume, while allowing the same operation after an intervening step.
+        prior_calls = [
+            item for item in list_tool_calls(task.conversation_id)
+            if item.task_id == task_id
+        ]
+        if (
+            prior_calls
+            and prior_calls[-1].status == "completed"
+            and prior_calls[-1].tool_name == tool_name
+            and prior_calls[-1].arguments == arguments
+        ):
+            context.append({
+                "role": "system",
+                "content": (
+                    "Mosaic execution guard: this exact operation just completed successfully. "
+                    "Do not repeat it immediately. Use the existing tool observation to continue "
+                    "the original goal, choose a different next step, or explain a concrete blocker."
+                ),
+            })
+            continue
 
         call = create_tool_call(task.conversation_id, tool_name, arguments, task_id=task_id)
         try:
