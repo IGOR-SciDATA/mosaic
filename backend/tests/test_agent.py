@@ -4,7 +4,7 @@ from app.db.database import init_db
 from app.models.conversation_repository import create_conversation
 from app.models.repository import create_model
 from app.models.task_repository import create_task, get_task, update_task
-from app.models.tool_call_repository import get_tool_call
+from app.models.tool_call_repository import get_tool_call, list_tool_calls
 from app.models.tool_result_repository import list_tool_results
 from app.services.agent import run_agent
 
@@ -39,7 +39,7 @@ def test_agent_passes_tool_observation_to_next_decision():
         observed.append(list(context))
         if len(observed) == 1:
             return {"type": "tool_call", "tool": "calculator", "arguments": {"expression": "7 * 6"}}
-        assert any(message["role"] == "tool" and "42" in message["content"] for message in context)
+        assert any(message["role"] == "system" and "42" in message["content"] for message in context)
         return {"type": "final", "content": "42"}
     result = run_agent(task.id, decide)
     assert result["status"] == "completed"
@@ -72,3 +72,16 @@ def test_agent_can_be_cancelled_before_tool_execution():
     result = run_agent(task.id, decide)
     assert result["status"] == "cancelled"
     assert calls == 1
+
+
+def test_agent_blocks_consecutive_duplicate_successful_tool_call():
+    task = _task()
+    decisions = iter([
+        {"type": "tool_call", "tool": "calculator", "arguments": {"expression": "7 * 6"}},
+        {"type": "tool_call", "tool": "calculator", "arguments": {"expression": "7 * 6"}},
+        {"type": "final", "content": "O resultado é 42."},
+    ])
+    result = run_agent(task.id, lambda context: next(decisions))
+    calls = [call for call in list_tool_calls(task.conversation_id) if call.task_id == task.id]
+    assert result["status"] == "completed"
+    assert len(calls) == 1

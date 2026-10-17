@@ -124,6 +124,11 @@ class OllamaProvider(ModelProvider):
             "think": configuration.get("think", False),
         }
 
+        # Ollama's constrained JSON mode is opt-in so normal chat stays natural.
+        # The agent decision adapter enables it for every structured decision.
+        if configuration.get("format") == "json":
+            payload["format"] = "json"
+
         options = {
             key: value
             for key, value in configuration.items()

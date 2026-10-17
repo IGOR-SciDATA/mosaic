@@ -36,6 +36,13 @@ def test_generate_extracts_qwen3_answer_after_thinking_marker():
     )
 
     assert result == "teste"
+    payload = provider._request_payload(
+        [{"role": "user", "content": "Responda teste"}],
+        "qwen3:4b",
+        {"format": "json"},
+        stream=False,
+    )
+    assert payload["format"] == "json"
 
 
 def test_stream_suppresses_qwen3_inline_thinking_and_handles_split_marker():
