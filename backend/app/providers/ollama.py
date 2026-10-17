@@ -32,6 +32,56 @@ class OllamaProvider(ModelProvider):
 
         return self._normalize_answer(content, model_name)
 
+    def generate_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        model_name: str,
+        configuration: dict[str, Any],
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Use Ollama's native tool-call protocol instead of asking the model to invent JSON envelopes."""
+        tool_configuration = {key: value for key, value in configuration.items() if key != "format"}
+        payload = self._request_payload(messages, model_name, tool_configuration, stream=False)
+        payload["tools"] = tools
+        response = self._post(
+            "/api/chat", payload,
+            timeout_seconds=self._request_timeout(configuration),
+        )
+        message = response.get("message")
+        if not isinstance(message, dict):
+            raise RuntimeError("Invalid Ollama tool-call response: missing message")
+
+        calls = message.get("tool_calls") or []
+        if calls:
+            if not isinstance(calls, list) or len(calls) != 1:
+                raise ValueError("Ollama must return exactly one tool call per agent turn")
+            function = calls[0].get("function", {}) if isinstance(calls[0], dict) else {}
+            name = function.get("name") if isinstance(function, dict) else None
+            arguments = function.get("arguments", {}) if isinstance(function, dict) else None
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("Ollama returned invalid JSON tool arguments") from exc
+            if not isinstance(name, str) or not name or not isinstance(arguments, dict):
+                raise ValueError("Ollama returned an invalid native tool call")
+            assistant_message = {
+                key: message[key]
+                for key in ("role", "content", "tool_calls")
+                if key in message
+            }
+            return {
+                "type": "tool_call",
+                "tool": name,
+                "arguments": arguments,
+                "_native_message": assistant_message,
+            }
+
+        content = self._normalize_answer(str(message.get("content", "")), model_name)
+        if not content:
+            raise ValueError("Ollama returned neither a tool call nor final content")
+        return {"type": "final", "content": content}
+
     def stream(
         self,
         messages: list[dict[str, str]],
