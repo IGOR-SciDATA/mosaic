@@ -425,7 +425,7 @@ def _artifact_output_path(goal: str) -> str:
                 return candidate.as_posix()
 
     named_output = re.search(
-        r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como|as|to|para|em)\s+"
+        r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como|as|to)\s+"
         r"(?:um|uma|a|o|the)?\s*['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.md)\b",
         output_instruction,
         flags=re.IGNORECASE,
