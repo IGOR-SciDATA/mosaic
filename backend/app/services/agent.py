@@ -17,8 +17,8 @@ TOOL_OBSERVATION_MAX_CHARS = 12_000
 def _goal_requires_file_artifact(goal: str) -> bool:
     """Detect explicit file-creation requests that require a verified artifact."""
     return bool(re.search(
-        r"\\b(?:create|save|write|generate|export|crie|criar|salve|salvar|escreva|escrever|gere|gerar|exporte|exportar)\\b"
-        r".{0,120}\\b(?:file|document|arquivo|documento)\\b",
+        r"\b(?:create|save|write|generate|export|crie|criar|salve|salvar|escreva|escrever|gere|gerar|exporte|exportar)\b"
+        r".{0,120}\b(?:file|document|arquivo|documento)\b",
         goal,
         flags=re.IGNORECASE | re.DOTALL,
     ))
@@ -26,9 +26,9 @@ def _goal_requires_file_artifact(goal: str) -> bool:
 
 def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> dict[str, Any] | None:
     """Return metadata only when a successful filesystem result points to a real non-empty file."""
-    markdown_requested = bool(re.search(r"\\b(?:markdown|\\.md)\\b", goal, flags=re.IGNORECASE))
+    markdown_requested = bool(re.search(r"\b(?:markdown|\.md)\b", goal, flags=re.IGNORECASE))
     new_file_requested = bool(re.search(
-        r"\\b(?:new|novo|nova)\\s+(?:file|arquivo|documento)\\b",
+        r"\b(?:new|novo|nova)\s+(?:file|arquivo|documento)\b",
         goal,
         flags=re.IGNORECASE,
     ))
@@ -72,7 +72,7 @@ def _tool_context(tool_call_id: int, result: ToolResult) -> dict[str, str]:
     else:
         content = f"ToolResult {tool_call_id} failed: {result.error}"
     if len(content) > TOOL_OBSERVATION_MAX_CHARS:
-        content = content[:TOOL_OBSERVATION_MAX_CHARS] + "\\n[observação truncada pelo Core; não trate o conteúdo parcial como documento completo]"
+        content = content[:TOOL_OBSERVATION_MAX_CHARS] + "\n[observação truncada pelo Core; não trate o conteúdo parcial como documento completo]"
     # Agent decisions use a JSON envelope rather than native provider tool_calls.
     # Send outcomes as explicit observations, not orphaned role="tool" messages.
     return {
