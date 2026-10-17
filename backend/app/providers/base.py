@@ -7,7 +7,7 @@ class ModelProvider(ABC):
     @abstractmethod
     def generate(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         model_name: str,
         configuration: dict[str, Any],
     ) -> str:
@@ -16,7 +16,7 @@ class ModelProvider(ABC):
     @abstractmethod
     def stream(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         model_name: str,
         configuration: dict[str, Any],
     ) -> Iterable[str]:
