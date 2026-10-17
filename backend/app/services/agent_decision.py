@@ -71,14 +71,44 @@ def _tool_catalog() -> list[dict[str, Any]]:
     return catalog
 
 
+def _allowed_tool_catalog(
+    context: list[dict[str, Any]],
+    catalog: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Honor the Core's per-subtask tool allowlist; absent means normal agent mode."""
+    marker = next(
+        (
+            str(message.get("content", "")).strip()
+            for message in context
+            if message.get("role") == "system"
+            and str(message.get("content", "")).strip().startswith("Mosaic allowed tools:")
+        ),
+        None,
+    )
+    if marker is None:
+        return catalog
+    raw_names = marker.split(":", 1)[1].strip()
+    if raw_names.casefold() == "none" or not raw_names:
+        return []
+    names = {name.strip() for name in raw_names.split(",") if name.strip()}
+    return [item for item in catalog if item["name"] in names]
+
+
 def _retry_feedback(error: ValueError, catalog: list[dict[str, Any]]) -> str:
-    """Give one bounded, concrete correction based on the validation error."""
+    """Give one bounded, concrete correction based on the active tool allowlist."""
     message = str(error)
     available = ", ".join(item["name"] for item in catalog)
+    if not catalog:
+        return "\n".join([
+            "A decisão anterior foi rejeitada pelo validador do Mosaic.",
+            f"Erro de validação: {message}.",
+            "Nenhuma ferramenta está habilitada para a subtarefa atual.",
+            "Retorne somente a resposta final com o conteúdo solicitado; não invente chamadas de ferramenta.",
+        ])
     feedback = [
         "A decisão anterior foi rejeitada pelo validador do Mosaic.",
         f"Erro de validação: {message}.",
-        f"Nomes de ferramentas permitidos: {available}.",
+        f"Nomes de ferramentas permitidos nesta subtarefa: {available}.",
         "Corrija a decisão usando exatamente o nome e o schema de uma ferramenta registrada.",
         "Para operações de arquivo, use filesystem com arguments contendo operation e path; não use file_path nem invente aliases.",
         "Não repita a mesma resposta inválida. Retorne somente um objeto JSON no envelope exigido.",
@@ -90,7 +120,7 @@ def _retry_feedback(error: ValueError, catalog: list[dict[str, Any]]) -> str:
         )
     elif "Unknown tool:" in message:
         feedback.append(
-            'O nome de ferramenta não registrado deve ser substituído pelo nome exato do catálogo; para arquivos, use "filesystem".'
+            "O nome de ferramenta não registrado deve ser substituído pelo nome exato do catálogo ativo."
         )
     elif "argument" in message.lower() or "required" in message.lower() or "schema" in message.lower():
         filesystem = next((item for item in catalog if item["name"] == "filesystem"), None)
@@ -174,20 +204,27 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
         raise ValueError(f"Unsupported model provider: {model.provider}")
 
     tool_catalog = _tool_catalog()
-    native_tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": item["name"],
-                "description": item["description"],
-                "parameters": item["input_schema"],
-            },
-        }
-        for item in tool_catalog
-    ]
     provider = OllamaProvider()
 
     def decide(context: list[dict[str, Any]]) -> dict[str, Any]:
+        active_tool_catalog = _allowed_tool_catalog(context, tool_catalog)
+        native_tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": item["name"],
+                    "description": item["description"],
+                    "parameters": item["input_schema"],
+                },
+            }
+            for item in active_tool_catalog
+        ]
+        allowed_names = {item["name"] for item in active_tool_catalog}
+        tools_restricted = any(
+            message.get("role") == "system"
+            and str(message.get("content", "")).strip().startswith("Mosaic allowed tools:")
+            for message in context
+        )
         base_messages = [
             {"role": "system", "content": _DECISION_INSTRUCTIONS},
             *context,
@@ -200,7 +237,7 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                     *base_messages,
                     {
                         "role": "system",
-                        "content": _retry_feedback(last_validation_error, tool_catalog),
+                        "content": _retry_feedback(last_validation_error, active_tool_catalog),
                     },
                 ]
             started = time.monotonic()
@@ -254,6 +291,14 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
             )
             try:
                 decision = parse_agent_decision(raw)
+                if (
+                    tools_restricted
+                    and decision["type"] == "tool_call"
+                    and decision["tool"] not in allowed_names
+                ):
+                    raise ValueError(
+                        f"Tool {decision['tool']} is not allowed for the current task subtask"
+                    )
                 if native_message is not None and decision["type"] == "tool_call":
                     decision["_native_message"] = native_message
             except ValueError as exc:
