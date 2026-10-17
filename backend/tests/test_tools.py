@@ -333,14 +333,23 @@ def test_new_work_items_cannot_start_in_terminal_or_approved_states() -> None:
 
 
 
-def test_core_policy_requires_approval_for_external_requests() -> None:
+def test_core_policy_requires_approval_for_side_effects_but_not_local_reads() -> None:
     calculator = resolve_tool_policy("calculator", {"expression": "1 + 1"})
     search = resolve_tool_policy("search", {"query": "Mosaic project"})
     fetch = resolve_tool_policy("web_fetch", {"url": "https://example.com"})
+    filesystem_read = resolve_tool_policy("filesystem", {"operation": "read", "path": "Documento.md"})
+    filesystem_list = resolve_tool_policy("filesystem", {"operation": "list", "path": "."})
+    filesystem_create = resolve_tool_policy(
+        "filesystem",
+        {"operation": "create", "path": "Resumo.md", "content": "# Resumo"},
+    )
 
     assert calculator["approval_required"] is False
     assert search["approval_required"] is True
     assert fetch["approval_required"] is True
+    assert filesystem_read["approval_required"] is False
+    assert filesystem_list["approval_required"] is False
+    assert filesystem_create["approval_required"] is True
 
 
 
