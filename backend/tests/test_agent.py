@@ -209,6 +209,21 @@ def test_agent_task_context_contains_only_current_task_tool_results(tmp_path: Pa
     old_goal = "leia A.md e faça um resumo antigo"
     create_message(conversation.id, "user", old_goal)
     create_message(conversation.id, "assistant", "RESUMO ANTIGO QUE NÃO DEVE VAZAR")
+    old_task = create_task(
+        type="generic",
+        mode="agent",
+        conversation_id=conversation.id,
+        project_id=project.id,
+        plan={"goal": old_goal},
+    )
+    old_read = create_tool_call(
+        conversation.id,
+        "filesystem",
+        {"operation": "read", "path": "A.md"},
+        task_id=old_task.id,
+    )
+    assert execute_tool_call(approve_tool_call(old_read)).status == "completed"
+
     goal = "leia B.md"
     create_message(conversation.id, "user", goal)
     task = create_task(
