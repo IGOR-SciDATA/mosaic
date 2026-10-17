@@ -48,7 +48,7 @@ def test_ollama_generate_sends_model_messages_and_configuration(monkeypatch) -> 
 
 
 def test_ollama_stream_yields_content_chunks(monkeypatch) -> None:
-    body = b'{"message":{"content":"Ol"}}\n{"message":{"content":"á"}}\n{"done":true}\n'
+    body = b'{"message":{"content":"Ol"}}\n{"message":{"content":"\\u00e1"}}\n{"done":true}\n'
     monkeypatch.setattr(
         "app.providers.ollama.request.urlopen",
         lambda request: FakeResponse(body),
