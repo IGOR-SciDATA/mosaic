@@ -88,6 +88,54 @@ def test_agent_does_not_complete_file_creation_goal_without_verified_artifact(go
     assert get_task(task.id).status == "failed"
 
 
+def test_agent_turns_final_summary_into_approved_artifact_creation(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Deterministic artifact creation", str(workspace))
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "Documento.md").write_text(
+        "# Documento\n\nConteúdo de origem para resumir.\n",
+        encoding="utf-8",
+    )
+    task = _task(
+        plan={"goal": "leia Documento.md e faça um novo arquivo .md com um resumo"},
+        project_id=project.id,
+    )
+    source_read = create_tool_call(
+        task.conversation_id,
+        "filesystem",
+        {"operation": "read", "path": "Documento.md"},
+        task_id=task.id,
+    )
+    assert execute_tool_call(approve_tool_call(source_read)).status == "completed"
+
+    summary = (
+        "# Resumo do documento\n\n"
+        "O documento descreve a proposta, seus objetivos e os passos iniciais para validar a solução. "
+        "A implementação deverá ser modular, com foco em entregar um protótipo funcional.\n\n"
+        "Para criar um documento Markdown baseado nesse texto, vou começar com o título e a estrutura."
+    )
+    result = run_agent(task.id, lambda context: {"type": "final", "content": summary})
+
+    assert result["status"] == "awaiting_approval"
+    assert get_task(task.id).status == "awaiting_approval"
+    calls = [call for call in list_tool_calls(task.conversation_id) if call.task_id == task.id]
+    create_call = next(
+        call for call in calls
+        if call.tool_name == "filesystem" and call.arguments.get("operation") == "create"
+    )
+    assert create_call.arguments["path"] == "Resumo_Documento.md"
+    assert "Para criar um documento" not in create_call.arguments["content"]
+    assert create_call.arguments["content"].startswith("# Resumo do documento")
+
+    assert execute_tool_call(approve_tool_call(create_call)).status == "completed"
+    update_task(task.id, status="executing")
+    completed = run_agent(task.id, lambda context: {"type": "final", "content": summary})
+
+    assert completed["status"] == "completed"
+    assert completed["artifact"]["path"] == "Resumo_Documento.md"
+    assert (workspace / "Resumo_Documento.md").is_file()
+
+
 def test_agent_does_not_complete_summary_without_reading_named_source(tmp_path: Path):
     workspace = tmp_path / "workspace"
     project = create_project("Source validation", str(workspace))
