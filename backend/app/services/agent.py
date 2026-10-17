@@ -400,9 +400,9 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
                 actual_text = actual_bytes.decode("utf-8")
             except UnicodeDecodeError:
                 actual_text = None
-            expected_text = expected_content.replace("\\r\\n", "\\n").replace("\\r", "\\n")
+            expected_text = expected_content.replace("\r\n", "\n").replace("\r", "\n")
             normalized_actual = (
-                actual_text.replace("\\r\\n", "\\n").replace("\\r", "\\n")
+                actual_text.replace("\r\n", "\n").replace("\r", "\n")
                 if actual_text is not None else None
             )
             # Legacy Windows text-mode writes may differ only by CRLF translation.
