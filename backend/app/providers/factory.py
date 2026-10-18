@@ -9,26 +9,27 @@ from typing import Any
 
 from app.providers.base import ModelProvider
 from app.providers.ollama import OllamaProvider
+from app.providers.openai import OpenAIProvider
 
 ProviderFactory = Callable[[dict[str, Any]], ModelProvider]
 
 
 def _create_ollama(_configuration: dict[str, Any]) -> ModelProvider:
-    # Keep provider endpoint configuration out of generic model settings until a
-    # dedicated, validated connection-settings contract is approved.
     return OllamaProvider()
+
+
+def _create_openai(_configuration: dict[str, Any]) -> ModelProvider:
+    return OpenAIProvider()
 
 
 _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
     "ollama": _create_ollama,
+    "openai": _create_openai,
 }
 
 
 def register_provider(name: str, factory: ProviderFactory) -> None:
-    """Register a provider implementation for application startup/tests.
-
-    Registration is explicit; the model database cannot import arbitrary code.
-    """
+    """Register a provider implementation for application startup/tests."""
     normalized = name.strip().lower() if isinstance(name, str) else ""
     if not normalized:
         raise ValueError("Provider name must be a non-empty string")

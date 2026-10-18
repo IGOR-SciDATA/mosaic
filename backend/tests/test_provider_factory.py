@@ -12,9 +12,15 @@ def test_registered_ollama_provider_is_selected_explicitly():
     assert isinstance(provider, OllamaProvider)
 
 
+def test_registered_openai_provider_is_selected_explicitly():
+    from app.providers.openai import OpenAIProvider
+
+    assert isinstance(create_provider("openai"), OpenAIProvider)
+
+
 def test_unknown_provider_fails_without_silent_ollama_fallback():
-    with pytest.raises(ValueError, match="Unsupported model provider: openai"):
-        create_provider("openai")
+    with pytest.raises(ValueError, match="Unsupported model provider: unknown-provider"):
+        create_provider("unknown-provider")
 
 
 def test_selected_model_provider_is_resolved_from_persisted_model(monkeypatch):
