@@ -37,10 +37,26 @@ def recover_interrupted_tasks() -> dict[str, Any]:
                     continue
                 recovered_tool_call_ids.append(call.id)
                 if not list_tool_results(call.id):
-                    create_tool_result(
+                    result = create_tool_result(
                         call.id,
                         "failed",
                         error="Execution interrupted by Mosaic Core restart; automatic retry suppressed.",
+                    )
+                    create_task_event(
+                        task_id=task.id,
+                        conversation_id=task.conversation_id,
+                        project_id=task.project_id,
+                        tool_call_id=call.id,
+                        component="recovery",
+                        event_name="tool.result_recorded",
+                        message="Interrupted ToolCall recorded as a failed ToolResult; automatic replay suppressed.",
+                        status="failed",
+                        level="warning",
+                        metadata={
+                            "tool_result_id": result.id,
+                            "error_type": "InterruptedByRestart",
+                            "automatic_retry": False,
+                        },
                     )
 
         for action in list_actions(task.id):
