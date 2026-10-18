@@ -285,9 +285,41 @@ function TaskWorkspace({ conversationId, projectId }) {
   const [toolCalls, setToolCalls] = useState([]);
   const [connectionState, setConnectionState] = useState("connecting");
   const [goal, setGoal] = useState("");
+  const [libraryAgents, setLibraryAgents] = useState([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    if (!projectId) { setLibraryAgents([]); return undefined; }
+    api.projects.agents(projectId).then(data => { if (active) setLibraryAgents(data); })
+      .catch(() => { if (active) setLibraryAgents([]); });
+    return () => { active = false; };
+  }, [projectId]);
+
+  function skillCommandSlug(name) {
+    return name.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
+  const agentQuery = goal.match(/^\\/([a-z0-9-]*)$/i);
+  const agentSuggestions = agentQuery ? libraryAgents.filter(agent =>
+    agent.slug.toLowerCase().includes(agentQuery[1].toLowerCase()) ||
+    agent.name.toLowerCase().includes(agentQuery[1].toLowerCase())
+  ).slice(0, 6) : [];
+  const skillQuery = goal.match(/^\\/([a-z0-9-]+)\\s+@([a-z0-9-]*)$/i);
+  const blankAfterAgent = goal.match(/^\\/([a-z0-9-]+)\\s+$/i);
+  const skillAgentSlug = skillQuery?.[1] || blankAfterAgent?.[1] || null;
+  const skillQueryText = skillQuery?.[2] || "";
+  const skillAgent = skillAgentSlug ? libraryAgents.find(agent => agent.slug === skillAgentSlug) : null;
+  const skillSuggestions = skillAgent && (skillQuery || blankAfterAgent)
+    ? skillAgent.skills.filter(skill => skill.enabled !== false && skillCommandSlug(skill.name).includes(skillQueryText.toLowerCase())).slice(0, 6)
+    : [];
+
+  function selectTaskAgent(agent) { setGoal("/" + agent.slug + " @"); }
+  function selectTaskSkill(agent, skill) { setGoal("/" + agent.slug + " @" + skillCommandSlug(skill.name) + " "); }
+  function useAgentWithoutSkill(agent) { setGoal("/" + agent.slug + " "); }
 
   async function refreshTasks(preferId = null) {
     if (!conversationId) { setTasks([]); setSelectedId(null); setLoading(false); return; }
@@ -436,7 +468,19 @@ function TaskWorkspace({ conversationId, projectId }) {
       ? <div className="task-empty"><Icon name="tool" size={25}/><strong>Selecione uma conversa</strong><span>As tarefas ficam vinculadas à conversa e ao projeto ativos.</span></div>
       : <form className="task-start-form" onSubmit={startTask}>
           <label htmlFor="agent-task-goal">O que você quer que o Mosaic faça?</label>
-          <textarea id="agent-task-goal" value={goal} onChange={event => setGoal(event.target.value)} rows={3} maxLength={8000} placeholder="Ex.: Analise a estrutura deste projeto e identifique os próximos passos." disabled={busy}/>
+          <div className="task-goal-autocomplete">
+            <textarea id="agent-task-goal" value={goal} onChange={event => setGoal(event.target.value)} rows={3} maxLength={8000} placeholder="Ex.: Analise a estrutura deste projeto. Digite / para escolher um agente." disabled={busy} autoComplete="off"/>
+            {!!agentSuggestions.length && <div className="agent-command-suggestions" role="listbox" aria-label="Agentes disponíveis">
+              <div className="agent-command-suggestions-title">Selecionar agente</div>
+              {agentSuggestions.map(agent => <button type="button" key={agent.slug} role="option" onClick={() => selectTaskAgent(agent)}><Icon name="bot" size={16}/><span><strong>/{agent.slug}</strong><small>{agent.name} · {agent.skills.filter(skill => skill.enabled !== false).length} Skills ativas</small></span><Icon name="chevron-right" size={15}/></button>)}
+            </div>}
+            {!!skillAgent && (skillQuery || blankAfterAgent) && <div className="agent-command-suggestions" role="listbox" aria-label="Skills disponíveis">
+              <div className="agent-command-suggestions-title">Skill para /{skillAgent.slug}</div>
+              <button type="button" role="option" onClick={() => useAgentWithoutSkill(skillAgent)}><Icon name="bot" size={16}/><span><strong>Usar agente sem selecionar Skill</strong><small>Inclui as Skills ativas configuradas no perfil.</small></span></button>
+              {skillSuggestions.map(skill => <button type="button" key={skillCommandSlug(skill.name)} role="option" onClick={() => selectTaskSkill(skillAgent, skill)}><Icon name="puzzle" size={16}/><span><strong>@{skillCommandSlug(skill.name)}</strong><small>{skill.name}</small></span><Icon name="chevron-right" size={15}/></button>)}
+              {!skillSuggestions.length && skillQuery && <div className="agent-command-empty">Nenhuma Skill ativa corresponde à busca.</div>}
+            </div>}
+          </div>
           <div className="task-start-footer"><span>Execução real · o Core controla ferramentas e permissões</span><button type="submit" className="primary-action" disabled={busy || !goal.trim()}><Icon name="send" size={15}/>{busy ? "Enviando…" : "Executar tarefa"}</button></div>
         </form>}
     {error && <div className="task-inline-error" role="alert">{error}</div>}
