@@ -1934,3 +1934,200 @@ body { overflow: hidden; }
   .theme-toggle { min-width: 34px; padding: 0 8px; }
   .theme-toggle span { display: none; }
 }
+
+
+/* Mosaic UI refresh — readable light theme, consistent surfaces and typography. */
+:root[data-theme="light"] {
+  font-size: 15px;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --surface-3: #eef1f4;
+  --border: #d9dde3;
+  --border-soft: #e7e9ed;
+  --text: #17191d;
+  --muted: #4b5563;
+  --dim: #667085;
+  --red: #c92320;
+  --red-bright: #b91f1b;
+  --red-soft: #fff0ef;
+  --green: #147a43;
+}
+:root[data-theme="light"] body,
+:root[data-theme="light"] .app-shell { background: #f5f6f8; }
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .app-main,
+:root[data-theme="light"] .workspace,
+:root[data-theme="light"] .topbar,
+:root[data-theme="light"] .project-header,
+:root[data-theme="light"] .context-panel,
+:root[data-theme="light"] .composer {
+  color: #17191d;
+  background-color: #fff;
+  border-color: #d9dde3;
+}
+:root[data-theme="light"] .sidebar { background: #fff; box-shadow: 0 2px 12px rgba(16,24,40,.04); }
+:root[data-theme="light"] .app-shell { gap: 12px; padding: 12px; }
+:root[data-theme="light"] .sidebar { border-radius: 14px; }
+:root[data-theme="light"] .topbar { min-height: 64px; }
+:root[data-theme="light"] .wordmark { color: #17191d; }
+:root[data-theme="light"] .side-primary button,
+:root[data-theme="light"] .side-bottom button,
+:root[data-theme="light"] .section-heading,
+:root[data-theme="light"] .top-link,
+:root[data-theme="light"] .top-project strong,
+:root[data-theme="light"] .project-identity h1,
+:root[data-theme="light"] .project-tabs button,
+:root[data-theme="light"] .context-panel,
+:root[data-theme="light"] .context-panel strong,
+:root[data-theme="light"] .card-heading strong,
+:root[data-theme="light"] .task-workspace-heading h2,
+:root[data-theme="light"] .task-panel-heading strong,
+:root[data-theme="light"] .task-timeline-heading strong,
+:root[data-theme="light"] .task-detail-heading h3,
+:root[data-theme="light"] .task-list-copy strong,
+:root[data-theme="light"] .memory-manager-item > div:first-child strong,
+:root[data-theme="light"] .agent-config-card,
+:root[data-theme="light"] .file-list,
+:root[data-theme="light"] .conversation-empty h2 {
+  color: #17191d;
+}
+:root[data-theme="light"] .top-project small,
+:root[data-theme="light"] .project-identity p,
+:root[data-theme="light"] .context-panel p,
+:root[data-theme="light"] .context-panel small,
+:root[data-theme="light"] .context-row-label,
+:root[data-theme="light"] .context-row-value small,
+:root[data-theme="light"] .card-heading span,
+:root[data-theme="light"] .task-workspace-heading p,
+:root[data-theme="light"] .task-list-copy small,
+:root[data-theme="light"] .task-timeline-heading span,
+:root[data-theme="light"] .task-start-footer > span,
+:root[data-theme="light"] .task-detail-actions > span,
+:root[data-theme="light"] .memory-manager-item small,
+:root[data-theme="light"] .conversation-empty p,
+:root[data-theme="light"] .modal-hint,
+:root[data-theme="light"] .help-block span {
+  color: #525b68;
+}
+:root[data-theme="light"] .side-primary button,
+:root[data-theme="light"] .side-bottom button,
+:root[data-theme="light"] .section-heading,
+:root[data-theme="light"] .project-tabs button,
+:root[data-theme="light"] .context-tabs button,
+:root[data-theme="light"] .top-link,
+:root[data-theme="light"] .theme-toggle,
+:root[data-theme="light"] .model-config-button {
+  font-size: 14px;
+}
+:root[data-theme="light"] .project-identity p,
+:root[data-theme="light"] .task-workspace-heading p,
+:root[data-theme="light"] .context-row-value,
+:root[data-theme="light"] .context-row-label,
+:root[data-theme="light"] .message-bubble p,
+:root[data-theme="light"] .assistant-copy > p,
+:root[data-theme="light"] .composer textarea,
+:root[data-theme="light"] .modal-form input,
+:root[data-theme="light"] .modal-form textarea,
+:root[data-theme="light"] .modal-form select,
+:root[data-theme="light"] .memory-manager-item p,
+:root[data-theme="light"] .conversation-empty p {
+  font-size: 15px;
+  line-height: 1.65;
+}
+:root[data-theme="light"] .project-identity h1 { font-size: 27px; line-height: 1.2; }
+:root[data-theme="light"] .task-workspace-heading h2 { font-size: 28px; }
+:root[data-theme="light"] .eyebrow,
+:root[data-theme="light"] .task-id { font-size: 11px; letter-spacing: .1em; }
+:root[data-theme="light"] .sidebar-empty,
+:root[data-theme="light"] .context-row-value small,
+:root[data-theme="light"] .task-count,
+:root[data-theme="light"] .task-status,
+:root[data-theme="light"] .task-list-copy small,
+:root[data-theme="light"] .task-timeline-heading span,
+:root[data-theme="light"] .memory-manager-item small,
+:root[data-theme="light"] .model-provider,
+:root[data-theme="light"] .model-status { font-size: 12px; }
+:root[data-theme="light"] .context-tabs { min-height: 52px; }
+:root[data-theme="light"] .context-tabs button { min-height: 52px; }
+:root[data-theme="light"] .context-card,
+:root[data-theme="light"] .side-card,
+:root[data-theme="light"] .task-start-form,
+:root[data-theme="light"] .task-detail,
+:root[data-theme="light"] .task-history,
+:root[data-theme="light"] .task-timeline-panel,
+:root[data-theme="light"] .agent-config-card,
+:root[data-theme="light"] .memory-manager-list,
+:root[data-theme="light"] .memory-manager-item,
+:root[data-theme="light"] .file-browser,
+:root[data-theme="light"] .file-preview,
+:root[data-theme="light"] .notes-editor,
+:root[data-theme="light"] .project-notes-editor,
+:root[data-theme="light"] .modal-content,
+:root[data-theme="light"] .help-block,
+:root[data-theme="light"] .model-response-panel {
+  color: #17191d;
+  background: #fff;
+  border-color: #d9dde3;
+}
+:root[data-theme="light"] .task-card,
+:root[data-theme="light"] .task-detail,
+:root[data-theme="light"] .task-history,
+:root[data-theme="light"] .task-timeline-panel,
+:root[data-theme="light"] .agent-config-card,
+:root[data-theme="light"] .memory-manager-list,
+:root[data-theme="light"] .memory-manager-item,
+:root[data-theme="light"] .model-response-panel { box-shadow: none; }
+:root[data-theme="light"] .task-list-copy strong,
+:root[data-theme="light"] .task-detail-heading h3,
+:root[data-theme="light"] .task-progress-meta strong,
+:root[data-theme="light"] .model-response-panel > p,
+:root[data-theme="light"] .model-response-panel > small,
+:root[data-theme="light"] .model-event-preview p,
+:root[data-theme="light"] .model-event-preview strong,
+:root[data-theme="light"] .model-event-details summary,
+:root[data-theme="light"] .memory-manager-item p,
+:root[data-theme="light"] .assistant-copy,
+:root[data-theme="light"] .assistant-copy > p { color: #20242a; }
+:root[data-theme="light"] .task-start-form textarea,
+:root[data-theme="light"] .task-start-form input,
+:root[data-theme="light"] .agent-config-card input,
+:root[data-theme="light"] .agent-config-card textarea,
+:root[data-theme="light"] .agent-config-card select,
+:root[data-theme="light"] .memory-form-grid input,
+:root[data-theme="light"] .memory-value-label textarea,
+:root[data-theme="light"] .project-notes-editor,
+:root[data-theme="light"] .modal-form input,
+:root[data-theme="light"] .modal-form textarea,
+:root[data-theme="light"] .modal-form select {
+  color: #17191d;
+  background: #fff;
+  border-color: #cbd1d9;
+  font-size: 15px;
+}
+:root[data-theme="light"] .task-start-form label,
+:root[data-theme="light"] .agent-config-card label,
+:root[data-theme="light"] .memory-form-grid label,
+:root[data-theme="light"] .memory-value-label,
+:root[data-theme="light"] .modal-form label { color: #343b45; font-size: 14px; }
+:root[data-theme="light"] .empty-state strong { color: #20242a; font-size: 15px; }
+:root[data-theme="light"] .empty-state span { color: #525b68; font-size: 13px; }
+:root[data-theme="light"] .task-muted,
+:root[data-theme="light"] .muted-copy { color: #525b68; }
+:root[data-theme="light"] .task-progress-track,
+:root[data-theme="light"] .model-event-preview { background: #f2f4f7; }
+:root[data-theme="light"] .modal { background: rgba(15, 20, 28, .38); }
+:root[data-theme="light"] .modal-header strong { color: #17191d; font-size: 17px; }
+:root[data-theme="light"] .modal-actions > button { color: #343b45; background: #f8f9fb; font-size: 14px; }
+:root[data-theme="light"] button:focus-visible,
+:root[data-theme="light"] input:focus-visible,
+:root[data-theme="light"] textarea:focus-visible,
+:root[data-theme="light"] select:focus-visible { outline: 2px solid #c92320; outline-offset: 2px; }
+:root[data-theme="light"] .project-tabs button.active { color: #b91f1b; }
+:root[data-theme="light"] .side-project.active { color: #17191d; }
+:root[data-theme="light"] .online { color: #147a43; }
+@media (max-width: 900px) {
+  :root[data-theme="light"] .topbar { gap: 8px; }
+  :root[data-theme="light"] .top-actions { gap: 7px; }
+  :root[data-theme="light"] .model-provider { display: none; }
+}
