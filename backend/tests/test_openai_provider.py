@@ -18,6 +18,7 @@ def test_payload_uses_responses_api_and_does_not_forward_local_only_settings():
         "model": "gpt-4.1-mini",
         "input": [{"role": "system", "content": "rules"}, {"role": "user", "content": "hello"}],
         "stream": False,
+        "store": False,
         "max_output_tokens": 700,
     }
 
