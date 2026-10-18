@@ -5,7 +5,13 @@
 **Escopo:** inspeção estática de `main`, documentação versionada e evidências de testes/CI acessíveis pelo GitHub  
 **Commit de referência:** `29f6af8e6ed1af9cb0a0160889c4d7ea56bd6912`  
 **PR de documentação:** [#56 — README e guia](https://github.com/IGOR-SciDATA/mosaic/pull/56)  
-**Resultado:** baseline estático produzido; Fase 0 **ainda não está integralmente aprovada**, pois testes/build/smoke tests não foram executados nesta auditoria.
+**Resultado do snapshot original:** baseline estático produzido no commit indicado abaixo. Veja a atualização dinâmica posterior no início deste relatório; ela supersede as conclusões históricas sobre execução de testes e canonização do contrato.
+
+---
+
+> **Atualização dinâmica — 2026-10-18:** o contrato MVP está versionado em seu caminho canônico e a decisão de schema foi registrada na seção 6 do Plano de Implementação. A branch `codex/phase0-full-validation-ci` adicionou criação idempotente das tabelas `artifacts` e `settings`, preservando `task_events` e `_mosaic_meta`, com testes de schema e reinitialização. O GitHub Actions executou a suíte backend completa no commit de código `4dac3ad1c7cb7041c78f5293ff1274c207cc28d9`: **197 passed, 1 warning**; o job de build frontend também passou. Execução: [workflow run 39107873440](https://github.com/IGOR-SciDATA/mosaic/actions/runs/39107873440).
+>
+> Essa evidência corresponde à branch de validação, ainda não integrada à `main`. Não houve smoke test com Ollama/provider real, validação E2E real nem execução local nesta sessão, pois o clone falhou por DNS. A regressão Markdown mais completa está na [PR #63](https://github.com/IGOR-SciDATA/mosaic/pull/63) e ainda precisa passar no CI. As seções abaixo registram a auditoria estática histórica do commit `29f6af8`; as afirmações antigas de contrato ausente e schema ainda sem decisão não descrevem mais a branch de validação atual.
 
 ---
 
