@@ -2643,3 +2643,70 @@ body { overflow: hidden; }
 :root[data-theme="dark"] .send-button:hover { background: #f12a33; }
 :root[data-theme="dark"] .agent-config-card, :root[data-theme="dark"] .context-card,
 :root[data-theme="dark"] .side-card { background: #111; border-color: #303030; }
+
+
+/* Workspace polish: crisp surfaces, no grey gradient in the sidebar. */
+:root[data-theme="light"] .sidebar {
+  background: #fff !important;
+  border: 1px solid #dce7df;
+  box-shadow: 0 10px 34px rgba(27, 66, 40, .06);
+}
+:root[data-theme="light"] .side-bottom {
+  background: #fff !important;
+  border-top: 1px solid #e7eee8;
+}
+:root[data-theme="light"] .sidebar::after { display: none; }
+:root[data-theme="light"] .app-main { background: #fff; }
+:root[data-theme="light"] .workspace { background: #fff; }
+:root[data-theme="light"] .project-header { background: #fff; }
+:root[data-theme="light"] .context-panel { background: #fbfdfb; border-left-color: #e0e9e2; }
+:root[data-theme="light"] .context-tabs { background: #fff; }
+:root[data-theme="light"] .agent-config-workspace { background: #f7faf7; }
+:root[data-theme="light"] .agent-config-card { box-shadow: 0 3px 14px rgba(30,70,42,.035); border-radius: 13px; }
+:root[data-theme="light"] .modal-backdrop { background: rgba(20,35,25,.34); backdrop-filter: blur(7px); }
+:root[data-theme="light"] .modal { background: #fff; border: 1px solid #dfe8e1; box-shadow: 0 24px 80px rgba(21,48,29,.18); border-radius: 18px; }
+:root[data-theme="light"] .modal-header { background: #fff; border-bottom: 1px solid #e8eee9; }
+:root[data-theme="light"] .modal-hint, :root[data-theme="light"] .help-block span { color: #647368; }
+:root[data-theme="light"] .help-block { background: #f7faf7; border-color: #e1eae3; border-radius: 11px; }
+:root[data-theme="dark"] .sidebar { background: #0b0b0b !important; }
+:root[data-theme="dark"] .side-bottom { background: #0b0b0b !important; }
+:root[data-theme="dark"] .modal-backdrop { background: rgba(0,0,0,.72); backdrop-filter: blur(7px); }
+:root[data-theme="dark"] .modal { background: #111; border: 1px solid #343434; box-shadow: 0 24px 80px rgba(0,0,0,.5); border-radius: 18px; }
+:root[data-theme="dark"] .modal-header { background: #111; border-bottom: 1px solid #292929; }
+:root[data-theme="dark"] .help-block { background: #171717; border-color: #303030; border-radius: 11px; }
+:root[data-theme="dark"] .agent-config-workspace { background: #0b0b0b; }
+.agent-document-field { min-width: 0; }
+.agent-file-toolbar { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:10px 12px; background:#20242b; color:#e8edf4; border:1px solid #343b45; border-bottom:0; border-radius:10px 10px 0 0; }
+.agent-file-title { display:flex; align-items:center; gap:9px; min-width:0; }
+.agent-file-title svg { color:#e3b341; }
+.agent-file-title strong { font-size:13px; }
+.agent-file-title span { color:#9da8b7; font-size:12px; }
+.agent-file-tabs { display:flex; align-items:center; gap:4px; }
+.agent-file-tabs button { display:flex; align-items:center; gap:6px; padding:7px 10px; color:#b7c0cd; background:transparent; border-radius:6px; font-size:12px; }
+.agent-file-tabs button.active { background:#343b45; color:#fff; }
+.agent-code-editor { display:grid; grid-template-columns:44px minmax(0,1fr); min-height:390px; background:#15191f; border:1px solid #343b45; }
+.agent-line-numbers { display:flex; flex-direction:column; align-items:flex-end; gap:0; padding:15px 11px 15px 0; background:#15191f; color:#657184; font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace; user-select:none; }
+.agent-code-editor textarea { width:100%; min-height:390px; resize:vertical; border:0 !important; border-radius:0 !important; outline:none; padding:15px 16px; background:#15191f !important; color:#d9e2f0 !important; font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace !important; white-space:pre; tab-size:2; }
+.agent-markdown-preview { min-height:390px; max-height:620px; overflow:auto; padding:22px 26px; border:1px solid #343b45; background:#171b21; color:#dbe2ec; font-size:14px; line-height:1.7; overflow-wrap:anywhere; }
+.agent-markdown-preview h2,.agent-markdown-preview h3,.agent-markdown-preview h4 { color:#fff; margin:1em 0 .5em; }
+.agent-markdown-preview h2 { font-size:24px; border-bottom:1px solid #343b45; padding-bottom:8px; }
+.agent-markdown-preview h3 { font-size:19px; }
+.agent-markdown-preview p { margin:7px 0; }
+.agent-preview-list { padding-left:16px; margin:5px 0; }
+.agent-preview-empty { color:#929dac; font-style:italic; }
+.agent-file-footer { display:flex; justify-content:space-between; gap:12px; padding:8px 12px; background:#20242b; border:1px solid #343b45; border-top:0; border-radius:0 0 10px 10px; color:#9da8b7; font-size:11px; }
+:root[data-theme="light"] .agent-file-toolbar,:root[data-theme="light"] .agent-file-footer { background:#f0f4f1; color:#314638; border-color:#d7e2d9; }
+:root[data-theme="light"] .agent-file-title span,:root[data-theme="light"] .agent-file-footer { color:#69796e; }
+:root[data-theme="light"] .agent-file-tabs button { color:#607064; }
+:root[data-theme="light"] .agent-file-tabs button.active { background:#dceee1; color:#176b3c; }
+:root[data-theme="light"] .agent-code-editor,:root[data-theme="light"] .agent-line-numbers { background:#f8faf8; border-color:#d7e2d9; color:#829087; }
+:root[data-theme="light"] .agent-code-editor textarea { background:#f8faf8 !important; color:#1e2e23 !important; }
+:root[data-theme="light"] .agent-markdown-preview { background:#fff; color:#26372b; border-color:#d7e2d9; }
+:root[data-theme="light"] .agent-markdown-preview h2,:root[data-theme="light"] .agent-markdown-preview h3,:root[data-theme="light"] .agent-markdown-preview h4 { color:#176b3c; }
+:root[data-theme="light"] .agent-markdown-preview h2 { border-color:#e0e9e2; }
+:root[data-theme="light"] .agent-preview-empty { color:#77867b; }
+@media (max-width: 720px) {
+ .agent-file-toolbar { align-items:flex-start; flex-direction:column; }
+ .agent-file-title span { display:none; }
+ .agent-code-editor,.agent-code-editor textarea,.agent-markdown-preview { min-height:300px; }
+}
