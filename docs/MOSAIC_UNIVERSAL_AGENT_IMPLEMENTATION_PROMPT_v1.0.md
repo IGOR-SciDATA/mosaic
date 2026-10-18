@@ -127,6 +127,17 @@ Não simule agentes independentes por meio de rótulos na UI. Cada especialidade
 - A UI nunca é a fronteira de segurança: toda autorização é validada no backend.
 - Estados devem vir da API/Core; nenhum botão inerte ou progresso inventado.
 
+## 5.1. Capacidade de baseline já demonstrada
+
+O usuário confirmou um fluxo manual concluído na versão atual: o agente leu um arquivo `.md`, resumiu o conteúdo e criou um novo arquivo `.md` com o resumo. Considere isso uma capacidade já demonstrada no protótipo, não apenas uma meta futura.
+
+Ao iniciar o trabalho:
+- inspecione o caminho real de código/ferramentas que possibilitou esse fluxo;
+- não o reescreva nem o remova sem necessidade demonstrada;
+- transforme-o em teste de regressão reproduzível, se o ambiente permitir, verificando leitura, conteúdo resumido e existência/legibilidade do artefato de saída;
+- diferencie explicitamente a validação manual relatada pelo usuário de testes automatizados que você próprio executar;
+- use esse cenário como primeiro teste vertical antes de ampliar a cobertura para documentos, pesquisa web e projetos de software.
+
 ## 6. Método obrigatório para cada incremento
 
 Antes de alterar código:
