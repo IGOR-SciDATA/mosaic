@@ -109,7 +109,7 @@ Esse é um marco concreto: o protótipo já demonstrou uma tarefa de leitura de 
 - Pesquisa web com fontes lidas e citações rastreáveis de ponta a ponta.
 - Geração e validação integrada de PDF, DOCX, PPTX, XLSX e projetos de software.
 - Coordenação sequencial de especialidades, integração entre subtarefas e QA real.
-- Build, testes e jornadas end-to-end executados no ambiente atual.
+- Suíte backend completa e build frontend executados no GitHub Actions na branch de validação; smoke test com Ollama e validação ponta a ponta com provider real ainda pendentes.
 
 **Estados de evidência usados neste README:**
 - **Planejado:** requisito definido, sem implementação comprovada.
@@ -118,7 +118,7 @@ Esse é um marco concreto: o protótipo já demonstrou uma tarefa de leitura de 
 - **Validado ponta a ponta:** jornada real foi executada e os critérios de aceite foram verificados.
 - **Demonstrado manualmente:** evidência reportada pelo usuário, ainda sem equivalência automática presumida.
 
-**Status de validação:** a auditoria documentada do baseline foi estática; o fluxo Markdown acima é uma validação manual reportada pelo usuário. Não considerar testes aprovados quando não houver resultado de execução registrado. Ver [auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md).
+**Atualização de validação (18/10/2026):** o GitHub Actions executou a suíte backend completa — **197 testes passaram, 1 aviso** — e o build frontend passou no commit de validação `4dac3ad` da branch `codex/phase0-full-validation-ci`. A branch ainda não foi integrada à `main`; não houve smoke test com Ollama nem jornada E2E com provider real. A demonstração manual do fluxo Markdown continua separada da regressão automatizada, que está em validação na [PR #63](https://github.com/IGOR-SciDATA/mosaic/pull/63). Ver [auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md).
 
 ---
 
@@ -244,8 +244,8 @@ O roadmap é atualizado conforme o código muda e as evidências são revisadas.
 
 ## Próximos objetivos de maior prioridade
 
-1. **Consolidar a verdade documental:** canonizar o contrato MVP, eliminar referências quebradas e manter um único roadmap normativo.
-2. **Preservar e automatizar o fluxo já demonstrado:** transformar leitura de `.md` → resumo → novo `.md` em cenário de regressão reproduzível; em paralelo, executar e registrar testes backend, build frontend e smoke tests.
+1. **Consolidar a verdade documental:** manter contratos, notas de baseline e a sequência Mestre atual alinhados; a sequência vigente está em [MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md](docs/MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md).
+2. **Preservar e automatizar o fluxo já demonstrado:** a suíte backend completa e o build frontend já passaram na branch de validação; a regressão determinística de leitura → resumo → escrita aprovada → releitura está em revisão na [PR #63](https://github.com/IGOR-SciDATA/mosaic/pull/63). O smoke test com provider real permanece pendente.
 3. **Fechar segurança e transições:** autorização no backend, limites de execução e estados consistentes.
 4. **Provar o Harness com o modelo da conversa:** ferramenta → resultado → observação → continuação/conclusão.
 5. **Construir persistência e retomada:** eventos, aprovação, cancelamento e recuperação da mesma Task.
@@ -253,7 +253,7 @@ O roadmap é atualizado conforme o código muda e as evidências são revisadas.
 7. **Coordenar especialidades sequencialmente:** backend, frontend, pesquisa, design e QA com entradas/saídas e critérios de aceite explícitos.
 8. **Integrar a experiência e avaliar autonomia:** a interface deve refletir o estado real; ampliar autonomia somente após métricas e testes.
 
-A sequência detalhada e os critérios técnicos estão no [Roadmap Mestre](docs/MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md) e no [Plano de Implementação](docs/MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md).
+A sequência operacional vigente está em [Sequência Mestre de Implementação por Fases](docs/MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md). O [Roadmap Mestre](docs/MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md) e o [Plano de Implementação](docs/MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md) preservam detalhes técnicos complementares.
 
 ---
 
@@ -333,6 +333,7 @@ Abra a URL local informada pelo Vite, normalmente http://localhost:5173.
 - [Guia de desenvolvimento do workspace agêntico](docs/MOSAIC_DEVELOPMENT_GUIDE_AGENTIC_WORKSPACE_v1.0.md)
 - [Plano de implementação passo a passo](docs/MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md)
 - [Perfis de Agent e ferramentas de artefatos](docs/MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md)
+- [Sequência Mestre de Implementação por Fases](docs/MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md)
 - [Auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md)
 - [Prompt normativo para implementação do agente geral](docs/MOSAIC_UNIVERSAL_AGENT_IMPLEMENTATION_PROMPT_v1.0.md)
 
