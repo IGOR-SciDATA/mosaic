@@ -67,9 +67,9 @@ Nunca declarar um teste aprovado se não foi executado. Nunca declarar uma capac
 Fazer com que todos os documentos normativos estejam no repositório e que o estado real do projeto tenha evidência reproduzível.
 
 ### Passos
-1. Adicionar o contrato MVP aprovado em docs/MOSAIC_MVP_IMPLEMENTATION_CONTRACT_v1.0.md, preservando seu conteúdo normativo.
+1. Confirmar que o contrato MVP aprovado está versionado em docs/MOSAIC_MVP_IMPLEMENTATION_CONTRACT_v1.0.md e que links/dependências apontam para esse caminho canônico.
 2. Atualizar links e hierarquia de precedência em README e documentos relacionados.
-3. Resolver a divergência do schema com a decisão definida na seção 6 deste plano.
+3. Aplicar e validar a decisão de schema definida na seção 6 deste plano; a decisão arquitetural está registrada, mas a execução ainda precisa de evidência.
 4. Inspecionar migrations/bootstrap, repositórios, modelos, endpoints e testes antes de alterar.
 5. Executar a suíte backend; registrar o comando, total de testes e falhas.
 6. Executar build frontend; registrar o comando e resultado.
