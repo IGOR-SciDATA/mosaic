@@ -39,11 +39,13 @@ Precedência dos contratos:
 2. [Harness Contract v1.2](MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md) para execução e ciclo do Harness, até ser substituído.
 3. [RAGNES Context System Contract v1.0](MOSAIC_RAGNES_CONTEXT_SYSTEM_CONTRACT_v1.0.md) para contexto, recuperação e compactação.
 4. [Frontend UX Contract v1.0](MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md) para interface e estados visíveis.
-5. Este roadmap para a ordem integrada de execução.
-6. MVP Implementation Contract v1.0 para entidades e schema, exceto alterações explícitas aprovadas.
+5. Este roadmap para a ordem macro das fases.
+6. [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md) para tarefas operacionais e critérios de aceite.
+7. MVP Implementation Contract v1.0 para entidades e schema, após canonização no repositório e decisão explícita sobre divergências.
+8. Código atual como verdade da implementação — nunca como justificativa para perpetuar falhas de segurança ou comportamento incompleto.
 7. Código atual como verdade da implementação — nunca como justificativa para perpetuar falhas de segurança ou comportamento incompleto.
 
-Se dois contratos entrarem em conflito, Chat 01 deve interromper a mudança afetada e solicitar decisão do MASTER; não deve inventar reconciliação silenciosa.
+Se dois contratos entrarem em conflito, Chat 01 deve interromper a mudança afetada e solicitar decisão do MASTER; não deve inventar reconciliação silenciosa. Para a divergência conhecida do schema, seguir a decisão normativa registrada na seção 6 do Plano de Implementação Passo a Passo: manter task_events e _mosaic_meta como tabelas internas e alinhar as entidades de domínio ao contrato MVP, incluindo artifacts e settings.
 
 ## 3. O que já existe — baseline a verificar
 
