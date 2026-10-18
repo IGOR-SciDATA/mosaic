@@ -118,10 +118,27 @@ def update_project(
 
 
 def delete_project(project_id: int) -> bool:
+    """Delete project-owned database records in dependency order, atomically."""
     with get_connection() as connection:
-        cursor = connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        project = connection.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if project is None:
+            return False
+        conversation_ids = [row["id"] for row in connection.execute("SELECT id FROM conversations WHERE project_id = ?", (project_id,)).fetchall()]
+        task_ids = [row["id"] for row in connection.execute("SELECT id FROM tasks WHERE project_id = ?", (project_id,)).fetchall()]
+        if conversation_ids:
+            placeholders = ",".join("?" for _ in conversation_ids)
+            task_ids.extend(row["id"] for row in connection.execute("SELECT id FROM tasks WHERE conversation_id IN (" + placeholders + ")", conversation_ids).fetchall())
+        task_ids = list(dict.fromkeys(task_ids))
+        if task_ids:
+            placeholders = ",".join("?" for _ in task_ids)
+            connection.execute("DELETE FROM tasks WHERE id IN (" + placeholders + ")", task_ids)
+        if conversation_ids:
+            placeholders = ",".join("?" for _ in conversation_ids)
+            connection.execute("DELETE FROM conversations WHERE id IN (" + placeholders + ")", conversation_ids)
+        connection.execute("DELETE FROM memories WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         connection.commit()
-        return cursor.rowcount > 0
+        return True
 
 
 def _row_to_project(row) -> Project:
