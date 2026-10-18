@@ -75,7 +75,7 @@ O modelo pode mudar. O computador pode mudar. A interface pode evoluir.
 
 **O Mosaic deve preservar a continuidade e ser responsável pela execução.**
 
-*The model is one component. The product is reliable work with continuity.*
+*O modelo é um componente, o core é eterno.*
 
 ---
 
