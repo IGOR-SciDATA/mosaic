@@ -2774,3 +2774,101 @@ body { overflow: hidden; }
 :root[data-theme="light"] .project-tabs button.active { color: #126c3c; }
 :root[data-theme="light"] .project-identity .project-mark,
 :root[data-theme="light"] .agent-file-title svg { color: #16834a; }
+
+
+/* Library editor: use the full available content width for comfortable editing. */
+.agent-config-workspace > form {
+  width: 100%;
+  max-width: none;
+}
+.agent-config-workspace > .agent-config-card,
+.agent-config-workspace > form > .agent-config-card {
+  width: 100%;
+  min-width: 0;
+}
+.agent-document-field { width: 100%; min-width: 0; }
+.agent-code-editor {
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 54px minmax(0, 1fr);
+}
+.agent-code-editor textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 560px;
+  resize: vertical;
+}
+.agent-line-numbers { min-height: 560px; }
+.agent-markdown-preview {
+  width: 100%;
+  min-height: 560px;
+  max-height: min(72vh, 900px);
+  font-size: 15px;
+  line-height: 1.8;
+}
+.agent-file-toolbar, .agent-file-footer { width: 100%; }
+
+/* Light theme uses green accents consistently; reserve red for dark theme only. */
+:root[data-theme="light"] {
+  --red: #16834a;
+  --red-bright: #116b3b;
+  --red-soft: rgba(22,131,74,.10);
+}
+:root[data-theme="light"] body {
+  background: radial-gradient(circle at 63% 5%, rgba(22,131,74,.045), transparent 23rem), #f4f7f5;
+}
+:root[data-theme="light"] .side-project.active {
+  background: linear-gradient(90deg, rgba(22,131,74,.10), rgba(25,30,38,.025));
+  border-left-color: #16834a;
+}
+:root[data-theme="light"] .project-tabs button.active {
+  color: #126c3c;
+  box-shadow: inset 0 -2px #16834a;
+}
+:root[data-theme="light"] .project-tabs button.active::after { background: #16834a; }
+:root[data-theme="light"] .user-message .message-bubble {
+  background: #edf7f0;
+  border-color: rgba(22,131,74,.18);
+}
+:root[data-theme="light"] .api-error {
+  color: #155b34;
+  background: #edf7f0;
+  border-color: rgba(22,131,74,.25);
+}
+:root[data-theme="light"] .api-error button {
+  color: #155b34;
+  border-color: rgba(22,131,74,.22);
+}
+:root[data-theme="light"] button:focus-visible,
+:root[data-theme="light"] input:focus-visible,
+:root[data-theme="light"] textarea:focus-visible,
+:root[data-theme="light"] select:focus-visible {
+  outline: 2px solid #16834a;
+  outline-offset: 2px;
+}
+:root[data-theme="light"] .task-list-item.selected { box-shadow: inset 3px 0 #16834a; }
+:root[data-theme="light"] .project-identity .mosaic-mark {
+  color: #16834a;
+  filter: drop-shadow(0 2px 5px rgba(22,131,74,.16));
+}
+:root[data-theme="light"] .formatted-response li::marker { color: #16834a; }
+:root[data-theme="light"] .model-response-panel {
+  border-color: rgba(22,131,74,.22);
+  background: rgba(22,131,74,.035);
+}
+:root[data-theme="light"] .model-response-panel > p { color: #20242a; }
+:root[data-theme="light"] .message-rule { background: #dce9e0; }
+:root[data-theme="light"] .assistant-empty {
+  border-left-color: rgba(22,131,74,.55);
+  background: rgba(22,131,74,.035);
+}
+:root[data-theme="light"] .formatted-response code {
+  color: #116b3b;
+  background: #edf7f0;
+  border-color: #d5e9db;
+}
+:root[data-theme="light"] .agent-file-toolbar .agent-file-title svg { color: #16834a; }
+@media (max-width: 720px) {
+  .agent-code-editor, .agent-code-editor textarea, .agent-line-numbers,
+  .agent-markdown-preview { min-height: 380px; }
+}
