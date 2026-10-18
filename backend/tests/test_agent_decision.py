@@ -64,7 +64,7 @@ def test_provider_decider_retries_malformed_response_with_specific_feedback(monk
             requests.append(kwargs)
             return next(responses)
 
-    monkeypatch.setattr(adapter, "OllamaProvider", FakeProvider)
+    monkeypatch.setattr(adapter, "resolve_model_provider", lambda model: FakeProvider())
     events = []
     monkeypatch.setattr(adapter, "create_task_event", lambda **kwargs: events.append(kwargs))
 
@@ -117,7 +117,7 @@ def test_provider_decider_uses_json_only_when_current_subtask_disallows_tools(mo
             raise AssertionError("Native tools must not be offered in a content-only subtask")
 
     provider = FakeProvider()
-    monkeypatch.setattr(adapter, "OllamaProvider", lambda: provider)
+    monkeypatch.setattr(adapter, "resolve_model_provider", lambda model: provider)
     monkeypatch.setattr(adapter, "create_task_event", lambda **kwargs: None)
 
     decision = adapter.create_provider_decider(task.id)([
@@ -160,7 +160,7 @@ def test_provider_decider_does_not_retry_more_than_once(monkeypatch):
             return "not JSON"
 
     provider = FakeProvider()
-    monkeypatch.setattr(adapter, "OllamaProvider", lambda: provider)
+    monkeypatch.setattr(adapter, "resolve_model_provider", lambda model: provider)
     monkeypatch.setattr(adapter, "create_task_event", lambda **kwargs: None)
 
     with pytest.raises(ValueError, match="valid JSON"):
