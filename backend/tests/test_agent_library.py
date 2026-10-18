@@ -157,6 +157,9 @@ def test_task_start_persists_snapshot_and_strips_command_from_goal():
     assert task.plan["goal"] == "Inspect this API"
     assert task.plan["agent_library_snapshot"]["slug"] == "backend-reviewer"
     assert validate_agent_snapshot(task.plan["agent_library_snapshot"])
+    original_snapshot = task.plan["agent_library_snapshot"]
+    update_project_agent(project.id, "backend-reviewer", {"instructions": "New instructions for future Tasks."})
+    assert get_task(started.id).plan["agent_library_snapshot"] == original_snapshot
 
 
 def test_task_start_rejects_unknown_agent_before_persisting_goal():
