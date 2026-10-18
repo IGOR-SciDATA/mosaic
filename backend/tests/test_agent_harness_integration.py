@@ -82,8 +82,8 @@ def test_provider_decision_tool_result_observation_and_completion_use_selected_m
 
     fake_provider = FakeProvider()
     monkeypatch.setattr(
-        "app.services.agent_decision.OllamaProvider",
-        lambda: fake_provider,
+        "app.services.agent_decision.resolve_model_provider",
+        lambda _model: fake_provider,
     )
 
     result = run_agent(task.id, create_provider_decider(task.id))
