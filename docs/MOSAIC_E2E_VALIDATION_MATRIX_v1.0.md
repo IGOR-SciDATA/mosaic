@@ -8,7 +8,7 @@
 | Cenário | Evidência automatizada atual | Estado |
 |---|---|---|
 | Saúde da API e inicialização | `backend/tests/test_health.py` | Coberto por teste existente |
-| Task via HTTP → aprovação → PDF → Artifact → eventos consultáveis | `backend/tests/test_harness_e2e.py` | Adicionado; aguarda CI |
+| Task via HTTP → aprovação → PDF → Artifact → eventos consultáveis; rejeição e cancelamento HTTP sem escrita | `backend/tests/test_harness_e2e.py` | Sucesso, rejeição e cancelamento HTTP adicionados; aguarda CI |
 | Criação/reabertura de Markdown, PDF, DOCX, XLSX e PPTX | `backend/tests/test_artifact_tool.py` | Coberto no branch de artefatos; verificar cadeia de PR |
 | Evidência invalidada após alteração do arquivo | `backend/tests/test_artifact_tool.py` | Coberto no branch de artefatos |
 | Três Tasks dependentes, perfis e integração sequencial | `backend/tests/test_task_coordinator.py` | Coberto no branch do coordenador; verificar cadeia de PR |
