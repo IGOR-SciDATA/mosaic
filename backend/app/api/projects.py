@@ -12,6 +12,10 @@ from app.models.project_repository import (
 )
 from app.services.project import create_project_with_workspace
 from app.services.agent_config import get_agent_config, save_agent_config
+from app.services.agent_library import (
+    create_project_agent, delete_project_agent, get_project_agent,
+    list_project_agents, update_project_agent,
+)
 from app.context.artifacts import list_workspace_artifacts, read_workspace_excerpt
 from app.context.search import search_workspace_artifacts
 
@@ -33,6 +37,21 @@ class AgentSkill(BaseModel):
 class AgentConfigUpdate(BaseModel):
     instructions: str = ""
     skills: list[AgentSkill] = []
+
+
+class AgentProfileCreate(BaseModel):
+    slug: str
+    name: str
+    description: str = ""
+    instructions: str
+    skills: list[dict[str, Any]] = []
+
+
+class AgentProfileUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    instructions: str | None = None
+    skills: list[dict[str, Any]] | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -112,6 +131,57 @@ def save_project_agent_config_endpoint(
     if config is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return config
+
+
+@router.get("/{project_id}/agents")
+def list_project_agents_endpoint(project_id: int) -> list[dict]:
+    try:
+        return list_project_agents(project_id)
+    except ValueError as exc:
+        status = 404 if str(exc) == "Project not found" else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
+@router.post("/{project_id}/agents", status_code=201)
+def create_project_agent_endpoint(project_id: int, payload: AgentProfileCreate) -> dict:
+    try:
+        return create_project_agent(project_id, payload.model_dump())
+    except ValueError as exc:
+        status = 404 if str(exc) == "Project not found" else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
+@router.get("/{project_id}/agents/{slug}")
+def get_project_agent_endpoint(project_id: int, slug: str) -> dict:
+    try:
+        profile = get_project_agent(project_id, slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=404 if str(exc) == "Project not found" else 400, detail=str(exc)) from exc
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Agent not found in this project")
+    return profile
+
+
+@router.put("/{project_id}/agents/{slug}")
+def update_project_agent_endpoint(project_id: int, slug: str, payload: AgentProfileUpdate) -> dict:
+    try:
+        profile = update_project_agent(project_id, slug, payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=404 if str(exc) == "Project not found" else 400, detail=str(exc)) from exc
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Agent not found in this project")
+    return profile
+
+
+@router.delete("/{project_id}/agents/{slug}")
+def delete_project_agent_endpoint(project_id: int, slug: str) -> dict[str, bool]:
+    try:
+        deleted = delete_project_agent(project_id, slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=404 if str(exc) == "Project not found" else 400, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Agent not found in this project")
+    return {"deleted": True}
 
 
 @router.get("/{project_id}/artifacts")
