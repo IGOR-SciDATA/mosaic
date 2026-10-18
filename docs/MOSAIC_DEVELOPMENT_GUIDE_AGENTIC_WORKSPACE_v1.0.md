@@ -19,7 +19,7 @@ Ele explica:
 - quais evidências comprovam que uma funcionalidade realmente funciona;
 - como evitar que instruções, skills ou agentes contornem as políticas do Core.
 
-Este guia **não substitui os contratos oficiais** nem autoriza mudanças de schema ou de arquitetura por conta própria. Se houver conflito, registrar o conflito, explicar o impacto e propor a menor alteração necessária para aprovação.
+Este guia **não substitui os contratos oficiais**. Para a ordem prática das tarefas, seguir o [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md). A divergência de schema identificada na baseline deve seguir a decisão normativa da seção 6 desse plano; não introduzir outras alterações de schema por conta própria. Se houver conflito, registrar o conflito, explicar o impacto e propor a menor alteração necessária para aprovação.
 
 ## 2. Hierarquia de fontes e decisões
 
