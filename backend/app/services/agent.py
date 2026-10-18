@@ -322,7 +322,9 @@ def _goal_requires_file_artifact(goal: str) -> bool:
         r"modifique|modificar|substitua|substituir|altere|alterar"
     )
     action = re.search(rf"\b(?:{creation_verbs})\b", goal, flags=re.IGNORECASE)
-    output_instruction = goal[action.end():] if action else goal
+    if action is None:
+        return False
+    output_instruction = goal[action.end():]
     output_format = re.search(
         r"\b(?:markdown|pdf|docx|xlsx|pptx|spreadsheet|planilha|powerpoint|presentation|apresentação|apresentacao)\b|"
         r"\.(?:md|markdown|pdf|docx|xlsx|pptx)\b",
@@ -688,6 +690,19 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
     """Decompose common file workflows deterministically without another model call."""
     sources = _required_source_paths(goal)
     creates_artifact = _goal_requires_file_artifact(goal)
+    artifact_format = _artifact_format(goal)
+    if artifact_format == "xlsx":
+        content_instruction = (
+            'Return only valid JSON in the shape {"sheets":[{"name":"Data","rows":[["Header"],["value"]]}]}. '
+            'Use explicit {"formula":"=SUM(A1:A2)"} objects for formulas; do not wrap JSON in Markdown fences.'
+        )
+    elif artifact_format in {"pdf", "docx", "pptx"}:
+        content_instruction = (
+            "Produce the complete document content as Markdown with clear headings and lists. "
+            "The Core will convert it to the requested file format and reopen-validate the artifact."
+        )
+    else:
+        content_instruction = "Produce the complete Markdown file content, without claiming it has already been saved."
     steps: list[dict[str, Any]] = []
 
     for index, source in enumerate(sources, start=1):
@@ -709,9 +724,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
                 "instruction": (
                     "Produce the complete updated file content using the source and the requested changes. "
                     "Do not call tools or claim the file has already been saved."
-                    if updating else
-                    "Produce the requested document content using the complete source evidence. "
-                    "Do not call tools or claim the output file already exists."
+                    if updating else content_instruction
                 ),
             },
             {
@@ -739,7 +752,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
                 "id": "draft_content",
                 "kind": "draft_content",
                 "status": "pending",
-                "instruction": "Produce the requested file content, without claiming that it has already been saved.",
+                "instruction": content_instruction,
             },
             {
                 "id": "create_artifact",
@@ -1072,17 +1085,29 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                     "awaiting_approval",
                     path=_artifact_output_path(goal),
                 )
-                operation = _artifact_operation(goal)
-                output_arguments = {
-                    "operation": operation,
-                    "path": _artifact_output_path(goal),
-                    "content": artifact_content,
-                }
-                if operation == "write":
-                    output_arguments["overwrite"] = True
+                output_format = _artifact_format(goal)
+                output_path = _artifact_output_path(goal)
+                if output_format == "markdown":
+                    operation = _artifact_operation(goal)
+                    output_arguments = {
+                        "operation": operation,
+                        "path": output_path,
+                        "content": artifact_content,
+                    }
+                    if operation == "write":
+                        output_arguments["overwrite"] = True
+                    output_tool = "filesystem"
+                else:
+                    output_arguments = {
+                        "format": output_format,
+                        "path": output_path,
+                        "content": artifact_content,
+                        "title": Path(output_path).stem,
+                    }
+                    output_tool = "artifact"
                 decision = {
                     "type": "tool_call",
-                    "tool": "filesystem",
+                    "tool": output_tool,
                     "arguments": output_arguments,
                 }
                 decision_type = "tool_call"
