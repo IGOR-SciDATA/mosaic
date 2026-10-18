@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import re
+import unicodedata
 from typing import Any
 
 from app.models.project_repository import get_project, update_project
@@ -177,18 +178,39 @@ def delete_project_agent(project_id: int, slug: str) -> bool:
     return True
 
 
-def create_agent_snapshot(project_id: int, slug: str) -> dict[str, Any]:
+def _skill_slug(name: str) -> str:
+    normalized = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii").lower()
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", normalized)).strip("-")
+
+
+def create_agent_snapshot(project_id: int, slug: str, skill_slug: str | None = None) -> dict[str, Any]:
     profile = get_project_agent(project_id, slug)
     if profile is None:
         raise ValueError(f"Unknown agent command '/{slug}' in this project")
+    skills = copy.deepcopy(profile["skills"])
+    if skill_slug is not None:
+        selected = next(
+            (skill for skill in skills if skill.get("enabled") is True and _skill_slug(skill.get("name", "")) == skill_slug),
+            None,
+        )
+        if selected is None:
+            raise ValueError(f"Unknown or disabled Skill '@{skill_slug}' for agent '/{slug}'")
+        skills = [selected]
     snapshot = {
         "slug": profile["slug"],
         "name": profile["name"],
         "description": profile["description"],
         "instructions": profile["instructions"],
         "version": profile["version"],
-        "sha256": profile["sha256"],
-        "skills": copy.deepcopy(profile["skills"]),
+        "sha256": _digest({
+            "slug": profile["slug"],
+            "name": profile["name"],
+            "description": profile["description"],
+            "instructions": profile["instructions"],
+            "version": profile["version"],
+            "skills": skills,
+        }),
+        "skills": skills,
     }
     if not validate_agent_snapshot(snapshot):
         raise ValueError("Agent profile snapshot failed integrity validation")
@@ -226,7 +248,7 @@ def validate_agent_snapshot(snapshot: Any) -> bool:
 
 
 def parse_agent_invocation(project_id: int | None, content: str) -> tuple[str, dict[str, Any] | None]:
-    """Resolve a leading /slug command without creating or switching conversations."""
+    """Resolve /agent [@skill] commands and freeze only the selected Skill when requested."""
     match = re.match(r"^/([A-Za-z0-9-]+)(?:\s+|$)(.*)$", content.strip(), flags=re.DOTALL)
     if not match:
         return content.strip(), None
@@ -235,10 +257,17 @@ def parse_agent_invocation(project_id: int | None, content: str) -> tuple[str, d
         raise ValueError(f"Agent command '/{slug}' requires a project conversation")
     if not SLUG_PATTERN.fullmatch(slug):
         raise ValueError(f"Invalid agent command '/{slug}'; use a lowercase project agent slug")
-    goal = match.group(2).strip()
+    remainder = match.group(2).strip()
+    skill_slug = None
+    skill_match = re.match(r"^@([a-z0-9]+(?:-[a-z0-9]+)*)(?:\s+|$)(.*)$", remainder, flags=re.DOTALL)
+    if skill_match:
+        skill_slug = skill_match.group(1)
+        remainder = skill_match.group(2).strip()
+    goal = remainder
     if not goal:
-        raise ValueError(f"Agent command '/{slug}' requires a task or message after the command")
-    return goal, create_agent_snapshot(project_id, slug)
+        suffix = f" with Skill '@{skill_slug}'" if skill_slug else ""
+        raise ValueError(f"Agent command '/{slug}'{suffix} requires a task or message after the command")
+    return goal, create_agent_snapshot(project_id, slug, skill_slug=skill_slug)
 
 
 def agent_snapshot_messages(snapshot: dict[str, Any]) -> list[dict[str, str]]:
