@@ -4,7 +4,7 @@
 
 # ◈ MOSAIC
 
-### Agente de IA de propósito geral · Memória · Contexto · Execução · Continuidade
+### Núcleo de IA de propósito geral · Memória · Contexto · Execução · Continuidade
 
 <br>
 
