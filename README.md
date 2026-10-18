@@ -172,7 +172,7 @@ Use a URL local informada pelo Vite. Os comandos acima descrevem a inicializaç�
 - [Contrato RAGNES — contexto e recuperação](docs/MOSAIC_RAGNES_CONTEXT_SYSTEM_CONTRACT_v1.0.md)
 - [Contrato de UX do frontend](docs/MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md)
 - [Guia de desenvolvimento do workspace agêntico](docs/MOSAIC_DEVELOPMENT_GUIDE_AGENTIC_WORKSPACE_v1.0.md)
-- [Proposta de perfis de Agent e ferramentas de artefatos](docs/MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md)
+- [Proposta de perfis de Agent e ferramentas de artefatos — PR #53](https://github.com/IGOR-SciDATA/mosaic/pull/53)
 
 Os contratos descrevem o comportamento pretendido e os limites arquiteturais; o código e os testes determinam o que está efetivamente implementado e validado.
 
