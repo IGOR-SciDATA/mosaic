@@ -2400,3 +2400,13 @@ body { overflow: hidden; }
 :root[data-theme="light"] .text-danger { color: #a32320; font-size: 12px; }
 :root[data-theme="light"] .agent-config-success { color: #176b3a; background: #f0faf3; border-color: #c7e8d1; }
 :root[data-theme="light"] .task-inline-error { color: #a32320; background: #fff5f4; border-color: #f0cecb; }
+
+
+/* Make the Mosaic symbol beside the project name a clear brand accent in light mode. */
+:root[data-theme="light"] .project-identity .mosaic-mark {
+  color: #e11d24;
+  filter: drop-shadow(0 2px 5px rgba(225, 29, 36, 0.18));
+}
+:root[data-theme="light"] .project-identity .mosaic-mark svg {
+  display: block;
+}
