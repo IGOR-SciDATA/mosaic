@@ -3,7 +3,7 @@
 **Status:** Guia operacional proposto para orientar implementação e revisão  
 **Data:** 2026-10-17  
 **Repositório:** IGOR-SciDATA/mosaic  
-**Base de referência:** `main` em `35570385743f4b4bdb0dec8acddd6459184fea5b`  
+**Snapshot da auditoria inicial:** `main` em `35570385743f4b4bdb0dec8acddd6459184fea5b` (referência histórica; conferir a branch atual antes de implementar)  
 **Documento complementar:** `MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md`
 
 ---
@@ -29,8 +29,8 @@ Antes de iniciar qualquer mudança, consulte os documentos aplicáveis no reposi
 2. Contrato oficial do Harness para execução, políticas, ferramentas, aprovação, eventos e artefatos.
 3. Contrato RAGNES para seleção, filtragem, ranking, compactação e continuidade de contexto.
 4. Contrato de UX para a interface React.
-5. Contrato MVP para entidades, campos, estados, relações e persistência, salvo alteração formal aprovada.
-6. Roadmap mestre vigente.
+5. Roadmap mestre vigente: `MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md`.
+6. Contrato MVP para entidades, campos, estados, relações e persistência, salvo alteração formal aprovada.
 7. Este guia de desenvolvimento.
 8. Código atual como evidência do comportamento implementado — não como autorização para perpetuar lacunas.
 
@@ -250,19 +250,19 @@ Uma capacidade só pode ser considerada concluída quando:
 
 ## 13. Sequência de desenvolvimento
 
-Seguir a sequência do roadmap complementar:
+A sequência normativa é a do **Roadmap Mestre do Harness Universal**: `docs/MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md`. Este guia descreve práticas de implementação e critérios técnicos; não cria uma sequência de fases concorrente.
 
-1. Reconciliação e aprovação da arquitetura.
-2. Perfis por conversa e snapshot de skills.
-3. Qualidade e validação de Markdown.
-4. Geração e validação de PDF.
-5. Geração e validação de XLSX.
-6. Geração e validação de PPTX.
-7. Pesquisa com fontes persistidas e citações verificáveis.
-8. Coordenação sequencial de agentes para desenvolvimento de sites.
-9. UI integrada e testes end-to-end.
+Resumo da ordem vigente:
 
-Não iniciar todas as fases simultaneamente. Cada fase deve produzir uma melhoria funcional isolada, testada e revisável.
+1. **Fase 0 — Baseline:** auditar a branch atual, contratos, testes e fluxos reais.
+2. **Fases 1–3 — Confiabilidade:** segurança e estados, integração do Harness com o modelo escolhido na conversa, eventos e retomada.
+3. **Fases 4–6 — Agent e contexto:** perfil/instruções/Skills persistentes com snapshots, coordenador de subtarefas e RAGNES.
+4. **Fases 7–9 — Capacidades e integração:** ferramentas seguras, artefatos/validadores e experiência de execução.
+5. **Fase 10 — Redesign do frontend:** auditoria da UX, redução de ruído e ampliação da área de chat.
+6. **Fases 11–12 — Validação:** cenários completos por tipo de tarefa, avaliação, resiliência e autonomia limitada.
+7. **Fase 13 — Paralelismo:** somente após os pré-requisitos de isolamento, concorrência, cancelamento e recuperação.
+
+Não iniciar todas as fases simultaneamente. Cada fase deve produzir uma melhoria isolada, testada e revisável, em PR próprio, com validação do MASTER antes de avançar.
 
 ## 14. Decisões que exigem aprovação
 
