@@ -11,7 +11,7 @@
 
 Este documento converte a arquitetura do Mosaic em uma sequência executável de trabalho. O agente de implementação deve seguir as etapas na ordem definida, trabalhar em incrementos pequenos e apresentar evidências antes de avançar.
 
-O resultado esperado é um Mosaic capaz de preservar memória e contexto, executar tarefas por meio de um Harness confiável, utilizar ferramentas sob controle do Core, retomar trabalho e apresentar tudo isso em uma interface clara.
+O resultado esperado é um Mosaic capaz de concluir tarefas gerais com rastreabilidade: pesquisar na internet e citar fontes realmente consultadas; criar e validar documentos, planilhas e apresentações; desenvolver projetos de software com especialidades coordenadas; preservar contexto e retomar tarefas; e apresentar plano, estado, evidências e artefatos em uma interface clara. O Harness é o mecanismo de execução desse produto, não o objetivo final isolado. Para orientar a implementação a partir dessa visão, consultar também [o Prompt Normativo do Agente de Propósito Geral](MOSAIC_UNIVERSAL_AGENT_IMPLEMENTATION_PROMPT_v1.0.md).
 
 **Não implementar todas as etapas em um único PR.** Cada etapa deve ter seu próprio escopo, testes, resumo de diff e critério de aceite. O MASTER valida a etapa antes da seguinte.
 
@@ -74,9 +74,10 @@ Fazer com que todos os documentos normativos estejam no repositório e que o est
 5. Executar a suíte backend; registrar o comando, total de testes e falhas.
 6. Executar build frontend; registrar o comando e resultado.
 7. Executar smoke test da API e um fluxo local com Ollama, quando o ambiente de validação disponibilizar o modelo.
-8. Executar pelo menos um fluxo integrado: conversa → Task → decisão do modelo → ferramenta permitida → resultado/eventos persistidos → estado final.
-9. Testar reinício/reconexão e verificar se o estado da Task é recuperável.
-10. Atualizar o relatório de baseline com evidências reais, separando testes executados de testes apenas existentes.
+8. Preservar e reproduzir o fluxo vertical já demonstrado manualmente pelo usuário: ler arquivo Markdown → resumir → criar novo Markdown; verificar o conteúdo e a existência/legibilidade do artefato gerado. Se o ambiente permitir, automatizar esse cenário como teste de regressão.
+9. Executar pelo menos um fluxo integrado mais amplo: conversa → Task → decisão do modelo → ferramenta permitida → resultado/eventos persistidos → estado final.
+10. Testar reinício/reconexão e verificar se o estado da Task é recuperável.
+11. Atualizar o relatório de baseline com evidências reais, separando validação manual reportada, testes automatizados executados e testes apenas existentes.
 
 ### Aceite
 - Contratos referenciados estão versionados e acessíveis no repositório.
