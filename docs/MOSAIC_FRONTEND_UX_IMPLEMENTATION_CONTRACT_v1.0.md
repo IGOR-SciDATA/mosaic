@@ -7,7 +7,7 @@
 
 ---
 
-> **Baseline note (2026-10-18):** the MVP Implementation Contract cited as a dependency is not yet versioned at its canonical path in `main`. This document defines target UX requirements and does not authorize schema changes or inferred deviations from the MVP. See the [Phase 0 audit](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md); persistence changes must wait until the MVP contract is canonicalized.
+> **Baseline update (2026-10-18):** the MVP Implementation Contract is now versioned at its canonical path. UI preferences must use the approved configuration mechanism; persistence changes must follow section 6 of `MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md` and must not introduce schema merely for convenience.
 
 ## 1. Purpose
 
