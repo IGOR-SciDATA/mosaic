@@ -316,3 +316,10 @@ OSAIC — RAGNES CONTEXT SYSTEM CONTRACT
 **Date:** 2026-10-13  
 **Authority:** MASTER / Architecture  
 **Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md, Mosaic_MVP_Implementation_Contract.md
+
+
+---
+
+## Ordem de implementação
+
+A sequência operacional para RAGNES está no [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md), Fase 6. Manter primeiro seleção determinística, leitura explícita, inventário e busca lexical avaliável. Embeddings, índices vetoriais e reranking só devem ser propostos quando métricas demonstrarem uma lacuna relevante.
