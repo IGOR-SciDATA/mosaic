@@ -2549,14 +2549,14 @@ body { overflow: hidden; }
   box-shadow: 0 3px 12px rgba(0,0,0,.12);
 }
 :root[data-theme="dark"] .home-example:hover {
-  background: #222a31;
-  border-color: #42755a;
-  box-shadow: 0 8px 22px rgba(0,0,0,.22);
+  background: #261719;
+  border-color: #a82a30;
+  box-shadow: 0 8px 22px rgba(0,0,0,.28);
 }
 :root[data-theme="dark"] .home-example-icon {
-  color: #63d6a3;
-  background: #17372a;
-  border-color: #28523e;
+  color: #ff7772;
+  background: rgba(226,30,38,.14);
+  border-color: rgba(248,113,113,.28);
 }
 :root[data-theme="dark"] .home-example strong { color: #f0f2f5; }
 :root[data-theme="dark"] .home-example > div > span { color: #b2bac6; }
