@@ -43,7 +43,6 @@ Precedência dos contratos:
 6. [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md) para tarefas operacionais e critérios de aceite.
 7. MVP Implementation Contract v1.0 para entidades e schema, após canonização no repositório e decisão explícita sobre divergências.
 8. Código atual como verdade da implementação — nunca como justificativa para perpetuar falhas de segurança ou comportamento incompleto.
-7. Código atual como verdade da implementação — nunca como justificativa para perpetuar falhas de segurança ou comportamento incompleto.
 
 Se dois contratos entrarem em conflito, Chat 01 deve interromper a mudança afetada e solicitar decisão do MASTER; não deve inventar reconciliação silenciosa. Para a divergência conhecida do schema, seguir a decisão normativa registrada na seção 6 do Plano de Implementação Passo a Passo: manter task_events e _mosaic_meta como tabelas internas e alinhar as entidades de domínio ao contrato MVP, incluindo artifacts e settings.
 
