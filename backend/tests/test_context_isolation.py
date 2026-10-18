@@ -69,7 +69,7 @@ def test_context_proof_keeps_project_state_memory_and_history_isolated(
         captured.append(messages)
         return "Contexto recebido"
 
-    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", fake_generate)
+    monkeypatch.setattr("app.providers.ollama.OllamaProvider.generate", fake_generate)
 
     guitar_response = client.post(
         f"/conversations/{guitar_conversation['id']}/chat",
