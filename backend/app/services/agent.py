@@ -400,6 +400,44 @@ def _required_source_paths(goal: str) -> list[str]:
             unique.append(normalized)
     return unique
 
+def _source_read_evidence(task_id: int, conversation_id: int, source: str) -> dict[str, Any]:
+    """Return persisted provenance for a fully read source without copying content into the plan."""
+    normalized_source = Path(source).as_posix().casefold()
+    chunks: dict[int, str] = {}
+    total_lines: int | None = None
+    call_ids: list[int] = []
+    result_ids: list[int] = []
+    for call in list_tool_calls(conversation_id):
+        if call.task_id != task_id or call.tool_name != "filesystem" or call.arguments.get("operation") != "read":
+            continue
+        for result in list_tool_results(call.id):
+            if result.status != "completed" or not isinstance(result.data, dict):
+                continue
+            data = result.data
+            if Path(str(data.get("path", ""))).as_posix().casefold() != normalized_source:
+                continue
+            content = data.get("content")
+            start_line = data.get("start_line")
+            lines = data.get("total_lines")
+            if not isinstance(content, str) or not isinstance(start_line, int) or not isinstance(lines, int):
+                continue
+            if total_lines is not None and total_lines != lines:
+                continue
+            total_lines = lines
+            chunks[start_line] = content
+            call_ids.append(call.id)
+            result_ids.append(result.id)
+    ordered = sorted(chunks.items())
+    complete_content = "".join(content for _, content in ordered)
+    return {
+        "source_path": source,
+        "source_total_lines": total_lines,
+        "source_sha256": hashlib.sha256(complete_content.encode("utf-8")).hexdigest() if ordered else None,
+        "tool_call_ids": sorted(set(call_ids)),
+        "tool_result_ids": sorted(set(result_ids)),
+    }
+
+
 def _verified_source_reads(task_id: int, conversation_id: int, goal: str) -> list[str]:
     """Require complete line coverage for every explicitly named source file."""
     required = _required_source_paths(goal)
@@ -739,6 +777,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
             "kind": "read_file",
             "path": source,
             "status": "pending",
+            "depends_on": [f"read_source_{index - 1}"] if index > 1 else [],
             "instruction": f"Read the complete source file {source}.",
         })
 
@@ -749,6 +788,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
                 "id": "transform_source" if updating else "summarize_source",
                 "kind": "transform_source" if updating else "summarize_source",
                 "status": "pending",
+                "depends_on": [f"read_source_{index}" for index in range(1, len(sources) + 1)],
                 "instruction": (
                     "Produce the complete updated file content using the source and the requested changes. "
                     "Do not call tools or claim the file has already been saved."
@@ -760,6 +800,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
                 "kind": "write_artifact" if updating else "create_artifact",
                 "path": _artifact_output_path(goal),
                 "status": "pending",
+                "depends_on": ["transform_source" if updating else "summarize_source"],
                 "instruction": (
                     "The Core will write the updated file after approval."
                     if updating else
@@ -772,6 +813,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
             "id": "answer_from_source",
             "kind": "answer_from_source",
             "status": "pending",
+            "depends_on": [f"read_source_{index}" for index in range(1, len(sources) + 1)],
             "instruction": "Answer the user's request using the complete source evidence. Do not call tools unless the Core starts a new explicit step.",
         })
     elif creates_artifact:
@@ -780,6 +822,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
                 "id": "draft_content",
                 "kind": "draft_content",
                 "status": "pending",
+                "depends_on": [],
                 "instruction": content_instruction,
             },
             {
@@ -787,6 +830,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
                 "kind": "create_artifact",
                 "path": _artifact_output_path(goal),
                 "status": "pending",
+                "depends_on": ["draft_content"],
                 "instruction": "The Core will create the output file from the generated content and validate it after approval.",
             },
         ])
@@ -795,6 +839,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
             "id": "execute_goal",
             "kind": "execute_goal",
             "status": "pending",
+            "depends_on": [],
             "instruction": "Choose the appropriate registered tool when the goal requires an action; otherwise answer directly.",
         })
     return steps
@@ -838,6 +883,24 @@ def _set_task_step_status(
     matched = False
     for step in steps:
         if isinstance(step, dict) and step.get("id") == step_id:
+            if status in {"in_progress", "completed"}:
+                step_by_id = {
+                    item.get("id"): item for item in steps
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)
+                }
+                dependencies = step.get("depends_on", [])
+                if not isinstance(dependencies, list):
+                    raise ValueError(f"Invalid dependency list for task step: {step_id}")
+                incomplete = [
+                    dependency for dependency in dependencies
+                    if dependency not in step_by_id
+                    or step_by_id[dependency].get("status") not in {"completed", "skipped"}
+                ]
+                if incomplete:
+                    raise ValueError(
+                        f"Task step {step_id} cannot become {status}; dependencies are incomplete: "
+                        + ", ".join(str(item) for item in incomplete)
+                    )
             step["status"] = status
             step.update(metadata)
             matched = True
@@ -923,7 +986,11 @@ def _prepare_task_sources(
         if missing:
             _set_task_step_status(task_id, step_id, "failed", error=f"Source could not be read completely: {source}")
             return missing
-        _set_task_step_status(task_id, step_id, "completed")
+        evidence = _source_read_evidence(task_id, conversation_id, source)
+        if evidence.get("source_sha256") is None:
+            _set_task_step_status(task_id, step_id, "failed", error=f"Source evidence missing after read: {source}")
+            return [source]
+        _set_task_step_status(task_id, step_id, "completed", **evidence)
 
     return []
 
@@ -1113,13 +1180,22 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                     return {"status": "failed", "error": error, "iterations": iteration}
 
                 step = _current_task_step(current.plan)
-                if step is not None and step.get("kind") in {"summarize_source", "draft_content"}:
-                    _set_task_step_status(task_id, str(step["id"]), "completed")
+                if step is not None and step.get("kind") in {"summarize_source", "transform_source", "draft_content"}:
+                    _set_task_step_status(
+                        task_id,
+                        str(step["id"]),
+                        "completed",
+                        output_sha256=hashlib.sha256(artifact_content.encode("utf-8")).hexdigest(),
+                        output_chars=len(artifact_content),
+                    )
                 _set_task_step_status(
                     task_id,
                     "create_artifact",
                     "awaiting_approval",
                     path=_artifact_output_path(goal),
+                    output_sha256=hashlib.sha256(artifact_content.encode("utf-8")).hexdigest(),
+                    output_chars=len(artifact_content),
+                    output_format=_artifact_format(goal),
                 )
                 output_format = _artifact_format(goal)
                 output_path = _artifact_output_path(goal)
