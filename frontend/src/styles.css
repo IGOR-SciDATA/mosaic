@@ -2983,3 +2983,32 @@ body { overflow: hidden; }
 :root[data-theme="dark"] .agent-command-suggestions { background: #141414; border-color: #353535; }
 :root[data-theme="dark"] .agent-command-suggestions button:hover,
 :root[data-theme="dark"] .agent-command-suggestions button:focus-visible { background: rgba(226,30,38,.15); }
+
+
+.task-agent-context {
+  display: block;
+  overflow: hidden;
+  color: var(--green, #16834a) !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-agent-snapshot {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 13px 15px;
+  border: 1px solid var(--border, #dce5dd);
+  border-radius: 11px;
+  background: var(--surface-2, #f8faf8);
+}
+.task-agent-snapshot > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+}
+.task-agent-snapshot > div > svg { flex: 0 0 auto; color: var(--green, #16834a); margin-top: 2px; }
+.task-agent-snapshot > div > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.task-agent-snapshot small { color: var(--muted, #647368); font-size: 11px; line-height: 1.5; }
+.task-agent-snapshot strong { color: var(--text, #17231b); font-size: 12px; overflow-wrap: anywhere; }
+:root[data-theme="dark"] .task-agent-snapshot { background: #151515; border-color: #343434; }
