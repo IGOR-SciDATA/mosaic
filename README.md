@@ -111,7 +111,14 @@ Esse é um marco concreto: o protótipo já demonstrou uma tarefa de leitura de 
 - Coordenação sequencial de especialidades, integração entre subtarefas e QA real.
 - Build, testes e jornadas end-to-end executados no ambiente atual.
 
-**Status de validação:** a auditoria documentada foi estática. Não considerar testes aprovados quando não houver resultado de execução registrado. Ver [auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md).
+**Estados de evidência usados neste README:**
+- **Planejado:** requisito definido, sem implementação comprovada.
+- **Presente no código:** há implementação identificada, sem garantia de execução correta.
+- **Testado:** comando/teste foi executado e o resultado está registrado.
+- **Validado ponta a ponta:** jornada real foi executada e os critérios de aceite foram verificados.
+- **Demonstrado manualmente:** evidência reportada pelo usuário, ainda sem equivalência automática presumida.
+
+**Status de validação:** a auditoria documentada do baseline foi estática; o fluxo Markdown acima é uma validação manual reportada pelo usuário. Não considerar testes aprovados quando não houver resultado de execução registrado. Ver [auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md).
 
 ---
 
@@ -180,6 +187,20 @@ Pedido → Task → Plano e critérios de aceite
 
 O Harness coordena componentes existentes do Core. Não é um segundo Core, não duplica o estado e não concede permissões ao modelo.
 
+### Observabilidade, verificação e progresso
+
+O Mosaic deve registrar eventos operacionais, verificar resultados com evidências e apresentar progresso baseado no estado real da Task. A estratégia é **verificar primeiro com mecanismos determinísticos baratos** — testes, códigos de saída, validação estrutural e releitura de artefatos — e recorrer ao modelo avaliador apenas quando a verificação exigir julgamento semântico.
+
+Quando houver falha, o Harness deve diagnosticar com contexto mínimo, corrigir apenas o trecho afetado, repetir somente as verificações necessárias e respeitar limites de tentativas/custo. A conclusão exige critérios de aceite verificados; chamada de ferramenta bem-sucedida ou teste não executado não é prova de conclusão. A observabilidade registra fatos operacionais e evidências, não raciocínio privado.
+
+### Estados de progresso
+
+- **Estado da tarefa:** pendente, planejamento, aguardando aprovação, executando, validando, concluída, falhou ou cancelada.
+- **Etapas operacionais:** ferramenta iniciada, resultado recebido, validação aprovada/reprovada, correção iniciada e artefato produzido.
+- **Estado de evidência:** aprovado, reprovado, bloqueado ou não executado.
+
+A interface deve refletir o estado persistido no Core. Não inventar percentuais; exibi-los somente quando o total de etapas for conhecido e mensurável.
+
 ---
 
 # 🧭 Princípios
@@ -208,7 +229,7 @@ O roadmap é atualizado conforme o código muda e as evidências são revisadas.
 | Marco | Estado no baseline | Objetivo / saída verificável |
 |---|---|---|
 | Fundação do Core | **Presente no código; validação dinâmica pendente** | Persistência, conversas, projetos, memórias, modelos e tarefas coerentes |
-| Agent e ferramentas | **Fluxo Markdown → resumo → novo Markdown concluído manualmente; cobertura geral pendente** | Preservar esse cenário como regressão e ampliar a validação para outras ferramentas e tipos de tarefa |
+| Agent, ferramentas e autoverificação | **Fluxo Markdown → resumo → novo Markdown demonstrado manualmente; regressão automatizada e observabilidade a validar** | Registrar eventos operacionais, verificar artefatos com evidências, corrigir falhas com limites e preservar esse fluxo como regressão |
 | Segurança e estado | **Trabalho necessário; revisar branch/PR e executar testes** | Workspace confinado, terminal controlado, validação estrita, políticas e transições consistentes |
 | Contratos e baseline | **Documentação consolidada; baseline dinâmico pendente** | Contratos canônicos, schema reconciliado, testes/build/smoke/E2E com evidências |
 | Harness retomável | **Objetivo de implementação** | Aprovação, eventos, cancelamento, reconexão e retomada sem duplicar efeitos |
