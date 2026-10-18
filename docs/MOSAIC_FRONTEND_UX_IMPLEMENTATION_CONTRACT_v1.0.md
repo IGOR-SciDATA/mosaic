@@ -370,3 +370,12 @@ If this contract conflicts with the current backend API, do not hide the mismatc
 **Mosaic should feel simple to use, while its work remains inspectable and controllable.**
 
 The user sees the goal, meaningful progress, decisions that require them, and the result. The Core handles the complexity, security, state transitions, execution, and persistence.
+
+
+---
+
+## 15. Ordem de implementação
+
+Este contrato define o resultado esperado da experiência frontend, mas não cria uma sequência paralela de desenvolvimento. A ordem operacional e os critérios de aceite estão no [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md), especialmente na Fase 8 — Frontend.
+
+Prioridades de UX: chat como tela padrão, área de mensagens mais ampla, tipografia mais legível, hierarquia visual consistente, redução de espaços e controles redundantes, responsividade, acessibilidade, estados reais de tarefa e detalhes técnicos sob demanda. Nenhum controle pode aparentar funcionar sem suporte real no backend.
