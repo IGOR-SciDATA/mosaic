@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import DATA_DIR
+from app.models.artifact_repository import create_artifact
 from app.models.conversation_repository import get_conversation
 from app.models.project_repository import get_project
 from app.models.task_event_repository import create_task_event
@@ -168,18 +169,38 @@ def execute_tool_call(tool_call: ToolCall) -> ToolResult:
     if executing is None:
         raise ValueError("ToolCall no longer exists")
     try:
-        workspace = resolve_tool_workspace(executing) if executing.tool_name in {"filesystem", "terminal"} else None
+        workspace = resolve_tool_workspace(executing) if executing.tool_name in {"filesystem", "terminal", "artifact"} else None
         def is_cancelled() -> bool:
             if executing.task_id is None:
                 return False
             task = get_task(executing.task_id)
             return task is None or task.status == "cancelled"
 
+        if executing.tool_name == "artifact" and executing.task_id is None:
+            raise ValueError("Artifact creation requires a persisted Task")
         data = tool.execute(
             executing.arguments,
             workspace=workspace,
-            cancel_check=is_cancelled if executing.tool_name == "terminal" else None,
+            cancel_check=is_cancelled if executing.tool_name in {"terminal", "artifact"} else None,
         )
+        if (
+            executing.tool_name == "artifact"
+            and executing.task_id is not None
+            and isinstance(data, dict)
+            and data.get("status") == "success"
+        ):
+            artifact = create_artifact(
+                task_id=executing.task_id,
+                type=str(data["format"]),
+                path=str(data["path"]),
+                metadata={
+                    "sha256": data["sha256"],
+                    "bytes": data["bytes"],
+                    "validation": data["validation"],
+                    "tool_call_id": executing.id,
+                },
+            )
+            data["artifact_id"] = artifact.id
     except Exception as exc:
         update_tool_call(executing.id, status="failed")
         result = create_tool_result(executing.id, "failed", error=f"{type(exc).__name__}: {exc}")
