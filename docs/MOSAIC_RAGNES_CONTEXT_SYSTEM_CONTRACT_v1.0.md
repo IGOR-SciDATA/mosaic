@@ -5,7 +5,7 @@
 **Authority:** MASTER / Architecture  
 **Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md, MVP Implementation Contract v1.0 (canonical repository path pending; see [Phase 0 audit](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md))
 
-> **Baseline note (2026-10-18):** the MVP Implementation Contract cited as a dependency is not yet versioned at its canonical path in `main`. This document defines target requirements but does not authorize schema changes or inferred deviations from the MVP. See the [Phase 0 audit](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) and wait for the contract to be canonicalized before changing persistence.
+> **Baseline update (2026-10-18):** the MVP Implementation Contract is now versioned at its canonical path. Persistence changes must follow the explicit schema decision in section 6 of `MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md`, including preservation of `task_events` and `_mosaic_meta` and idempotent, non-destructive creation of the missing domain tables. RAGNES still does not authorize unrelated schema expansion.
 
 ## 1. Purpose
 
