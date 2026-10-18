@@ -285,9 +285,41 @@ function TaskWorkspace({ conversationId, projectId }) {
   const [toolCalls, setToolCalls] = useState([]);
   const [connectionState, setConnectionState] = useState("connecting");
   const [goal, setGoal] = useState("");
+  const [libraryAgents, setLibraryAgents] = useState([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    if (!projectId) { setLibraryAgents([]); return undefined; }
+    api.projects.agents(projectId).then(data => { if (active) setLibraryAgents(data); })
+      .catch(() => { if (active) setLibraryAgents([]); });
+    return () => { active = false; };
+  }, [projectId]);
+
+  function skillCommandSlug(name) {
+    return name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
+  const agentQuery = goal.match(/^\/([a-z0-9-]*)$/i);
+  const agentSuggestions = agentQuery ? libraryAgents.filter(agent =>
+    agent.slug.toLowerCase().includes(agentQuery[1].toLowerCase()) ||
+    agent.name.toLowerCase().includes(agentQuery[1].toLowerCase())
+  ).slice(0, 6) : [];
+  const skillQuery = goal.match(/^\/([a-z0-9-]+)\s+@([a-z0-9-]*)$/i);
+  const blankAfterAgent = goal.match(/^\/([a-z0-9-]+)\s+$/i);
+  const skillAgentSlug = skillQuery?.[1] || blankAfterAgent?.[1] || null;
+  const skillQueryText = skillQuery?.[2] || "";
+  const skillAgent = skillAgentSlug ? libraryAgents.find(agent => agent.slug === skillAgentSlug) : null;
+  const skillSuggestions = skillAgent && (skillQuery || blankAfterAgent)
+    ? skillAgent.skills.filter(skill => skill.enabled !== false && skillCommandSlug(skill.name).includes(skillQueryText.toLowerCase())).slice(0, 6)
+    : [];
+
+  function selectTaskAgent(agent) { setGoal("/" + agent.slug + " @"); }
+  function selectTaskSkill(agent, skill) { setGoal("/" + agent.slug + " @" + skillCommandSlug(skill.name) + " "); }
+  function useAgentWithoutSkill(agent) { setGoal("/" + agent.slug + " "); }
 
   async function refreshTasks(preferId = null) {
     if (!conversationId) { setTasks([]); setSelectedId(null); setLoading(false); return; }
@@ -436,17 +468,30 @@ function TaskWorkspace({ conversationId, projectId }) {
       ? <div className="task-empty"><Icon name="tool" size={25}/><strong>Selecione uma conversa</strong><span>As tarefas ficam vinculadas à conversa e ao projeto ativos.</span></div>
       : <form className="task-start-form" onSubmit={startTask}>
           <label htmlFor="agent-task-goal">O que você quer que o Mosaic faça?</label>
-          <textarea id="agent-task-goal" value={goal} onChange={event => setGoal(event.target.value)} rows={3} maxLength={8000} placeholder="Ex.: Analise a estrutura deste projeto e identifique os próximos passos." disabled={busy}/>
+          <div className="task-goal-autocomplete">
+            <textarea id="agent-task-goal" value={goal} onChange={event => setGoal(event.target.value)} rows={3} maxLength={8000} placeholder="Ex.: Analise a estrutura deste projeto. Digite / para escolher um agente." disabled={busy} autoComplete="off"/>
+            {!!agentSuggestions.length && <div className="agent-command-suggestions" role="listbox" aria-label="Agentes disponíveis">
+              <div className="agent-command-suggestions-title">Selecionar agente</div>
+              {agentSuggestions.map(agent => <button type="button" key={agent.slug} role="option" onClick={() => selectTaskAgent(agent)}><Icon name="bot" size={16}/><span><strong>/{agent.slug}</strong><small>{agent.name} · {agent.skills.filter(skill => skill.enabled !== false).length} Skills ativas</small></span><Icon name="chevron-right" size={15}/></button>)}
+            </div>}
+            {!!skillAgent && (skillQuery || blankAfterAgent) && <div className="agent-command-suggestions" role="listbox" aria-label="Skills disponíveis">
+              <div className="agent-command-suggestions-title">Skill para /{skillAgent.slug}</div>
+              <button type="button" role="option" onClick={() => useAgentWithoutSkill(skillAgent)}><Icon name="bot" size={16}/><span><strong>Usar agente sem selecionar Skill</strong><small>Inclui as Skills ativas configuradas no perfil.</small></span></button>
+              {skillSuggestions.map(skill => <button type="button" key={skillCommandSlug(skill.name)} role="option" onClick={() => selectTaskSkill(skillAgent, skill)}><Icon name="puzzle" size={16}/><span><strong>@{skillCommandSlug(skill.name)}</strong><small>{skill.name}</small></span><Icon name="chevron-right" size={15}/></button>)}
+              {!skillSuggestions.length && skillQuery && <div className="agent-command-empty">Nenhuma Skill ativa corresponde à busca.</div>}
+            </div>}
+          </div>
           <div className="task-start-footer"><span>Execução real · o Core controla ferramentas e permissões</span><button type="submit" className="primary-action" disabled={busy || !goal.trim()}><Icon name="send" size={15}/>{busy ? "Enviando…" : "Executar tarefa"}</button></div>
         </form>}
     {error && <div className="task-inline-error" role="alert">{error}</div>}
     <div className="task-layout">
       <section className="task-list-panel"><div className="task-panel-heading"><strong>Histórico de tarefas</strong><button type="button" onClick={() => refreshTasks()} aria-label="Atualizar tarefas" title="Atualizar">↻</button></div>
-        {loading ? <div className="task-muted">Carregando tarefas…</div> : !tasks.length ? <div className="task-muted">Nenhuma tarefa nesta conversa.</div> : <div className="task-list">{[...tasks].reverse().map(task => <button type="button" key={task.id} className={selectedId === task.id ? "task-list-item selected" : "task-list-item"} onClick={() => setSelectedId(task.id)}><span className={"task-status-dot status-" + task.status}/><span className="task-list-copy"><strong>{task.plan?.goal || ("Tarefa #" + task.id)}</strong><small>#{task.id} · {new Date(task.updated_at).toLocaleString("pt-BR", {dateStyle:"short",timeStyle:"short"})}</small></span><span className={"task-status status-" + task.status}>{TASK_STATUS_LABELS[task.status] || task.status}</span></button>)}</div>}
+        {loading ? <div className="task-muted">Carregando tarefas…</div> : !tasks.length ? <div className="task-muted">Nenhuma tarefa nesta conversa.</div> : <div className="task-list">{[...tasks].reverse().map(task => <button type="button" key={task.id} className={selectedId === task.id ? "task-list-item selected" : "task-list-item"} onClick={() => setSelectedId(task.id)}><span className={"task-status-dot status-" + task.status}/><span className="task-list-copy"><strong>{task.plan?.goal || ("Tarefa #" + task.id)}</strong><small>#{task.id} · {new Date(task.updated_at).toLocaleString("pt-BR", {dateStyle:"short",timeStyle:"short"})}</small>{task.plan?.agent_library_snapshot && <small className="task-agent-context">/{task.plan.agent_library_snapshot.slug}{task.plan.agent_library_snapshot.skills?.length ? " · " + task.plan.agent_library_snapshot.skills.map(skill => skill.name).join(", ") : ""}</small>}</span><span className={"task-status status-" + task.status}>{TASK_STATUS_LABELS[task.status] || task.status}</span></button>)}</div>}
       </section>
       <section className="task-detail-panel">
         {!selected ? <div className="task-empty compact"><Icon name="layers" size={23}/><strong>Selecione uma tarefa</strong><span>O estado, a linha do tempo e o resultado aparecerão aqui.</span></div> : <>
           <div className="task-detail-heading"><div><span className="task-id">TAREFA #{selected.id}</span><h3>{selected.plan?.goal || "Execução do Mosaic"}</h3></div><span className={"task-status status-" + selected.status}>{TASK_STATUS_LABELS[selected.status] || selected.status}</span></div>
+          {selected.plan?.agent_library_snapshot && <div className="task-agent-snapshot"><div><Icon name="bot" size={16}/><span><small>Agente congelado nesta Task</small><strong>/{selected.plan.agent_library_snapshot.slug} · v{selected.plan.agent_library_snapshot.version}</strong></span></div><div><Icon name="puzzle" size={16}/><span><small>Skills no snapshot</small><strong>{selected.plan.agent_library_snapshot.skills?.length ? selected.plan.agent_library_snapshot.skills.map(skill => skill.name + " v" + skill.version).join(", ") : "Nenhuma Skill"}</strong></span></div><small>As instruções e Skills deste snapshot permanecem vinculadas à tarefa mesmo que a Biblioteca seja editada depois.</small></div>}
           <div className="task-progress-meta"><span>Estado atual</span><strong>{TASK_STATUS_LABELS[selected.status] || selected.status}</strong></div>
           {active && selected.status !== "awaiting_approval" && <div className="task-progress-track"><span/></div>}
           {selected.status === "awaiting_approval" && <div className="approval-stack"><div className="task-notice"><Icon name="check" size={17}/>O Mosaic precisa da sua autorização antes de executar esta operação.</div>{toolCalls.filter(call => call.status === "pending").map(call => <article className="approval-card" key={call.id}><span className="eyebrow">AÇÃO #{call.id} · AGUARDANDO</span><h4>Permitir {call.tool_name}?</h4><p>O agente solicitou esta ferramenta. Revise os argumentos antes de autorizar a execução.</p><details><summary>Ver operação e argumentos</summary><pre>{JSON.stringify(call.arguments, null, 2)}</pre></details><div className="approval-actions"><button type="button" className="danger-action" disabled={busy} onClick={() => decideCall(call.id, "reject")}>Recusar</button><button type="button" className="primary-action" disabled={busy} onClick={() => decideCall(call.id, "approve")}>{busy ? "Registrando…" : "Aprovar e continuar"}</button></div></article>)}</div>}

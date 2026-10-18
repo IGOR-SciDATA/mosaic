@@ -2932,3 +2932,83 @@ body { overflow: hidden; }
   box-shadow: 0 0 0 3px rgba(22,131,74,.08);
 }
 :root[data-theme="light"] .agent-document-field .agent-file-title svg { color: #16834a; }
+
+
+/* Agent and Skill autocomplete inside the Task composer. */
+.task-goal-autocomplete { position: relative; width: 100%; min-width: 0; }
+.task-goal-autocomplete > textarea { display: block; width: 100%; }
+.agent-command-suggestions {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% - 2px);
+  left: 0;
+  right: 0;
+  max-height: 290px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--border, #dce5dd);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  box-shadow: 0 14px 36px rgba(0,0,0,.16);
+}
+.agent-command-suggestions-title {
+  padding: 7px 10px 8px;
+  color: var(--muted, #647368);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.agent-command-suggestions button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text, #17231b);
+  text-align: left;
+}
+.agent-command-suggestions button:hover,
+.agent-command-suggestions button:focus-visible { background: var(--red-soft, rgba(22,131,74,.1)); outline: none; }
+.agent-command-suggestions button > span { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.agent-command-suggestions button strong { font-size: 13px; font-weight: 650; }
+.agent-command-suggestions button small { color: var(--muted, #647368); font-size: 11px; }
+.agent-command-empty { padding: 12px; color: var(--muted, #647368); font-size: 12px; }
+:root[data-theme="light"] .agent-command-suggestions { background: #fff; border-color: #d7e4da; }
+:root[data-theme="light"] .agent-command-suggestions button:hover,
+:root[data-theme="light"] .agent-command-suggestions button:focus-visible { background: #eaf6ee; }
+:root[data-theme="dark"] .agent-command-suggestions { background: #141414; border-color: #353535; }
+:root[data-theme="dark"] .agent-command-suggestions button:hover,
+:root[data-theme="dark"] .agent-command-suggestions button:focus-visible { background: rgba(226,30,38,.15); }
+
+
+.task-agent-context {
+  display: block;
+  overflow: hidden;
+  color: var(--green, #16834a) !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-agent-snapshot {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 13px 15px;
+  border: 1px solid var(--border, #dce5dd);
+  border-radius: 11px;
+  background: var(--surface-2, #f8faf8);
+}
+.task-agent-snapshot > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+}
+.task-agent-snapshot > div > svg { flex: 0 0 auto; color: var(--green, #16834a); margin-top: 2px; }
+.task-agent-snapshot > div > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.task-agent-snapshot small { color: var(--muted, #647368); font-size: 11px; line-height: 1.5; }
+.task-agent-snapshot strong { color: var(--text, #17231b); font-size: 12px; overflow-wrap: anywhere; }
+:root[data-theme="dark"] .task-agent-snapshot { background: #151515; border-color: #343434; }
