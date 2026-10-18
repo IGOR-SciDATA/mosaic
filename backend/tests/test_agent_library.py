@@ -238,3 +238,40 @@ def test_existing_pending_task_resolves_agent_command_on_run():
     assert started.status == "executing"
     assert persisted.plan["goal"] == "Check this service"
     assert persisted.plan["agent_library_snapshot"]["slug"] == "backend-reviewer"
+
+
+def test_agent_invocation_can_freeze_one_selected_skill_by_slug():
+    project = _project()
+    create_project_agent(project.id, _payload())
+    goal, snapshot = parse_agent_invocation(
+        project.id,
+        "/backend-reviewer @api-review Review this endpoint",
+    )
+    assert goal == "Review this endpoint"
+    assert validate_agent_snapshot(snapshot)
+    assert [skill["name"] for skill in snapshot["skills"]] == ["API review"]
+    messages = agent_snapshot_messages(snapshot)
+    flattened = "\\n".join(item["content"] for item in messages)
+    assert "Check status codes and schemas." in flattened
+    assert "Must not enter active context." not in flattened
+
+
+def test_agent_invocation_rejects_unknown_or_disabled_selected_skill():
+    project = _project()
+    create_project_agent(project.id, _payload())
+    with pytest.raises(ValueError, match="Unknown or disabled Skill"):
+        parse_agent_invocation(project.id, "/backend-reviewer @missing do work")
+    with pytest.raises(ValueError, match="Unknown or disabled Skill"):
+        parse_agent_invocation(project.id, "/backend-reviewer @disabled-skill do work")
+
+
+def test_selected_skill_snapshot_stays_immutable_after_profile_update():
+    project = _project()
+    create_project_agent(project.id, _payload())
+    _, snapshot = parse_agent_invocation(project.id, "/backend-reviewer @api-review Original task")
+    update_project_agent(project.id, "backend-reviewer", {
+        "skills": [{"name": "API review", "content": "Changed after task started.", "enabled": True}],
+    })
+    assert validate_agent_snapshot(snapshot)
+    assert len(snapshot["skills"]) == 1
+    assert snapshot["skills"][0]["content"] == "Check status codes and schemas."
