@@ -70,7 +70,7 @@ def test_approved_write_resumes_same_task_and_verifies_once(tmp_path):
         project_id=project.id,
         plan={"goal": "crie arquivo Resumo.md"},
     )
-    content = "# Resumo verificado\\n\\nConteúdo persistido.\\n"
+    content = "# Resumo verificado\n\nConteúdo persistido.\n"
     call = create_tool_call(
         conversation.id,
         "filesystem",
