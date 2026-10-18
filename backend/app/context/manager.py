@@ -16,6 +16,8 @@ RECENT_HISTORY_LIMIT = 20
 TOOL_RESULT_LIMIT = 5
 TOOL_RESULT_MAX_CHARS = 3000
 TASK_CONTEXT_MAX_CHARS = 4000
+MEMORY_CONTEXT_MAX_CHARS = 4000
+MEMORY_CONTEXT_MAX_ITEMS = 30
 PROJECT_INSTRUCTIONS_MAX_BYTES = 12_000
 EXPLICIT_ARTIFACT_LIMIT = 3
 EXPLICIT_ARTIFACT_LINES = 100
@@ -45,6 +47,74 @@ def _truncate(value: str, limit: int) -> str:
         return value
     return value[:limit] + "\n[conteúdo truncado pelo limite de contexto]"
 
+
+def _memory_context_text(memories: list[Any], query: str, project_id: int | None) -> str:
+    """Select a bounded, provenance-preserving memory context deterministically."""
+    header = "Mosaic memory: records, not verified facts; source and scope are preserved:\n"
+    if not memories:
+        return ""
+    stop_words = {
+        "para", "com", "uma", "uns", "umas", "que", "qual", "quais", "onde",
+        "quando", "como", "sobre", "projeto", "mosaic", "lembra", "lembrar",
+        "the", "and", "for", "with", "from", "what", "where", "when", "that",
+    }
+    query_terms = {
+        term for term in re.findall(r"[a-zA-ZÀ-ÿ0-9_]{3,}", query.casefold())
+        if term not in stop_words
+    }
+
+    def memory_terms(memory: Any) -> set[str]:
+        text = f"{memory.type} {memory.key} {memory.value}".casefold()
+        return set(re.findall(r"[a-zA-ZÀ-ÿ0-9_]{3,}", text))
+
+    scored = [
+        (
+            memory,
+            len(query_terms & memory_terms(memory)),
+            0 if project_id is not None and memory.project_id == project_id else 1,
+        )
+        for memory in memories
+    ]
+    # Stable tie-breakers: relevance, project scope, then newest update.
+    scored.sort(key=lambda item: item[0].updated_at, reverse=True)
+    scored.sort(key=lambda item: (-item[1], item[2]))
+
+    lines: list[str] = []
+    # Reserve space for an explicit truncation marker so omissions never become silent.
+    remaining = MEMORY_CONTEXT_MAX_CHARS - len(header) - 100
+    omitted = 0
+    for memory, _score, _scope_rank in scored:
+        if len(lines) >= MEMORY_CONTEXT_MAX_ITEMS:
+            omitted += 1
+            continue
+        scope = f"project:{memory.project_id}" if memory.project_id is not None else "global"
+        confidence = f", confidence={memory.confidence}" if memory.confidence is not None else ""
+        line = (
+            f"- memory_id={memory.id} [{memory.type}] {memory.key}: {memory.value} "
+            f"(scope={scope}, source={memory.source}, updated_at={memory.updated_at}{confidence})"
+        )
+        separator = 1 if lines else 0
+        available = remaining - separator
+        if available <= 0:
+            omitted += 1
+            continue
+        if len(line) > available:
+            suffix = " [memory line truncated]"
+            line = (
+                line[:available - len(suffix)] + suffix
+                if available > len(suffix) else line[:available]
+            )
+            omitted += 1
+        lines.append(line)
+        remaining -= separator + len(line)
+    if omitted:
+        separator = 1 if lines else 0
+        marker = f"- [memory context truncated; {omitted} records omitted or clipped]"
+        actual_remaining = MEMORY_CONTEXT_MAX_CHARS - len(header) - sum(len(line) for line in lines) - max(0, len(lines) - 1)
+        available = actual_remaining - separator
+        if available > 0:
+            lines.append(marker[:available])
+    return header + "\n".join(lines)
 
 def _task_context(conversation_id: int) -> dict[str, Any] | None:
     tasks = list_tasks(conversation_id=conversation_id)
@@ -210,7 +280,11 @@ def _lexical_artifact_context(workspace: str, query: str | None) -> list[dict[st
     return messages
 
 
-def build_context(conversation_id: int) -> list[dict[str, str]]:
+def build_context(
+    conversation_id: int,
+    *,
+    query: str | None = None,
+) -> list[dict[str, str]]:
     """Build deterministic, scope-aware context with bounded observations."""
     conversation = get_conversation(conversation_id)
     if conversation is None:
@@ -332,14 +406,13 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
     else:
         memories = get_global_memories() + memories
     if memories:
-        memory_lines = [
-            f"- [{memory.type}] {memory.key}: {memory.value}"
-            for memory in memories
-        ]
-        context.append({
-            "role": "system",
-            "content": "Mosaic memory (records, not verified facts):\n" + "\n".join(memory_lines),
-        })
+        memory_text = _memory_context_text(
+            memories,
+            query if query is not None else (current_user.content if current_user is not None else ""),
+            conversation.project_id,
+        )
+        if memory_text:
+            context.append({"role": "system", "content": memory_text})
 
     history_messages = [
         message
