@@ -2417,3 +2417,129 @@ body { overflow: hidden; }
   color: #16845b;
   filter: drop-shadow(0 1px 4px rgba(22, 132, 91, 0.28));
 }
+
+
+/* Mosaic Home: calm, modern landing state with a subtle typewriter prompt. */
+.home-welcome {
+  box-sizing: border-box;
+  width: min(760px, 100%);
+  min-height: min(640px, 100%);
+  margin: 0 auto;
+  padding: clamp(36px, 7vh, 76px) 28px 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #17191d;
+  animation: home-welcome-in .35s ease-out both;
+}
+.home-welcome-mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 20px;
+  border: 1px solid #dce9e2;
+  border-radius: 17px;
+  background: linear-gradient(145deg, #ffffff, #f0f8f3);
+  box-shadow: 0 5px 18px rgba(22,132,91,.08);
+}
+.home-welcome-mark .mosaic-mark { width: 36px; height: 36px; color: #16845b; }
+.home-welcome h1 {
+  margin: 0;
+  color: #111318;
+  font-size: clamp(30px, 3.4vw, 40px);
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -1.35px;
+}
+.home-welcome-subtitle {
+  margin: 13px 0 0;
+  color: #687281;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.home-typewriter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: min(620px, 100%);
+  min-height: 52px;
+  margin: 18px 0 30px;
+  padding: 0 14px;
+  color: #16845b;
+  font-size: clamp(14px, 1.5vw, 17px);
+  font-weight: 550;
+  line-height: 1.5;
+}
+.home-typewriter > span:first-child { overflow-wrap: anywhere; }
+.home-caret {
+  display: inline-block;
+  color: #16845b;
+  font-weight: 400;
+  animation: home-caret-blink 1s steps(2, start) infinite;
+}
+.home-examples {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+}
+.home-example {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 15px;
+  min-height: 146px;
+  padding: 18px 16px;
+  border: 1px solid #e1e5e9;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 3px 12px rgba(16,24,40,.025);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.home-example:hover {
+  transform: translateY(-2px);
+  border-color: #cbd8d0;
+  box-shadow: 0 8px 22px rgba(16,24,40,.055);
+}
+.home-example-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: #16845b;
+  background: #edf7f1;
+  border: 1px solid #d8ecdf;
+  border-radius: 10px;
+}
+.home-example > div { display: flex; flex-direction: column; gap: 6px; }
+.home-example strong { color: #20242a; font-size: 13px; font-weight: 650; line-height: 1.4; }
+.home-example > div > span { color: #687281; font-size: 12px; line-height: 1.55; }
+.home-welcome-hint { margin: 26px 0 0; color: #78818e; font-size: 12px; line-height: 1.6; }
+.home-welcome-hint strong { color: #343b45; font-weight: 650; }
+@keyframes home-caret-blink { to { visibility: hidden; } }
+@keyframes home-welcome-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 760px) {
+  .home-welcome { min-height: 100%; padding: 34px 18px 36px; }
+  .home-welcome h1 { font-size: 30px; letter-spacing: -1px; }
+  .home-welcome-subtitle { font-size: 14px; }
+  .home-typewriter { margin: 14px 0 22px; min-height: 64px; }
+  .home-examples { grid-template-columns: 1fr; gap: 9px; }
+  .home-example { flex-direction: row; align-items: center; gap: 12px; min-height: auto; padding: 13px; }
+  .home-example > div { gap: 3px; }
+  .home-welcome-hint { margin-top: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-welcome, .home-caret { animation: none; }
+  .home-example { transition: none; }
+}
+:root[data-theme="dark"] .home-welcome { color: #eceef2; }
+:root[data-theme="dark"] .home-welcome h1 { color: #f5f6f8; }
+:root[data-theme="dark"] .home-welcome-subtitle,
+:root[data-theme="dark"] .home-welcome-hint { color: #a3aab5; }
+:root[data-theme="dark"] .home-welcome-hint strong { color: #e4e7eb; }
+:root[data-theme="dark"] .home-example { background: #fff; }
