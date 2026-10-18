@@ -564,7 +564,7 @@ class ArtifactTool(Tool):
         },
     }
     _EXTENSIONS = {
-        "markdown": {".md"}, "pdf": {".pdf"}, "docx": {".docx"},
+        "markdown": {".md", ".markdown"}, "pdf": {".pdf"}, "docx": {".docx"},
         "xlsx": {".xlsx"}, "pptx": {".pptx"},
     }
 
