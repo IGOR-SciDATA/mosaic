@@ -796,6 +796,8 @@ class ArtifactTool(Tool):
         self._validate_reopened(fmt, data, content)
         target.parent.mkdir(parents=True, exist_ok=True)
         target = _workspace_path(root, relative_path)
+        if cancel_check and cancel_check():
+            return {"status": "cancelled", "path": relative_path, "format": fmt}
         if target.exists():
             raise FileExistsError(f"Artifact already exists: {relative_path}")
         with target.open("xb") as handle:
