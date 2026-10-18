@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.artifact_repository import list_artifacts
 from app.models.conversation_repository import get_conversation
-from app.models.message_repository import create_message
+from app.models.message_repository import create_message, list_messages
 from app.models.task import Task
 from app.models.task_event import TaskEvent
 from app.models.task_event_repository import create_task_event, list_task_events
@@ -443,6 +443,21 @@ def run_task_endpoint(task_id: int, background_tasks: BackgroundTasks) -> Task:
         raise HTTPException(status_code=400, detail="Agent Task requires a valid conversation")
     if task.status != "pending":
         raise HTTPException(status_code=409, detail=f"Task cannot start from status: {task.status}")
+    plan = dict(task.plan or {})
+    raw_goal = plan.get("goal")
+    if isinstance(raw_goal, str) and raw_goal.strip().startswith("/") and "agent_library_snapshot" not in plan:
+        scope_project_id = conversation.project_id if conversation.project_id is not None else task.project_id
+        try:
+            goal, agent_snapshot = parse_agent_invocation(scope_project_id, raw_goal)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        plan["goal"] = goal
+        plan["agent_library_snapshot"] = agent_snapshot
+        update_task(task_id, plan=plan)
+        messages = list_messages(conversation.id)
+        last_user = next((message for message in reversed(messages) if message.role == "user"), None)
+        if last_user is None or last_user.content != goal:
+            create_message(conversation.id, "user", goal)
     try:
         claimed = update_task(task_id, status="executing")
     except ValueError as exc:
