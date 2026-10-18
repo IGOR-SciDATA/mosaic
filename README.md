@@ -2,13 +2,13 @@
 
 <br>
 
-# ◈ MOSAIC
+# MOSAIC
 
 ### Núcleo de IA de propósito geral · Memória · Contexto · Execução · Continuidade
 
 <br>
 
-<img src="assets/branding/mosaic-symbol.png" alt="Símbolo do Mosaic" width="300" />
+<img src="assets/branding/8c33d74f-1f72-425b-a34a-1108de13dd98.png" alt="Símbolo do Mosaic" width="600" />
 
 ### 🧩 Uma inteligência que transforma pedidos em trabalho realizado
 
@@ -32,9 +32,9 @@
 
 <div align="center">
 
-<img src="assets/branding/download.png" alt="Interface web do Mosaic" width="100%" />
+<img src="assets/branding/Screenshot_2.png" alt="Interface web do Mosaic" width="100%" />
 
-<sub>Interface do protótipo — funcionalidades visíveis não significam, por si só, fluxos ponta a ponta validados.</sub>
+<sub>Interface do protótipo — funcionalidades visíveis e, fluxos ponta a ponta validados.</sub>
 
 </div>
 
