@@ -79,11 +79,11 @@ def test_approval_executes_pending_tool_and_resumes_same_task(monkeypatch, tmp_p
     conversation = create_conversation("Approval", model.id, project_id=project.id)
     task = create_task(
         type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id,
-        plan={"goal": "Inspect project"},
+        plan={"goal": "Create Approved.md in the project"},
     )
     pending = run_agent(
         task.id,
-        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "read", "path": "README.md"}},
+        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "create", "path": "Approved.md", "content": "# Approved\\n"}},
     )
     assert pending["status"] == "awaiting_approval"
     call_id = pending["tool_call_id"]
@@ -109,10 +109,13 @@ def test_approval_reject_marks_task_failed_without_execution(tmp_path):
     project = create_project("Approval", str(workspace))
     model = create_model("Test", "ollama", "test:model")
     conversation = create_conversation("Approval", model.id, project_id=project.id)
-    task = create_task(type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id)
+    task = create_task(
+        type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id,
+        plan={"goal": "Create Approved.md in the project"},
+    )
     pending = run_agent(
         task.id,
-        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "read", "path": "README.md"}},
+        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "create", "path": "Approved.md", "content": "# Approved\\n"}},
     )
     updated = decide_tool_call_endpoint(
         task.id, pending["tool_call_id"], ToolDecision(decision="reject"), BackgroundTasks(),
