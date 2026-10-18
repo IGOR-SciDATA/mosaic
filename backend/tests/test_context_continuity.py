@@ -53,7 +53,7 @@ def test_continuity_request_recovers_project_state_history_and_memory_provenance
         mode="agent",
         conversation_id=conversation.id,
         project_id=project.id,
-        plan={"goal": "Mosaic, lembra onde paramos no projeto?"},
+        plan={"goal": "Mosaic, lembra onde paramos na decisão de usar FastAPI e SQLite?"},
     )
     captured = []
 
