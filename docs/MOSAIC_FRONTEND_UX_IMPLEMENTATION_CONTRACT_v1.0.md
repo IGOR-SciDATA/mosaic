@@ -3,9 +3,11 @@
 **Status:** Proposed official frontend contract  
 **Date:** 2026-10-12  
 **Authority:** MASTER / Architecture  
-**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, Mosaic_MVP_Implementation_Contract.md
+**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MVP Implementation Contract v1.0 (caminho canônico pendente; ver [auditoria da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md))
 
 ---
+
+> **Nota de baseline (2026-10-18):** o MVP Implementation Contract citado como dependência ainda não está versionado no caminho canônico em `main`. Este documento define requisitos-alvo, mas não autoriza mudanças de schema ou divergências do MVP por inferência. Consulte a [auditoria da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) e aguarde a canonização do contrato antes de alterar persistência.
 
 ## 1. Purpose
 
