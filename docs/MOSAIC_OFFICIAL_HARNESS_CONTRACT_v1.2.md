@@ -7,6 +7,8 @@
 **Repository:** https://github.com/IGOR-SciDATA/mosaic  
 **Implementation target:** existing `main` branch; incremental commits by Chat 01.
 
+> **Baseline note (2026-10-18):** the original MVP Contract v1.0 that this document amends is not currently versioned at its expected canonical path in `main`. Until it is committed and reconciled, this contract does not authorize implementers to guess unresolved MVP schema details. See [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md); changes to `Artifact`, `Setting`, or `task_events` require an explicit MASTER decision.
+
 ---
 
 ## 1. Why this contract exists
