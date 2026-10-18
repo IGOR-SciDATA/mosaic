@@ -93,6 +93,7 @@ def test_context_includes_current_task_and_tool_results() -> None:
         conversation_id=conversation.id,
         tool_name="calculator",
         arguments={"expression": "2 + 2"},
+        task_id=task.id,
     )
     result = execute_tool_call(approve_tool_call(tool_call))
     assert result.status == "completed"
