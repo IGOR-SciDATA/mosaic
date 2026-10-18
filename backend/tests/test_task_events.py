@@ -21,7 +21,10 @@ def test_task_creation_and_status_change_are_persisted_in_order():
 
     events = list_task_events(task.id)
     assert [event.event_name for event in events] == [
-        "task.created", "task.status_changed", "task.status_changed"
+        "task.created",
+        "task.status_changed",
+        "task.status_changed",
+        "task.execution_log_written",
     ]
     assert [event.id for event in events] == sorted(event.id for event in events)
     assert events[1].metadata["previous_status"] == "pending"

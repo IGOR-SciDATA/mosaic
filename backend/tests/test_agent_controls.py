@@ -7,8 +7,8 @@ from app.db.database import init_db
 from app.models.conversation_repository import create_conversation
 from app.models.project_repository import create_project
 from app.models.repository import create_model
-from app.models.task_repository import create_task, get_task
-from app.models.tool_call_repository import get_tool_call
+from app.models.task_repository import create_task, get_task, update_task
+from app.models.tool_call_repository import create_tool_call, get_tool_call
 from app.models.tool_result import ToolResult
 from app.context.manager import build_context
 from app.models.message_repository import create_message
@@ -74,22 +74,26 @@ def test_agent_config_rejects_symlink_agents_file(tmp_path):
 def test_approval_executes_pending_tool_and_resumes_same_task(monkeypatch, tmp_path):
     workspace = tmp_path / "project"
     workspace.mkdir()
+    (workspace / "README.md").write_text("# Project\nSource content\n", encoding="utf-8")
     project = create_project("Approval", str(workspace))
     model = create_model("Test", "ollama", "test:model")
     conversation = create_conversation("Approval", model.id, project_id=project.id)
     task = create_task(
         type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id,
-        plan={"goal": "Inspect project"},
+        plan={"goal": "Read README.md and create Approved.md in the project"},
     )
-    pending = run_agent(
-        task.id,
-        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "read", "path": "README.md"}},
+    call = create_tool_call(
+        conversation.id,
+        "filesystem",
+        {"operation": "create", "path": "Approved.md", "content": "# Approved\\n"},
+        task_id=task.id,
     )
-    assert pending["status"] == "awaiting_approval"
-    call_id = pending["tool_call_id"]
+    update_task(task.id, status="executing")
+    update_task(task.id, status="awaiting_approval", result={"tool_call_id": call.id})
+    call_id = call.id
 
     def fake_execute(call):
-        return ToolResult(id=1, tool_call_id=call.id, status="completed", data={"content": "read ok"}, error=None, created_at="now")
+        return ToolResult(id=1, tool_call_id=call.id, status="completed", data={"created": True, "path": "Approved.md"}, error=None, created_at="now")
 
     monkeypatch.setattr("app.api.tasks.execute_tool_call", fake_execute)
     background = BackgroundTasks()
@@ -106,20 +110,28 @@ def test_approval_executes_pending_tool_and_resumes_same_task(monkeypatch, tmp_p
 def test_approval_reject_marks_task_failed_without_execution(tmp_path):
     workspace = tmp_path / "project"
     workspace.mkdir()
+    (workspace / "README.md").write_text("# Project\nSource content\n", encoding="utf-8")
     project = create_project("Approval", str(workspace))
     model = create_model("Test", "ollama", "test:model")
     conversation = create_conversation("Approval", model.id, project_id=project.id)
-    task = create_task(type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id)
-    pending = run_agent(
-        task.id,
-        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "read", "path": "README.md"}},
+    task = create_task(
+        type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id,
+        plan={"goal": "Read README.md and create Approved.md in the project"},
     )
+    call = create_tool_call(
+        conversation.id,
+        "filesystem",
+        {"operation": "create", "path": "Approved.md", "content": "# Approved\\n"},
+        task_id=task.id,
+    )
+    update_task(task.id, status="executing")
+    update_task(task.id, status="awaiting_approval", result={"tool_call_id": call.id})
     updated = decide_tool_call_endpoint(
-        task.id, pending["tool_call_id"], ToolDecision(decision="reject"), BackgroundTasks(),
+        task.id, call.id, ToolDecision(decision="reject"), BackgroundTasks(),
     )
     assert updated.status == "failed"
     assert updated.result["error"] == "A operação solicitada foi recusada pelo usuário."
-    assert get_tool_call(pending["tool_call_id"]).status == "rejected"
+    assert get_tool_call(call.id).status == "rejected"
 
 
 def test_agent_context_includes_project_instructions_and_enabled_skills(tmp_path):

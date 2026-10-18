@@ -6,7 +6,7 @@ from app.main import app
 from app.memory.manager import remember
 from app.models.message_repository import create_message, list_messages
 from app.models.project_repository import create_project
-from app.models.repository import create_model
+from app.models.repository import create_model, list_models
 
 
 @pytest.fixture(autouse=True)
@@ -22,7 +22,15 @@ def client():
 
 
 def _conversation(client: TestClient) -> int:
-    model = create_model("Qwen 3B", "ollama", "qwen3:3b")
+    model = next(
+        (
+            item for item in list_models()
+            if item.provider == "ollama" and item.model_name == "qwen3:3b"
+        ),
+        None,
+    )
+    if model is None:
+        model = create_model("Qwen 3B", "ollama", "qwen3:3b")
     response = client.post(
         "/conversations",
         json={"title": "Chat test", "model_id": model.id},

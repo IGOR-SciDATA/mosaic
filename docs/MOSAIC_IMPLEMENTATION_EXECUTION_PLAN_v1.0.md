@@ -28,6 +28,10 @@ O resultado esperado é um Mosaic capaz de concluir tarefas gerais com rastreabi
 
 Se dois documentos contradisserem um ao outro, o agente deve parar somente a parte afetada, apontar os trechos em conflito e solicitar decisão. Não inventar schema, campos, estados, permissões ou infraestrutura.
 
+
+
+**Sequência vigente (2026-10-18):** seguir [Sequência Mestre de Implementação por Fases](MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md), que registra a instrução mais recente do MASTER e prevalece sobre a numeração/ordem das fases deste plano anterior. Este plano continua como referência de detalhes técnicos quando não houver conflito.
+
 ## 3. Regras de trabalho obrigatórias
 
 Para cada etapa:
@@ -67,9 +71,9 @@ Nunca declarar um teste aprovado se não foi executado. Nunca declarar uma capac
 Fazer com que todos os documentos normativos estejam no repositório e que o estado real do projeto tenha evidência reproduzível.
 
 ### Passos
-1. Adicionar o contrato MVP aprovado em docs/MOSAIC_MVP_IMPLEMENTATION_CONTRACT_v1.0.md, preservando seu conteúdo normativo.
+1. Confirmar que o contrato MVP aprovado está versionado em docs/MOSAIC_MVP_IMPLEMENTATION_CONTRACT_v1.0.md e que links/dependências apontam para esse caminho canônico.
 2. Atualizar links e hierarquia de precedência em README e documentos relacionados.
-3. Resolver a divergência do schema com a decisão definida na seção 6 deste plano.
+3. Aplicar e validar a decisão de schema definida na seção 6 deste plano; a decisão arquitetural está registrada, mas a execução ainda precisa de evidência.
 4. Inspecionar migrations/bootstrap, repositórios, modelos, endpoints e testes antes de alterar.
 5. Executar a suíte backend; registrar o comando, total de testes e falhas.
 6. Executar build frontend; registrar o comando e resultado.
