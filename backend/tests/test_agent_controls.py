@@ -74,7 +74,7 @@ def test_agent_config_rejects_symlink_agents_file(tmp_path):
 def test_approval_executes_pending_tool_and_resumes_same_task(monkeypatch, tmp_path):
     workspace = tmp_path / "project"
     workspace.mkdir()
-    (workspace / "README.md").write_text("# Project\\nSource content\\n", encoding="utf-8")
+    (workspace / "README.md").write_text("# Project\nSource content\n", encoding="utf-8")
     project = create_project("Approval", str(workspace))
     model = create_model("Test", "ollama", "test:model")
     conversation = create_conversation("Approval", model.id, project_id=project.id)
@@ -84,7 +84,7 @@ def test_approval_executes_pending_tool_and_resumes_same_task(monkeypatch, tmp_p
     )
     pending = run_agent(
         task.id,
-        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "create", "path": "Approved.md", "content": "# Approved\\n"}},
+        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "create", "path": "Approved.md", "content": "# Approved\n"}},
     )
     assert pending["status"] == "awaiting_approval"
     call_id = pending["tool_call_id"]
@@ -107,16 +107,17 @@ def test_approval_executes_pending_tool_and_resumes_same_task(monkeypatch, tmp_p
 def test_approval_reject_marks_task_failed_without_execution(tmp_path):
     workspace = tmp_path / "project"
     workspace.mkdir()
+    (workspace / "README.md").write_text("# Project\nSource content\n", encoding="utf-8")
     project = create_project("Approval", str(workspace))
     model = create_model("Test", "ollama", "test:model")
     conversation = create_conversation("Approval", model.id, project_id=project.id)
     task = create_task(
         type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id,
-        plan={"goal": "Create Approved.md in the project"},
+        plan={"goal": "Read README.md and create Approved.md in the project"},
     )
     pending = run_agent(
         task.id,
-        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "create", "path": "Approved.md", "content": "# Approved\\n"}},
+        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "create", "path": "Approved.md", "content": "# Approved\n"}},
     )
     updated = decide_tool_call_endpoint(
         task.id, pending["tool_call_id"], ToolDecision(decision="reject"), BackgroundTasks(),
