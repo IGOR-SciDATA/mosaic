@@ -544,6 +544,7 @@ def test_markdown_summary_flow_reads_source_creates_and_reopens_verified_artifac
     ]
     assert len(verification_events) == 1
     assert verification_events[0].metadata["sha256"] == completed["artifact"]["sha256"]
+    assert verification_events[0].tool_call_id == output_call.id
     assert verification_events[0].metadata["tool_result_id"] > 0
     assert any(result.status == "completed" for result in list_tool_results(output_call.id))
 
