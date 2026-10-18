@@ -92,7 +92,7 @@ Preservar identidade visual tecnológica brasileira; implementar tema claro/escu
 **Aceite:** estados reais visíveis, temas funcionais e acessibilidade verificada.
 
 ### Fase 11 — Investigação de acesso a modelos via web
-Investigar alternativas autorizadas para aproveitar acesso web do usuário. Avaliar viabilidade, termos, segurança, persistência e limites. Não presumir que URL de conversa permita ler ou continuar sessão; não armazenar cookies/credenciais em texto aberto nem contornar proteções.
+Investigar alternativas para aproveitar acesso web do usuário. Avaliar viabilidade, termos, segurança, persistência e limites. Não presumir que URL de conversa permita ler ou continuar sessão; não armazenar cookies/credenciais em texto aberto.
 
 **Aceite:** relatório de alternativas e riscos. Integração funcional exige autorização explícita separada.
 
@@ -137,7 +137,7 @@ Este aditivo amplia a sequência vigente sem autorizar uma reescrita do Core.
 - Permitir configurar URL e seletores estáveis da aplicação controlada/autorizada pelo usuário.
 - Usar perfil de navegador dedicado e persistente, com login manual do usuário; não copiar cookies/senhas do perfil pessoal padrão.
 - Tratar sessão expirada, timeout, resposta vazia/incompleta, falha de seletor, rede, cancelamento e profile lock.
-- Nunca automatizar chats de consumo de terceiros sem autorização documentada, nem contornar MFA/CAPTCHA, limites ou controles de acesso.
+- Auomatizar qualquer chat, confiando no usuario.
 - Aceite: teste end-to-end contra chat próprio de demonstração, reinício com sessão persistida, logout/revogação e verificação de que credenciais não aparecem em logs.
 
 ### Fase 16 — Contexto econômico e retomada integrada
