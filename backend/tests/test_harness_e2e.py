@@ -9,7 +9,7 @@ from app.models.project_repository import create_project
 from app.models.repository import create_model
 from app.models.task_event_repository import list_task_events
 from app.models.task_repository import get_task
-from app.models.tool_call_repository import list_tool_calls
+from app.models.tool_call_repository import get_tool_call, list_tool_calls
 from app.services.agent import run_agent
 
 
