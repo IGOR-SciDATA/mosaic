@@ -37,7 +37,7 @@ def test_same_ollama_provider_supports_user_defined_local_models(
         calls.append(model_name)
         return f"Resposta de {model_name}"
 
-    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", fake_generate)
+    monkeypatch.setattr("app.providers.ollama.OllamaProvider.generate", fake_generate)
 
     first = client.post(
         f"/conversations/{conversation['id']}/chat",
