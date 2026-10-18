@@ -70,7 +70,7 @@ Antes de qualquer prova de conceito automatizada:
 | Revisão documental de termos oficiais | **Testado** — fontes consultadas em 18/10/2026 |
 | Automação de sessão web de consumo | **Planejado / não autorizado** — não implementada |
 | Handoff manual com proveniência | **Planejado** — pode ser proposto como fluxo separado |
-| API/provider oficial selecionado por conversa | **Presente no código**; cobertura de CI não substitui validação com credenciais reais |
+| Provider registrado e selecionado por conversa | **Presente no código** para Ollama; provider remoto oficial ainda não implementado |
 | Prova de ida/volta em integração web autorizada | **Não executada** |
 
 **Resultado:** a investigação documental foi concluída. Não existe base suficiente para aprovar automação de interfaces web de consumo. Manter essa modalidade fora do caminho crítico; priorizar APIs oficiais, providers locais e handoff manual transparente. Nenhuma integração automática foi adicionada.
@@ -80,3 +80,12 @@ Antes de qualquer prova de conceito automatizada:
 - OpenAI, *Terms of Use* (effective 2026-01-01): https://openai.com/policies/row-terms-of-use/
 - Anthropic, *Consumer Terms of Service* (version reviewed, effective 2025-10-08): https://www.anthropic.com/legal/consumer-terms
 - Google, *Termos de Serviço do Google* (versão consultada em 2026-10-18): https://policies.google.com/terms?hl=pt-BR
+
+
+## 8. Atualização de implementação — 18/10/2026
+
+O Core agora resolve providers por um registro explícito em `backend/app/providers/factory.py`. O Agent e o chat/streaming usam essa resolução; providers desconhecidos e modelos desabilitados falham explicitamente, sem fallback silencioso. O registro contém somente `ollama` neste momento.
+
+A validação automatizada do commit `0914d86ec2093ab005ab99cc6d02b193feff3e7a` passou com 233 testes backend e build frontend no [GitHub Actions #39118831291](https://github.com/IGOR-SciDATA/mosaic/actions/runs/39118831291). Isso valida o registro e os fluxos simulados, não uma integração remota com credenciais reais.
+
+**Decisão mantida:** não foi adicionada automação de ChatGPT, Claude ou Gemini por sessão web de consumo. A implementação de um provider remoto oficial depende de definir explicitamente o fornecedor/método, credenciais seguras e orçamento/limites aceitáveis; a automação de sessão web de consumo continua não autorizada. O fluxo de pesquisa pública do Mosaic (search + web_fetch) é uma ferramenta distinta e não reutiliza sessões autenticadas de modelos.
