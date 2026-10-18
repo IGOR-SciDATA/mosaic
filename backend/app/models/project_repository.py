@@ -124,10 +124,16 @@ def delete_project(project_id: int) -> bool:
         if project is None:
             return False
         conversation_ids = [row["id"] for row in connection.execute("SELECT id FROM conversations WHERE project_id = ?", (project_id,)).fetchall()]
-        task_ids = [row["id"] for row in connection.execute("SELECT id FROM tasks WHERE project_id = ?", (project_id,)).fetchall()]
+        task_rows = connection.execute("SELECT id, status FROM tasks WHERE project_id = ?", (project_id,)).fetchall()
+        if any(row["status"] not in {"completed", "failed", "cancelled"} for row in task_rows):
+            raise ValueError("This project has active Tasks; cancel or finish them before deleting it")
+        task_ids = [row["id"] for row in task_rows]
         if conversation_ids:
             placeholders = ",".join("?" for _ in conversation_ids)
-            task_ids.extend(row["id"] for row in connection.execute("SELECT id FROM tasks WHERE conversation_id IN (" + placeholders + ")", conversation_ids).fetchall())
+            conversation_task_rows = connection.execute("SELECT id, status FROM tasks WHERE conversation_id IN (" + placeholders + ")", conversation_ids).fetchall()
+            if any(row["status"] not in {"completed", "failed", "cancelled"} for row in conversation_task_rows):
+                raise ValueError("This project has active Tasks; cancel or finish them before deleting it")
+            task_ids.extend(row["id"] for row in conversation_task_rows)
         task_ids = list(dict.fromkeys(task_ids))
         if task_ids:
             placeholders = ",".join("?" for _ in task_ids)
