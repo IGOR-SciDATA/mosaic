@@ -28,6 +28,10 @@ O resultado esperado é um Mosaic capaz de concluir tarefas gerais com rastreabi
 
 Se dois documentos contradisserem um ao outro, o agente deve parar somente a parte afetada, apontar os trechos em conflito e solicitar decisão. Não inventar schema, campos, estados, permissões ou infraestrutura.
 
+
+
+**Sequência vigente (2026-10-18):** seguir [Sequência Mestre de Implementação por Fases](MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md), que registra a instrução mais recente do MASTER e prevalece sobre a numeração/ordem das fases deste plano anterior. Este plano continua como referência de detalhes técnicos quando não houver conflito.
+
 ## 3. Regras de trabalho obrigatórias
 
 Para cada etapa:
