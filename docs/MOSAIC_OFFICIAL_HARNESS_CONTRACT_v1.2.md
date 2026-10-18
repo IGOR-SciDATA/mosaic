@@ -562,3 +562,10 @@ If implementation evidence requires a new capability not specified here, propose
 ---
 
 **Master decision:** Build the complete Harness as a modular subsystem of Mosaic Core, extending existing components where they fit and adding new components where justified by the execution, knowledge and observability contracts above. Prioritize end-to-end behavior, safety and inspectability over isolated feature count.
+
+
+---
+
+## Ordem de implementação
+
+Este contrato define o comportamento normativo do Harness. A sequência incremental, as tarefas e os critérios de aceite estão no [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md) e no [Roadmap Mestre](MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md). O Harness deve reutilizar o Core e o Task Engine existentes; não implementar um segundo sistema de estado.
