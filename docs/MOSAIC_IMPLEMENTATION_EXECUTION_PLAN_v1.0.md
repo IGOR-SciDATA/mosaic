@@ -74,9 +74,10 @@ Fazer com que todos os documentos normativos estejam no repositório e que o est
 5. Executar a suíte backend; registrar o comando, total de testes e falhas.
 6. Executar build frontend; registrar o comando e resultado.
 7. Executar smoke test da API e um fluxo local com Ollama, quando o ambiente de validação disponibilizar o modelo.
-8. Executar pelo menos um fluxo integrado: conversa → Task → decisão do modelo → ferramenta permitida → resultado/eventos persistidos → estado final.
-9. Testar reinício/reconexão e verificar se o estado da Task é recuperável.
-10. Atualizar o relatório de baseline com evidências reais, separando testes executados de testes apenas existentes.
+8. Preservar e reproduzir o fluxo vertical já demonstrado manualmente pelo usuário: ler arquivo Markdown → resumir → criar novo Markdown; verificar o conteúdo e a existência/legibilidade do artefato gerado. Se o ambiente permitir, automatizar esse cenário como teste de regressão.
+9. Executar pelo menos um fluxo integrado mais amplo: conversa → Task → decisão do modelo → ferramenta permitida → resultado/eventos persistidos → estado final.
+10. Testar reinício/reconexão e verificar se o estado da Task é recuperável.
+11. Atualizar o relatório de baseline com evidências reais, separando validação manual reportada, testes automatizados executados e testes apenas existentes.
 
 ### Aceite
 - Contratos referenciados estão versionados e acessíveis no repositório.
