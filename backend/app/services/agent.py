@@ -462,6 +462,10 @@ def _artifact_verification_evidence(
 ) -> dict[str, Any]:
     """Record deterministic evidence that the reopened artifact matches persisted inputs."""
     digest = hashlib.sha256(actual_bytes).hexdigest()
+    method = (
+        "sha256+artifact_record+format_reopen_validation"
+        if operation.startswith("artifact:") else "sha256+persisted_content_match"
+    )
     verified_at = datetime.now(timezone.utc).isoformat()
     event_id = None
     task = get_task(task_id)
@@ -470,7 +474,7 @@ def _artifact_verification_evidence(
             "path": path,
             "bytes": len(actual_bytes),
             "sha256": digest,
-            "verification_method": "sha256+persisted_content_match",
+            "verification_method": method,
             "operation": operation,
             "tool_result_id": tool_result_id,
             "recovered_after_verification_error": recovered_after_verification_error,
@@ -500,7 +504,7 @@ def _artifact_verification_evidence(
         "operation": operation,
         "sha256": digest,
         "verified": True,
-        "verification_method": "sha256+persisted_content_match",
+        "verification_method": method,
         "verified_at": verified_at,
         "verification_event_recorded": event_id is not None,
     }
