@@ -7,7 +7,7 @@ from app.models.conversation_repository import get_conversation
 from app.models.repository import get_model
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task
-from app.providers.ollama import OllamaProvider
+from app.providers.factory import resolve_model_provider
 from app.tools import registry
 
 
@@ -208,11 +208,8 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
         raise ValueError("Model not found")
     if not model.enabled:
         raise ValueError("Selected model is disabled")
-    if model.provider != "ollama":
-        raise ValueError(f"Unsupported model provider: {model.provider}")
-
+    provider = resolve_model_provider(model)
     tool_catalog = _tool_catalog()
-    provider = OllamaProvider()
 
     def decide(context: list[dict[str, Any]]) -> dict[str, Any]:
         active_tool_catalog = _allowed_tool_catalog(context, tool_catalog)
