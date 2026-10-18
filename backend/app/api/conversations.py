@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from app.models.conversation import Conversation
 from app.models.conversation_repository import (
     create_conversation,
+    delete_conversation,
     get_conversation,
     list_conversations,
     update_conversation,
@@ -64,3 +65,10 @@ def update_conversation_endpoint(
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
+
+
+@router.delete("/{conversation_id}")
+def delete_conversation_endpoint(conversation_id: int) -> dict[str, bool]:
+    if not delete_conversation(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"deleted": True}
