@@ -1,3 +1,4 @@
+from app.models.artifact_repository import get_artifact
 from collections.abc import Callable
 import ast
 import hashlib
@@ -286,26 +287,78 @@ def _goal_updates_existing_file(goal: str) -> bool:
     ))
 
 
-def _goal_requires_file_artifact(goal: str) -> bool:
-    """Detect explicit output-file intent, including updates to named workspace files."""
+def _artifact_format(goal: str) -> str:
+    """Resolve an explicitly requested output format without treating a source extension as output."""
     creation_verbs = (
         r"create|make|build|write|save|generate|export|compose|update|edit|modify|replace|overwrite|"
         r"crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|elabore|elaborar|prepare|preparar|"
         r"salve|salvar|escreva|escrever|gere|gerar|exporte|exportar|atualize|atualizar|edite|editar|"
         r"modifique|modificar|substitua|substituir|altere|alterar"
     )
-    mentions_file = re.search(
-        rf"\b(?:{creation_verbs})\b.{{0,160}}\b(?:file|document|arquivo|documento)\b",
-        goal,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    saves_named_markdown = re.search(
-        rf"\b(?:{creation_verbs})\b.{{0,160}}\b[A-Za-z0-9_./-]+\.md\b",
-        goal,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    return bool(mentions_file or saves_named_markdown)
+    action = re.search(rf"\b(?:{creation_verbs})\b", goal, flags=re.IGNORECASE)
+    output_instruction = goal[action.end():] if action else goal
+    if re.match(r"\s*(?:(?:a|the|um|uma|o|a)\s+)?pdf\b", output_instruction, re.IGNORECASE):
+        return "pdf"
+    if re.match(r"\s*(?:(?:a|the|um|uma|o|a)\s+)?docx\b", output_instruction, re.IGNORECASE):
+        return "docx"
+    if re.match(r"\s*(?:(?:a|the|um|uma|o|a)\s+)?xlsx\b", output_instruction, re.IGNORECASE):
+        return "xlsx"
+    if re.match(r"\s*(?:(?:a|the|um|uma|o|a)\s+)?pptx\b", output_instruction, re.IGNORECASE):
+        return "pptx"
+    if re.match(r"\s*(?:(?:a|the|um|uma|o|a)\s+)?markdown\b", output_instruction, re.IGNORECASE):
+        return "markdown"
+    if re.search(r"\b(?:spreadsheet|planilha|excel workbook)\b", output_instruction, re.IGNORECASE):
+        return "xlsx"
+    if re.search(r"\b(?:word document|documento word)\b", output_instruction, re.IGNORECASE):
+        return "docx"
+    if re.search(r"\b(?:powerpoint|presentation|apresentação|apresentacao)\b", output_instruction, re.IGNORECASE):
+        return "pptx"
 
+    explicit_names = [
+        r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como)\s+['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+        r"\b(?:file|arquivo|documento|document|report|relatório|relatorio|planilha|spreadsheet|presentation|apresentação|apresentacao)\s+['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+        r"^\s+(?:(?:a|the|um|uma|o|a)\s+)?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+    ]
+    for pattern in explicit_names:
+        match = re.search(pattern, output_instruction, re.IGNORECASE)
+        if match:
+            suffix = Path(match.group(1)).suffix.lower()
+            return {".md": "markdown", ".markdown": "markdown", ".pdf": "pdf", ".docx": "docx", ".xlsx": "xlsx", ".pptx": "pptx"}[suffix]
+    return "markdown"
+
+
+def _goal_requires_file_artifact(goal: str) -> bool:
+    """Detect explicit file output intent for supported formats."""
+    creation_verbs = (
+        r"create|make|build|write|save|generate|export|compose|update|edit|modify|replace|overwrite|"
+        r"crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|elabore|elaborar|prepare|preparar|"
+        r"salve|salvar|escreva|escrever|gere|gerar|exporte|exportar|atualize|atualizar|edite|editar|"
+        r"modifique|modificar|substitua|substituir|altere|alterar"
+    )
+    action = re.search(rf"\b(?:{creation_verbs})\b", goal, flags=re.IGNORECASE)
+    if action is None:
+        return False
+    output_instruction = goal[action.end():]
+    format_at_start = re.match(
+        r"\s*(?:(?:a|the|um|uma|o|a)\s+)?(?:pdf|docx|xlsx|pptx|markdown)\b",
+        output_instruction,
+        re.IGNORECASE,
+    )
+    named_output = any(
+        re.search(pattern, output_instruction, re.IGNORECASE)
+        for pattern in (
+            r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como)\s+['\"]?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx)\b",
+            r"\b(?:file|arquivo|documento|document|report|relatório|relatorio|planilha|spreadsheet|presentation|apresentação|apresentacao)\s+['\"]?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx)\b",
+            r"^\s+(?:(?:a|the|um|uma|o|a)\s+)?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx)\b",
+        )
+    )
+    mentions_file = re.search(
+        r"\b(?:file|document|arquivo|documento|report|relatório|relatorio|spreadsheet|planilha|presentation|apresentação|apresentacao)\b",
+        output_instruction,
+        re.IGNORECASE,
+    )
+    mentions_format = bool(re.search(r"\b(?:spreadsheet|planilha|word document|documento word|powerpoint|presentation|apresentação|apresentacao)\b", output_instruction, re.IGNORECASE))
+    return bool(format_at_start or named_output or mentions_file or mentions_format)
 
 
 
@@ -405,14 +458,30 @@ def _artifact_verification_evidence(
     operation: str,
     tool_call_id: int,
     tool_result_id: int,
+    artifact_id: int | None = None,
     recovered_after_verification_error: bool = False,
 ) -> dict[str, Any]:
-    """Record deterministic evidence that the reopened artifact matches persisted write input."""
+    """Record deterministic evidence that the reopened artifact matches persisted inputs."""
     digest = hashlib.sha256(actual_bytes).hexdigest()
+    method = (
+        "sha256+artifact_record+format_reopen_validation"
+        if operation.startswith("artifact:") else "sha256+persisted_content_match"
+    )
     verified_at = datetime.now(timezone.utc).isoformat()
     event_id = None
     task = get_task(task_id)
     if task is not None:
+        metadata = {
+            "path": path,
+            "bytes": len(actual_bytes),
+            "sha256": digest,
+            "verification_method": method,
+            "operation": operation,
+            "tool_result_id": tool_result_id,
+            "recovered_after_verification_error": recovered_after_verification_error,
+        }
+        if artifact_id is not None:
+            metadata["artifact_id"] = artifact_id
         try:
             event = create_task_event(
                 task_id=task_id,
@@ -421,22 +490,13 @@ def _artifact_verification_evidence(
                 tool_call_id=tool_call_id,
                 component="verification",
                 event_name="artifact.verified",
-                message="Artifact bytes were reopened and matched the persisted write input.",
+                message="Artifact bytes were reopened and matched persisted creation evidence.",
                 status="verified",
-                metadata={
-                    "path": path,
-                    "bytes": len(actual_bytes),
-                    "sha256": digest,
-                    "verification_method": "sha256+persisted_content_match",
-                    "operation": operation,
-                    "tool_result_id": tool_result_id,
-                    "recovered_after_verification_error": recovered_after_verification_error,
-                },
+                metadata=metadata,
             )
             verified_at = event.timestamp
             event_id = event.id
         except Exception:
-            # Verification itself remains deterministic; event persistence is reported separately.
             event_id = None
 
     evidence: dict[str, Any] = {
@@ -445,10 +505,12 @@ def _artifact_verification_evidence(
         "operation": operation,
         "sha256": digest,
         "verified": True,
-        "verification_method": "sha256+persisted_content_match",
+        "verification_method": method,
         "verified_at": verified_at,
         "verification_event_recorded": event_id is not None,
     }
+    if artifact_id is not None:
+        evidence["artifact_id"] = artifact_id
     if event_id is not None:
         evidence["verification_event_id"] = event_id
     if recovered_after_verification_error:
@@ -457,35 +519,67 @@ def _artifact_verification_evidence(
 
 
 def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> dict[str, Any] | None:
-    """Verify an artifact from a successful result or reconcile a known post-write error."""
-    markdown_requested = bool(re.search(
-        r"\bmarkdown\b|\b(?:new|novo|nova)\s+(?:file|arquivo|document|documento)\s+\.md\b",
-        goal,
-        flags=re.IGNORECASE,
-    ))
-    new_file_requested = bool(re.search(
-        r"\b(?:new|novo|nova)\s+(?:file|arquivo|documento)\b",
-        goal,
-        flags=re.IGNORECASE,
-    ))
+    """Reopen and verify a filesystem or registered ArtifactTool output before Task completion."""
+    fmt = _artifact_format(goal)
     expected_path = Path(_artifact_output_path(goal)).as_posix().casefold()
     calls = [
         call for call in list_tool_calls(conversation_id)
-        if call.task_id == task_id and call.tool_name == "filesystem"
+        if call.task_id == task_id and call.tool_name in {"filesystem", "artifact"}
     ]
     for call in reversed(calls):
+        relative_path = call.arguments.get("path")
+        if not isinstance(relative_path, str) or Path(relative_path).as_posix().casefold() != expected_path:
+            continue
+        if call.tool_name == "artifact":
+            if call.arguments.get("format") != fmt:
+                continue
+            try:
+                root = resolve_tool_workspace(call)
+                candidate = (root / relative_path).resolve(strict=True)
+                candidate.relative_to(root)
+                if not candidate.is_file() or candidate.stat().st_size <= 0:
+                    continue
+                actual_bytes = candidate.read_bytes()
+            except (OSError, RuntimeError, ValueError):
+                continue
+            actual_hash = hashlib.sha256(actual_bytes).hexdigest()
+            for result in reversed(list_tool_results(call.id)):
+                if result.status != "completed" or not isinstance(result.data, dict):
+                    continue
+                data = result.data
+                artifact_id = data.get("artifact_id")
+                if not isinstance(artifact_id, int):
+                    continue
+                record = get_artifact(artifact_id)
+                if (
+                    data.get("sha256") != actual_hash
+                    or data.get("bytes") != len(actual_bytes)
+                    or not isinstance(data.get("validation"), dict)
+                    or data["validation"].get("valid") is not True
+                    or record is None
+                    or record.task_id != task_id
+                    or record.path != relative_path
+                    or record.metadata.get("sha256") != actual_hash
+                ):
+                    continue
+                return _artifact_verification_evidence(
+                    task_id=task_id,
+                    conversation_id=conversation_id,
+                    path=candidate.relative_to(root).as_posix(),
+                    actual_bytes=actual_bytes,
+                    operation=f"artifact:{fmt}",
+                    tool_call_id=call.id,
+                    tool_result_id=result.id,
+                    artifact_id=artifact_id,
+                )
+            continue
+
+        # The original Markdown filesystem flow remains supported as a regression path.
+        if fmt != "markdown":
+            continue
         operation = call.arguments.get("operation")
         if operation not in {"create", "write"}:
             continue
-        relative_path = call.arguments.get("path")
-        if not isinstance(relative_path, str) or not relative_path.strip():
-            continue
-        normalized_path = Path(relative_path).as_posix().casefold()
-        if normalized_path != expected_path:
-            continue
-        if markdown_requested and Path(relative_path).suffix.lower() != ".md":
-            continue
-
         try:
             root = resolve_tool_workspace(call)
             candidate = (root / relative_path).resolve(strict=True)
@@ -508,7 +602,6 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
                 actual_text.replace("\r\n", "\n").replace("\r", "\n")
                 if actual_text is not None else None
             )
-            # Legacy Windows text-mode writes may differ only by CRLF translation.
             content_matches = (
                 actual_bytes == expected_content.encode("utf-8")
                 or (normalized_actual is not None and normalized_actual == expected_text)
@@ -519,11 +612,9 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
             if result.status == "completed" and isinstance(result.data, dict):
                 data = result.data
                 result_path = data.get("path")
-                if not isinstance(result_path, str):
+                if not isinstance(result_path, str) or Path(result_path).as_posix().casefold() != expected_path:
                     continue
-                if Path(result_path).as_posix().casefold() != expected_path:
-                    continue
-                if (new_file_requested or operation == "create") and data.get("created") is not True:
+                if operation == "create" and data.get("created") is not True:
                     continue
                 return _artifact_verification_evidence(
                     task_id=task_id,
@@ -534,10 +625,6 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
                     tool_call_id=call.id,
                     tool_result_id=result.id,
                 )
-
-            # A write may have taken effect before a later verification step raised.
-            # Recover only this known ambiguous error, and only if the destination
-            # bytes exactly match the content persisted in the original ToolCall.
             if (
                 result.status == "failed"
                 and isinstance(result.error, str)
@@ -557,7 +644,7 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
     return None
 
 def _artifact_output_path(goal: str) -> str:
-    """Resolve an explicit output filename without mistaking a source path for the target."""
+    """Resolve a named output file; never mistake a source path for the target."""
     output_verbs = (
         r"create|crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|"
         r"elabore|elaborar|prepare|preparar|write|save|generate|export|salve|salvar|"
@@ -566,57 +653,31 @@ def _artifact_output_path(goal: str) -> str:
     )
     action = re.search(rf"\b(?:{output_verbs})\b", goal, flags=re.IGNORECASE)
     output_instruction = goal[action.end():] if action else goal
-
-    # An update explicitly targets the named existing file.
-    if _goal_updates_existing_file(goal):
-        direct_path = re.search(
-            r"(?<![A-Za-z0-9_./-])([A-Za-z0-9_./-]+\.md)\b",
-            output_instruction,
-            flags=re.IGNORECASE,
-        )
-        if direct_path:
-            candidate = Path(direct_path.group(1))
-            if candidate.name and candidate.suffix.lower() == ".md":
+    patterns = (
+        r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como)\s+['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+        r"\b(?:file|arquivo|documento|document|report|relatório|relatorio|planilha|spreadsheet|presentation|apresentação|apresentacao)\s+['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+        r"^\s+(?:(?:a|the|um|uma|o|a)\s+)?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, output_instruction, re.IGNORECASE)
+        if match:
+            candidate = Path(match.group(1))
+            if candidate.name:
                 return candidate.as_posix()
 
-    named_output = re.search(
-        r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como|as|to)\s+"
-        r"(?:um|uma|a|o|the)?\s*['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.md)\b",
-        output_instruction,
-        flags=re.IGNORECASE,
-    )
-    if named_output:
-        candidate = Path(named_output.group(1))
-        if candidate.name and candidate.suffix.lower() == ".md":
-            return candidate.as_posix()
-
-    explicit_after_file = re.search(
-        r"\b(?:arquivo|file|documento|document)\s+(?:(?:novo|nova|new)\s+)?"
-        r"['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.md)\b",
-        output_instruction,
-        flags=re.IGNORECASE,
-    )
-    if explicit_after_file:
-        candidate = Path(explicit_after_file.group(1))
-        if candidate.name and candidate.suffix.lower() == ".md":
-            return candidate.as_posix()
-
-    # Also accept a filename immediately following the output verb: "crie Resumo.md".
-    leading_path = re.match(
-        r"\s+(?:(?:um|uma|a|o|the)\s+)?([A-Za-z0-9_][A-Za-z0-9_./-]*\.md)\b",
-        output_instruction,
-        flags=re.IGNORECASE,
-    )
-    if leading_path:
-        candidate = Path(leading_path.group(1))
-        if candidate.name and candidate.suffix.lower() == ".md":
-            return candidate.as_posix()
-
     sources = _required_source_paths(goal)
+    fmt = _artifact_format(goal)
+    extension = {"markdown": ".md", "pdf": ".pdf", "docx": ".docx", "xlsx": ".xlsx", "pptx": ".pptx"}[fmt]
     if sources:
         source = Path(sources[0])
-        return (source.parent / f"Resumo_{source.stem}.md").as_posix()
-    return "Resumo.md"
+        return (source.parent / f"Resumo_{source.stem}{extension}").as_posix()
+    return {
+        "markdown": "Resumo.md",
+        "pdf": "Relatorio.pdf",
+        "docx": "Documento.docx",
+        "xlsx": "Planilha.xlsx",
+        "pptx": "Apresentacao.pptx",
+    }[fmt]
 
 
 def _artifact_operation(goal: str) -> str:
@@ -657,6 +718,19 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
     """Decompose common file workflows deterministically without another model call."""
     sources = _required_source_paths(goal)
     creates_artifact = _goal_requires_file_artifact(goal)
+    artifact_format = _artifact_format(goal)
+    if artifact_format == "xlsx":
+        content_instruction = (
+            'Return only valid JSON in the shape {"sheets":[{"name":"Data","rows":[["Header"],["value"]]}]}. '
+            'Use explicit {"formula":"=SUM(A1:A2)"} objects for formulas; do not wrap JSON in Markdown fences.'
+        )
+    elif artifact_format in {"pdf", "docx", "pptx"}:
+        content_instruction = (
+            "Produce the complete document content as Markdown with clear headings and lists. "
+            "The Core will convert it to the requested file format and reopen-validate the artifact."
+        )
+    else:
+        content_instruction = "Produce the complete Markdown file content, without claiming it has already been saved."
     steps: list[dict[str, Any]] = []
 
     for index, source in enumerate(sources, start=1):
@@ -678,9 +752,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
                 "instruction": (
                     "Produce the complete updated file content using the source and the requested changes. "
                     "Do not call tools or claim the file has already been saved."
-                    if updating else
-                    "Produce the requested document content using the complete source evidence. "
-                    "Do not call tools or claim the output file already exists."
+                    if updating else content_instruction
                 ),
             },
             {
@@ -708,7 +780,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
                 "id": "draft_content",
                 "kind": "draft_content",
                 "status": "pending",
-                "instruction": "Produce the requested file content, without claiming that it has already been saved.",
+                "instruction": content_instruction,
             },
             {
                 "id": "create_artifact",
@@ -1041,17 +1113,29 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                     "awaiting_approval",
                     path=_artifact_output_path(goal),
                 )
-                operation = _artifact_operation(goal)
-                output_arguments = {
-                    "operation": operation,
-                    "path": _artifact_output_path(goal),
-                    "content": artifact_content,
-                }
-                if operation == "write":
-                    output_arguments["overwrite"] = True
+                output_format = _artifact_format(goal)
+                output_path = _artifact_output_path(goal)
+                if output_format == "markdown":
+                    operation = _artifact_operation(goal)
+                    output_arguments = {
+                        "operation": operation,
+                        "path": output_path,
+                        "content": artifact_content,
+                    }
+                    if operation == "write":
+                        output_arguments["overwrite"] = True
+                    output_tool = "filesystem"
+                else:
+                    output_arguments = {
+                        "format": output_format,
+                        "path": output_path,
+                        "content": artifact_content,
+                        "title": Path(output_path).stem,
+                    }
+                    output_tool = "artifact"
                 decision = {
                     "type": "tool_call",
-                    "tool": "filesystem",
+                    "tool": output_tool,
                     "arguments": output_arguments,
                 }
                 decision_type = "tool_call"
