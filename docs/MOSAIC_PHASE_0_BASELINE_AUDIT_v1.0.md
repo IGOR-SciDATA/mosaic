@@ -214,3 +214,30 @@ A Fase 0 estará **dinamicamente validada** somente após as verificações exec
 Após a redação desta auditoria, o usuário confirmou a conclusão manual de uma tarefa na versão atual: o agente leu um arquivo `.md`, resumiu seu conteúdo e criou um novo arquivo `.md` com o resumo. O fluxo foi acompanhado até a conclusão e o usuário confirmou o artefato de saída.
 
 Esta informação complementa, mas não invalida, o escopo original de auditoria estática. A auditoria inicial não executou testes automatizados/build/E2E. O fluxo acima é **evidência manual reportada pelo usuário**, e não um teste executado por esta auditoria. Deve ser reproduzido e convertido em teste de regressão pelo implementador.
+
+
+---
+
+## Atualização dinâmica — 18/10/2026, após registro de providers e fluxo de pesquisa
+
+**Commit de referência validado:** `0914d86ec2093ab005ab99cc6d02b193feff3e7a`.  
+**Evidência:** [GitHub Actions #39118831291](https://github.com/IGOR-SciDATA/mosaic/actions/runs/39118831291).  
+**Comandos executados no runner:** `python -m pytest -q` em `backend` e `npm run build` em `frontend`.  
+**Resultado:** 233 testes aprovados, 1 aviso de depreciação; build frontend aprovado.
+
+### Alterações e evidências adicionais
+
+- `backend/app/providers/factory.py` registra providers explicitamente. Atualmente somente `ollama` está registrado; providers desconhecidos falham sem fallback.
+- `backend/app/services/chat.py` e `backend/app/services/agent_decision.py` resolvem o provider pela configuração persistida do modelo.
+- `backend/tests/test_provider_factory.py` cobre seleção explícita, provider desconhecido, modelo desabilitado e configuração inválida.
+- O plano de Task mantém dependências entre etapas e evidências compactas (hashes, IDs de ToolCall/ToolResult e verificação do artefato), sem copiar conteúdo de arquivos para o plano.
+- `backend/tests/test_agent.py::test_web_research_report_fetches_source_and_persists_cited_url` comprova o fluxo determinístico search → web_fetch → relatório com URL citada → criação aprovada → reabertura/verificação do Markdown.
+
+### Limitações que permanecem explícitas
+
+- Não foi executado smoke test com uma instância real de Ollama/modelo; o CI usa providers simulados nos testes de orquestração.
+- O CI não prova disponibilidade de rede pública em runtime, nem integração remota com API de modelo.
+- Reinício real de processo com operação em andamento, verificação visual/acessibilidade em navegador e jornada de construção de software completa permanecem pendentes.
+- A pesquisa usa fixtures determinísticas no teste E2E; isso não é apresentado como prova de pesquisa real em rede.
+
+**Parecer atualizado:** a baseline automatizada está verde para os testes e o build registrados acima. Os itens pendentes são validações de runtime explicitamente identificadas, não testes presumidos como aprovados.
