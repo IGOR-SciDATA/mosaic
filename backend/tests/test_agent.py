@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +9,7 @@ from app.models.conversation_repository import create_conversation
 from app.models.message_repository import create_message
 from app.models.project_repository import create_project
 from app.models.repository import create_model
+from app.models.task_event_repository import list_task_events
 from app.models.task_repository import create_task, get_task, update_task
 from app.models.tool_call_repository import create_tool_call, get_tool_call, list_tool_calls, update_tool_call
 from app.models.tool_result_repository import create_tool_result, list_tool_results
@@ -532,6 +534,18 @@ def test_markdown_summary_flow_reads_source_creates_and_reopens_verified_artifac
     assert "Construir um protótipo funcional." in reopened
     assert "## Etapas principais" in reopened
     assert len(reopened.encode("utf-8")) == completed["artifact"]["bytes"]
+    assert completed["artifact"]["verified"] is True
+    assert completed["artifact"]["sha256"] == hashlib.sha256(reopened.encode("utf-8")).hexdigest()
+    assert completed["artifact"]["verification_method"] == "sha256+persisted_content_match"
+    assert completed["artifact"]["verification_event_recorded"] is True
+    verification_events = [
+        event for event in list_task_events(task.id)
+        if event.event_name == "artifact.verified"
+    ]
+    assert len(verification_events) == 1
+    assert verification_events[0].metadata["sha256"] == completed["artifact"]["sha256"]
+    assert verification_events[0].tool_call_id == output_call.id
+    assert verification_events[0].metadata["tool_result_id"] > 0
     assert any(result.status == "completed" for result in list_tool_results(output_call.id))
 
 def test_tool_observation_is_bounded_and_marks_truncation():

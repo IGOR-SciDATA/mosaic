@@ -1,10 +1,12 @@
 import json
+import time
 from pathlib import Path
 from typing import Any
 
 from app.core.config import DATA_DIR
 from app.models.conversation_repository import get_conversation
 from app.models.project_repository import get_project
+from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task
 from app.models.tool_call import ToolCall
 from app.models.tool_call_repository import get_tool_call, update_tool_call
@@ -86,6 +88,60 @@ def approve_tool_call(tool_call: ToolCall) -> ToolCall:
     return updated
 
 
+def _record_tool_result_event(
+    tool_call: ToolCall,
+    result: ToolResult,
+    started_at: float,
+    *,
+    data: dict[str, Any] | None = None,
+    error_type: str | None = None,
+) -> None:
+    """Persist bounded operational evidence without logging tool contents or private reasoning."""
+    if tool_call.task_id is None:
+        return
+    task = get_task(tool_call.task_id)
+    if task is None:
+        return
+
+    metadata: dict[str, Any] = {
+        "tool_name": tool_call.tool_name,
+        "tool_result_id": result.id,
+        "result_data_keys": sorted(str(key)[:80] for key in data.keys())[:20] if data else [],
+    }
+    if isinstance(data, dict):
+        for key in ("path", "bytes", "returncode", "output_truncated", "truncated"):
+            value = data.get(key)
+            if key == "path" and isinstance(value, str):
+                metadata[key] = value[:500]
+            elif key in {"bytes", "returncode"} and isinstance(value, int) and not isinstance(value, bool):
+                metadata[key] = value
+            elif key in {"output_truncated", "truncated"} and isinstance(value, bool):
+                metadata[key] = value
+        execution_status = data.get("status")
+        if isinstance(execution_status, str):
+            metadata["execution_status"] = execution_status[:80]
+    if error_type:
+        metadata["error_type"] = error_type[:100]
+
+    try:
+        create_task_event(
+            task_id=task.id,
+            conversation_id=tool_call.conversation_id,
+            project_id=task.project_id,
+            tool_call_id=tool_call.id,
+            component="tool",
+            event_name="tool.result_recorded",
+            message="ToolResult persisted; bounded execution evidence recorded.",
+            duration_ms=max(0, round((time.monotonic() - started_at) * 1000)),
+            status=result.status,
+            level="error" if result.status == "failed" else "info",
+            metadata=metadata,
+        )
+    except Exception:
+        # Observability must not turn a real tool result into a failed or repeated side effect.
+        return
+
+
 def execute_tool_call(tool_call: ToolCall) -> ToolResult:
     # Re-fetch at the execution boundary so stale caller state cannot authorize execution.
     current = get_tool_call(tool_call.id)
@@ -93,15 +149,20 @@ def execute_tool_call(tool_call: ToolCall) -> ToolResult:
         raise ValueError("ToolCall not found")
     if current.status != "approved":
         raise ValueError("Tool call must be approved before execution")
+    started_at = time.monotonic()
     tool = registry.get(current.tool_name)
     if tool is None:
         update_tool_call(current.id, status="failed")
-        return create_tool_result(current.id, "failed", error=f"Unknown tool: {current.tool_name}")
+        result = create_tool_result(current.id, "failed", error=f"Unknown tool: {current.tool_name}")
+        _record_tool_result_event(current, result, started_at, error_type="UnknownTool")
+        return result
     try:
         tool.validate(current.arguments)
     except Exception as exc:
         update_tool_call(current.id, status="failed")
-        return create_tool_result(current.id, "failed", error=f"{type(exc).__name__}: {exc}")
+        result = create_tool_result(current.id, "failed", error=f"{type(exc).__name__}: {exc}")
+        _record_tool_result_event(current, result, started_at, error_type=type(exc).__name__)
+        return result
 
     executing = update_tool_call(current.id, status="executing")
     if executing is None:
@@ -121,18 +182,27 @@ def execute_tool_call(tool_call: ToolCall) -> ToolResult:
         )
     except Exception as exc:
         update_tool_call(executing.id, status="failed")
-        return create_tool_result(executing.id, "failed", error=f"{type(exc).__name__}: {exc}")
+        result = create_tool_result(executing.id, "failed", error=f"{type(exc).__name__}: {exc}")
+        _record_tool_result_event(executing, result, started_at, error_type=type(exc).__name__)
+        return result
 
     if isinstance(data, dict) and data.get("status") in {"timeout", "cancelled", "launch_failure"}:
         call_status = "cancelled" if data["status"] == "cancelled" else "failed"
         update_tool_call(executing.id, status=call_status)
-        return create_tool_result(
+        result = create_tool_result(
             executing.id,
             "failed",
             error=json.dumps(data, ensure_ascii=False),
         )
+        _record_tool_result_event(
+            executing, result, started_at, data=data,
+            error_type=str(data.get("status", "ToolExecutionFailed")),
+        )
+        return result
 
     update_tool_call(executing.id, status="completed")
     if not isinstance(data, dict):
         data = {"value": data}
-    return create_tool_result(executing.id, "completed", data=data)
+    result = create_tool_result(executing.id, "completed", data=data)
+    _record_tool_result_event(executing, result, started_at, data=data)
+    return result

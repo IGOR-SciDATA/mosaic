@@ -1,10 +1,13 @@
 from collections.abc import Callable
+import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import re
 from typing import Any
 
 from app.context.manager import build_context
+from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task, update_task
 from app.models.tool_call_repository import create_tool_call, list_tool_calls
 from app.models.tool_result import ToolResult
@@ -353,6 +356,66 @@ def _verified_source_reads(task_id: int, conversation_id: int, goal: str) -> lis
     return missing
 
 
+def _artifact_verification_evidence(
+    *,
+    task_id: int,
+    conversation_id: int,
+    path: str,
+    actual_bytes: bytes,
+    operation: str,
+    tool_call_id: int,
+    tool_result_id: int,
+    recovered_after_verification_error: bool = False,
+) -> dict[str, Any]:
+    """Record deterministic evidence that the reopened artifact matches persisted write input."""
+    digest = hashlib.sha256(actual_bytes).hexdigest()
+    verified_at = datetime.now(timezone.utc).isoformat()
+    event_id = None
+    task = get_task(task_id)
+    if task is not None:
+        try:
+            event = create_task_event(
+                task_id=task_id,
+                conversation_id=conversation_id,
+                project_id=task.project_id,
+                tool_call_id=tool_call_id,
+                component="verification",
+                event_name="artifact.verified",
+                message="Artifact bytes were reopened and matched the persisted write input.",
+                status="verified",
+                metadata={
+                    "path": path,
+                    "bytes": len(actual_bytes),
+                    "sha256": digest,
+                    "verification_method": "sha256+persisted_content_match",
+                    "operation": operation,
+                    "tool_result_id": tool_result_id,
+                    "recovered_after_verification_error": recovered_after_verification_error,
+                },
+            )
+            verified_at = event.timestamp
+            event_id = event.id
+        except Exception:
+            # Verification itself remains deterministic; event persistence is reported separately.
+            event_id = None
+
+    evidence: dict[str, Any] = {
+        "path": path,
+        "bytes": len(actual_bytes),
+        "operation": operation,
+        "sha256": digest,
+        "verified": True,
+        "verification_method": "sha256+persisted_content_match",
+        "verified_at": verified_at,
+        "verification_event_recorded": event_id is not None,
+    }
+    if event_id is not None:
+        evidence["verification_event_id"] = event_id
+    if recovered_after_verification_error:
+        evidence["recovered_after_verification_error"] = True
+    return evidence
+
+
 def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> dict[str, Any] | None:
     """Verify an artifact from a successful result or reconcile a known post-write error."""
     markdown_requested = bool(re.search(
@@ -422,11 +485,15 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
                     continue
                 if (new_file_requested or operation == "create") and data.get("created") is not True:
                     continue
-                return {
-                    "path": candidate.relative_to(root).as_posix(),
-                    "bytes": len(actual_bytes),
-                    "operation": data.get("operation", operation),
-                }
+                return _artifact_verification_evidence(
+                    task_id=task_id,
+                    conversation_id=conversation_id,
+                    path=candidate.relative_to(root).as_posix(),
+                    actual_bytes=actual_bytes,
+                    operation=str(data.get("operation", operation)),
+                    tool_call_id=call.id,
+                    tool_result_id=result.id,
+                )
 
             # A write may have taken effect before a later verification step raised.
             # Recover only this known ambiguous error, and only if the destination
@@ -437,12 +504,16 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
                 and "Written file could not be verified" in result.error
                 and content_matches
             ):
-                return {
-                    "path": candidate.relative_to(root).as_posix(),
-                    "bytes": len(actual_bytes),
-                    "operation": operation,
-                    "recovered_after_verification_error": True,
-                }
+                return _artifact_verification_evidence(
+                    task_id=task_id,
+                    conversation_id=conversation_id,
+                    path=candidate.relative_to(root).as_posix(),
+                    actual_bytes=actual_bytes,
+                    operation=operation,
+                    tool_call_id=call.id,
+                    tool_result_id=result.id,
+                    recovered_after_verification_error=True,
+                )
     return None
 
 def _artifact_output_path(goal: str) -> str:

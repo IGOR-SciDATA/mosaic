@@ -8,6 +8,7 @@ from app.models.action_repository import create_action, update_action
 from app.models.conversation_repository import create_conversation
 from app.models.project_repository import create_project
 from app.models.repository import create_model
+from app.models.task_event_repository import list_task_events
 from app.models.task_repository import create_task, update_task
 from app.models.tool_call_repository import create_tool_call, get_tool_call, update_tool_call
 from app.models.tool_result_repository import get_tool_result
@@ -55,6 +56,67 @@ def test_calculator_execution_persists_result() -> None:
     assert result.data == {"result": 5}
     assert get_tool_call(call.id).status == "completed"
     assert get_tool_result(result.id) == result
+
+
+def test_tool_result_events_record_duration_and_bounded_evidence(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    project = create_project("Tool evidence", str(workspace))
+    conversation = _conversation(project.id)
+    task = create_task(
+        type="generic",
+        mode="agent",
+        conversation_id=conversation.id,
+        project_id=project.id,
+        plan={"goal": "calculate 2 + 3"},
+    )
+    call = create_tool_call(
+        conversation.id, "calculator", {"expression": "2 + 3"}, task_id=task.id
+    )
+    result = execute_tool_call(approve_tool_call(call))
+
+    assert result.status == "completed"
+    events = [
+        event for event in list_task_events(task.id)
+        if event.event_name == "tool.result_recorded"
+    ]
+    assert len(events) == 1
+    event = events[0]
+    assert event.tool_call_id == call.id
+    assert event.status == "completed"
+    assert event.duration_ms is not None and event.duration_ms >= 0
+    assert event.metadata["tool_result_id"] == result.id
+    assert event.metadata["tool_name"] == "calculator"
+    assert event.metadata["result_data_keys"] == ["result"]
+    assert "content" not in event.metadata
+
+
+def test_failed_tool_result_event_records_error_type_without_raw_payload(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    project = create_project("Failed tool evidence", str(workspace))
+    conversation = _conversation(project.id)
+    task = create_task(
+        type="generic",
+        mode="agent",
+        conversation_id=conversation.id,
+        project_id=project.id,
+        plan={"goal": "calculate invalid expression"},
+    )
+    call = create_tool_call(
+        conversation.id, "calculator", {"expression": "unknown"}, task_id=task.id
+    )
+    result = execute_tool_call(approve_tool_call(call))
+
+    assert result.status == "failed"
+    event = next(
+        event for event in list_task_events(task.id)
+        if event.event_name == "tool.result_recorded"
+    )
+    assert event.status == "failed"
+    assert event.duration_ms is not None and event.duration_ms >= 0
+    assert event.metadata["error_type"] == "ValueError"
+    assert "unknown" not in str(event.metadata)
 
 
 def test_failed_tool_result_invariant() -> None:
