@@ -112,3 +112,38 @@ Criar cenários reproduzíveis por família; medir sucesso, falhas, tentativas, 
 ## Critérios gerais de economia e confiabilidade
 
 Antes de chamar o modelo novamente, verificar se código convencional resolve a checagem. Corrigir localmente e repetir apenas verificações afetadas quando seguro. Não repetir operações com efeitos colaterais sem idempotência ou autorização. Não prometer economia de tokens sem medi-la.
+
+
+## Aditivo do MASTER — biblioteca de agentes e providers (2026-10-18)
+
+Este aditivo amplia a sequência vigente sem autorizar uma reescrita do Core.
+
+### Fase 13 — Provider oficial via API
+- Auditar o factory/registry e a interface `ModelProvider` atual.
+- Preservar Ollama e acrescentar primeiro um provider de API oficial/documentada.
+- Guardar credenciais apenas no backend por mecanismo seguro; nunca expor chave no frontend/logs.
+- Respeitar seleção explícita do modelo/provider, timeout, limites, erros e custos; sem fallback silencioso.
+- Aceite: testes de seleção, modelo desabilitado, provider desconhecido, timeout, erro de credencial e regressão Ollama. Smoke test real só quando houver credencial fornecida pelo usuário.
+
+### Fase 14 — Biblioteca de agentes reutilizáveis por projeto
+- Usuário cria/lista/edita/remove agentes em um projeto; cada perfil tem slug único, descrição, instruções e Skills versionadas.
+- Invocação via `/slug` em qualquer conversa/tarefa do mesmo projeto; ativa o perfil na execução atual, sem criar outra conversa automaticamente.
+- Reutilizar `Project.state` e estruturas existentes se forem suficientes; nenhuma tabela nova sem evidência e aprovação de schema.
+- Persistir snapshot imutável/verificável do perfil e Skills na Task; retomada usa o snapshot original.
+- Aceite: duas conversas no mesmo projeto usam o mesmo agente; projetos diferentes permanecem isolados; edição do perfil não altera Task já iniciada; comandos desconhecidos falham claramente.
+
+### Fase 15 — WebChat adapter para aplicação própria/autorizada
+- Criar um adaptador de navegador separado do provider de API, usando o contrato de execução comum sempre que adequado.
+- Permitir configurar URL e seletores estáveis da aplicação controlada/autorizada pelo usuário.
+- Usar perfil de navegador dedicado e persistente, com login manual do usuário; não copiar cookies/senhas do perfil pessoal padrão.
+- Tratar sessão expirada, timeout, resposta vazia/incompleta, falha de seletor, rede, cancelamento e profile lock.
+- Nunca automatizar chats de consumo de terceiros sem autorização documentada, nem contornar MFA/CAPTCHA, limites ou controles de acesso.
+- Aceite: teste end-to-end contra chat próprio de demonstração, reinício com sessão persistida, logout/revogação e verificação de que credenciais não aparecem em logs.
+
+### Fase 16 — Contexto econômico e retomada integrada
+- Revisar orçamento por chamada, recuperação seletiva e checkpoint da Task.
+- Medir tokens/calls quando o provider disponibilizar métricas; não prometer economia sem medição.
+- Testar pausa, reinício, retomada com snapshot de agente/Skills e ausência de efeitos colaterais duplicados.
+- Aceite: relatório de antes/depois para consumo mensurável e E2E de retomada com evidências.
+
+As fases 13–16 são incrementais e não devem ser agrupadas em um único PR. Cada fase exige testes, revisão de segurança, documentação do estado real e validação explícita antes da seguinte.
