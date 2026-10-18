@@ -476,3 +476,72 @@ Esta é uma evidência manual reportada pelo usuário e deve ser registrada como
 - Quando o ambiente de desenvolvimento estiver disponível, automatizar teste de leitura/resumo/escrita com fixture Markdown e validar o conteúdo do arquivo gerado.
 - Não substituir o resultado manual reportado por uma afirmação de teste automatizado até que o teste seja implementado e executado.
 - Atualizar o estado do README conforme novas evidências forem produzidas.
+
+
+## 13. Avaliação arquitetural de propostas — 2026-10-18
+
+Esta seção registra propostas novas avaliadas pelo MASTER. Ela complementa o roadmap, mas não altera silenciosamente contratos de schema, segurança, provider ou UX. A presença de uma proposta aqui não significa que a capacidade esteja implementada ou aprovada para execução imediata.
+
+### 13.1. Acesso a modelos por interfaces web de terceiros
+
+**Motivação reportada:** permitir que o usuário aproveite uma sessão/conta web que já possui, reduzindo ou evitando cobrança por chamadas de API.
+
+**Decisão:** investigar como uma modalidade futura de acesso; não tratar automação de interfaces web de terceiros como provider aprovado nem como substituto equivalente à API.
+
+Princípios obrigatórios para qualquer prova de conceito:
+
+- Preservar `MODEL ≠ ACCESS`: o modelo lógico, o mecanismo de acesso e a execução permanecem conceitos separados.
+- O usuário continua escolhendo explicitamente o modelo/acesso por conversa; não implementar roteamento, fallback ou troca silenciosa.
+- O Core continua dono da Task, do estado, das aprovações, do histórico Mosaic e da validação do resultado.
+- Persistir somente dados de sessão que sejam legitimamente acessíveis e necessários. A URL de uma conversa pode ser uma referência, mas não prova que o Mosaic consegue ler, retomar ou verificar seu conteúdo.
+- Registrar a origem do resultado, timestamp, estado de recuperação e limitações. Não afirmar que uma resposta foi recuperada se o usuário ou uma integração autorizada não a tornou disponível ao Core.
+- Não armazenar senhas, cookies, tokens de sessão ou dados de autenticação em texto aberto; não contornar CAPTCHA, controles de acesso, mecanismos anti-automação ou restrições do serviço.
+- Antes de qualquer automação, avaliar termos aplicáveis, autorização explícita do usuário, estabilidade, privacidade, segurança, limites, manutenção e custo total. Uma assinatura web não deve ser presumida como autorização para automação programática.
+- Se não existir mecanismo autorizado e tecnicamente confiável, manter a opção como fluxo assistido pelo usuário (por exemplo, abrir uma página e permitir que o usuário traga a resposta) ou não implementar a integração automática.
+- Não introduzir uma tabela ou infraestrutura nova antes de demonstrar a necessidade. Primeiro avaliar se a abstração de acesso e os metadados existentes conseguem representar a modalidade sem comprometer integridade.
+
+**Critérios para decidir se avança:** protótipo isolado, autorização e limites documentados, prova de ida/volta reproduzível, tratamento de sessão expirada/erro, persistência de proveniência e revisão de segurança. Só então o MASTER decide se vira um acesso suportado. Esta proposta não muda a escolha explícita de modelo por conversa nem autoriza dependência de scraping de UI.
+
+### 13.2. Ferramenta meteorológica
+
+**Decisão:** manter clima como ferramenta especializada candidata a validação funcional, integrada ao Tool Registry e ao ciclo universal existente; não criar um fluxo de execução paralelo.
+
+Antes de implementar ou reescrever, Chat 01 deve inspecionar a ferramenta atual e determinar o que existe de fato. Se já houver implementação, reutilizar o código válido e preencher apenas lacunas.
+
+Contrato comportamental esperado:
+
+- aceitar uma localização fornecida pelo usuário, como cidade, bairro/região, estado ou país; esclarecer quando a localização for ambígua;
+- diferenciar condições atuais de previsão e deixar explícito o período consultado;
+- consultar fonte meteorológica real e registrar fonte, localização resolvida, horário de consulta e unidade usada;
+- tratar geocodificação ambígua, indisponibilidade da fonte, timeout, limite de requisições e resposta incompleta sem inventar valores;
+- persistir ToolCall/ToolResult/eventos conforme os contratos vigentes e devolver ao modelo o resultado observado;
+- mostrar a fonte e a atualização ao usuário; nunca apresentar dados simulados como clima atual.
+
+**Aceite:** testes determinísticos para localização válida, ambígua e inválida, erro/timeout da fonte e formatação; além de smoke/E2E com fonte real quando o ambiente permitir. Até a execução desses testes, a capacidade deve ser marcada como existente, implementada, testada ou validada conforme a evidência real — não presumida.
+
+### 13.3. Identidade visual brasileira e temas claro/escuro
+
+**Decisão:** incluir a identidade visual como trabalho de produto/frontend, sem bloquear a validação do Core nem antecipar uma logo ainda não definida.
+
+Diretrizes:
+
+- construir uma linguagem visual brasileira contemporânea, própria e tecnológica; evitar depender apenas de símbolos patrióticos literais;
+- preparar tokens semânticos para cores, superfícies, bordas, foco, estados, tipografia e espaçamento, com variantes para tema claro e escuro;
+- permitir alternância explícita entre claro/escuro e persistir a preferência usando o mecanismo de configuração já aprovado, sem adicionar schema desnecessário;
+- garantir contraste, foco visível, navegação por teclado, legibilidade e estados equivalentes nos dois temas;
+- manter os estados de Task, aprovação, erro, fontes e artefatos factuais e consistentes com o contrato de UX;
+- desenvolver e aprovar a logo como artefato de design separado; não codificar a identidade em componentes de forma que dificulte sua substituição.
+
+**Aceite:** revisão visual das jornadas principais nos dois temas, teste de persistência da preferência, contraste/foco e build frontend executado. A adoção da identidade não altera a arquitetura do Core.
+
+### 13.4. Ordem e limites de escopo
+
+Estas propostas não substituem os bloqueios da Fase 0, a política de segurança, a seleção explícita de modelo ou a validação E2E. A ordem recomendada é:
+
+1. concluir a validação dinâmica e a reconciliação contratual pendentes da Fase 0;
+2. preservar e automatizar o cenário de regressão Markdown → resumo → novo Markdown;
+3. inspecionar e validar a ferramenta de clima existente, implementando somente as lacunas comprovadas;
+4. definir a linguagem visual e implementar temas claro/escuro sob o contrato de UX;
+5. conduzir uma investigação técnica separada sobre acesso por interfaces web, sem incorporá-la ao caminho crítico até demonstrar viabilidade, autorização e segurança.
+
+Cada item funcional deve ter escopo e evidências próprios. Não introduzir mudanças de schema, novos serviços ou infraestrutura apenas para antecipar essas propostas.
