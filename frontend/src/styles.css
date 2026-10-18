@@ -3012,3 +3012,39 @@ body { overflow: hidden; }
 .task-agent-snapshot small { color: var(--muted, #647368); font-size: 11px; line-height: 1.5; }
 .task-agent-snapshot strong { color: var(--text, #17231b); font-size: 12px; overflow-wrap: anywhere; }
 :root[data-theme="dark"] .task-agent-snapshot { background: #151515; border-color: #343434; }
+
+
+/* Sidebar conversation readability and safe destructive-action controls. */
+.project-conversation-list { padding: 3px 0 7px 12px; }
+.conversation-row { display: flex; align-items: center; gap: 3px; min-width: 0; margin: 2px 0; }
+.conversation-row .conversation-item { flex: 1; min-width: 0; width: auto; color: var(--text, #f5f5f5) !important; background: transparent; border-radius: 7px; }
+.conversation-row .conversation-item:hover { background: rgba(255,255,255,.07); color: var(--text, #f5f5f5) !important; }
+.conversation-row .conversation-item.selected { color: var(--text, #f5f5f5) !important; background: rgba(226,30,38,.18); box-shadow: inset 2px 0 var(--red, #e21e26); }
+.conversation-row .tiny-chevron { color: var(--muted, #b5b5b5); flex: 0 0 auto; }
+.sidebar-delete-button { display: inline-flex !important; align-items: center; justify-content: center; flex: 0 0 28px; width: 28px !important; min-width: 28px; min-height: 28px !important; height: 28px; padding: 0 !important; border: 1px solid transparent !important; border-radius: 7px !important; background: transparent !important; color: var(--muted, #aeb4bd) !important; opacity: .78; }
+.sidebar-delete-button:hover, .sidebar-delete-button:focus-visible { opacity: 1; color: #fff !important; background: #b91c28 !important; border-color: #dc3545 !important; outline: none; }
+.project-delete-button { margin-left: 1px; }
+.project-row .project-expand { flex: 0 0 24px; width: 24px; }
+.conversation-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+:root[data-theme="dark"] .conversation-row .conversation-item { color: #f0f1f3 !important; }
+:root[data-theme="dark"] .conversation-row .conversation-item.selected { background: rgba(226,30,38,.16); }
+:root[data-theme="light"] .conversation-row .conversation-item { color: #17231b !important; }
+:root[data-theme="light"] .conversation-row .conversation-item:hover { background: #edf6ef; color: #102b1a !important; }
+:root[data-theme="light"] .conversation-row .conversation-item.selected { background: #e4f4e9; color: #102b1a !important; box-shadow: inset 2px 0 #16834a; }
+:root[data-theme="light"] .conversation-row .tiny-chevron { color: #53685a; }
+.delete-confirm-content { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding-top: 8px; }
+.delete-confirm-content h3 { margin: 0; font-size: 17px; line-height: 1.4; color: var(--text); }
+.delete-confirm-content p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.delete-confirm-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; color: #dc3545; background: rgba(220,53,69,.12); border: 1px solid rgba(220,53,69,.24); }
+.delete-confirm-actions { display: flex; justify-content: flex-end; gap: 9px; width: 100%; margin-top: 8px; }
+.delete-confirm-actions button { min-height: 38px; padding: 0 14px; border-radius: 9px; font-size: 13px; }
+.delete-confirm-actions .secondary-button { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.delete-confirm-actions .danger-button { background: #c92330; color: #fff; border: 1px solid #dc3545; }
+.delete-confirm-actions .danger-button:hover { background: #e02d3a; }
+@media (hover: hover) {
+  .project-row .sidebar-delete-button, .conversation-row .sidebar-delete-button { opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+  .project-row:hover .sidebar-delete-button, .project-row:focus-within .sidebar-delete-button, .conversation-row:hover .sidebar-delete-button, .conversation-row:focus-within .sidebar-delete-button { opacity: 1; pointer-events: auto; }
+}
+@media (hover: none) {
+  .project-row .sidebar-delete-button, .conversation-row .sidebar-delete-button { opacity: 1; pointer-events: auto; }
+}
