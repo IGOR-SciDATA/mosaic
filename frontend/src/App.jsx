@@ -299,17 +299,17 @@ function TaskWorkspace({ conversationId, projectId }) {
   }, [projectId]);
 
   function skillCommandSlug(name) {
-    return name.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase()
+    return name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
       .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   }
 
-  const agentQuery = goal.match(/^\\/([a-z0-9-]*)$/i);
+  const agentQuery = goal.match(/^\/([a-z0-9-]*)$/i);
   const agentSuggestions = agentQuery ? libraryAgents.filter(agent =>
     agent.slug.toLowerCase().includes(agentQuery[1].toLowerCase()) ||
     agent.name.toLowerCase().includes(agentQuery[1].toLowerCase())
   ).slice(0, 6) : [];
-  const skillQuery = goal.match(/^\\/([a-z0-9-]+)\\s+@([a-z0-9-]*)$/i);
-  const blankAfterAgent = goal.match(/^\\/([a-z0-9-]+)\\s+$/i);
+  const skillQuery = goal.match(/^\/([a-z0-9-]+)\s+@([a-z0-9-]*)$/i);
+  const blankAfterAgent = goal.match(/^\/([a-z0-9-]+)\s+$/i);
   const skillAgentSlug = skillQuery?.[1] || blankAfterAgent?.[1] || null;
   const skillQueryText = skillQuery?.[2] || "";
   const skillAgent = skillAgentSlug ? libraryAgents.find(agent => agent.slug === skillAgentSlug) : null;
