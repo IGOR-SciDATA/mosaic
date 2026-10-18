@@ -1,5 +1,7 @@
 from urllib import error, request
 import json
+import os
+import re
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -25,9 +27,27 @@ class ModelUpdate(BaseModel):
 router = APIRouter(prefix="/models", tags=["models"])
 
 
+_SECRET_FIELD = re.compile(r"(api.?key|authorization|access.?token|refresh.?token|password|secret|credential)", re.IGNORECASE)
+
+
+def _reject_secret_configuration(value: object, path: str = "configuration") -> None:
+    """Keep provider credentials out of model configuration returned by the API."""
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if isinstance(key, str) and _SECRET_FIELD.search(key):
+                raise ValueError(f"{path} must not contain secret fields; configure credentials in the backend environment.")
+            _reject_secret_configuration(nested, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            _reject_secret_configuration(nested, f"{path}[{index}]")
+
+
+
+
 @router.post("", response_model=Model)
 def create_model_endpoint(payload: ModelCreate) -> Model:
     try:
+        _reject_secret_configuration(payload.configuration)
         return create_model(
             name=payload.name,
             provider=payload.provider,
@@ -45,8 +65,19 @@ def list_models_endpoint() -> list[Model]:
 
 
 @router.get("/status")
-def model_provider_status() -> dict:
-    """Report real Ollama reachability and currently running models."""
+def model_provider_status(provider: str = "ollama") -> dict:
+    """Report Ollama reachability or whether OpenAI backend credentials are configured."""
+    normalized = provider.strip().lower()
+    if normalized == "openai":
+        configured = bool(os.environ.get("OPENAI_API_KEY", "").strip())
+        return {
+            "provider": "openai",
+            "online": configured,
+            "configured": configured,
+            "running_models": [],
+        }
+    if normalized != "ollama":
+        return {"provider": normalized, "online": False, "configured": False, "running_models": []}
     try:
         with request.urlopen("http://localhost:11434/api/ps", timeout=2) as response:
             payload = json.loads(response.read().decode("utf-8"))
@@ -70,6 +101,8 @@ def update_model_endpoint(model_id: int, payload: ModelUpdate) -> Model:
     if model is None:
         raise HTTPException(status_code=404, detail="Model not found")
     try:
+        if payload.configuration is not None:
+            _reject_secret_configuration(payload.configuration)
         return update_model(
             model_id,
             name=payload.name,
