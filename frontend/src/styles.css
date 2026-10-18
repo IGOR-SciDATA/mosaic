@@ -2267,3 +2267,136 @@ body { overflow: hidden; }
 :root[data-theme="light"] .file-preview pre,
 :root[data-theme="light"] .file-preview code,
 :root[data-theme="light"] .project-notes-editor { color: #20242a; background: #f8f9fb; }
+
+
+/* Final light-mode pass for actual file/artifact and notes components. */
+:root[data-theme="light"] .project-files-workspace,
+:root[data-theme="light"] .agent-config-workspace { color: #17191d; background: #fff; }
+:root[data-theme="light"] .project-file-search {
+  color: #4b5563;
+  background: #f8f9fb;
+  border-color: #d9dee5;
+}
+:root[data-theme="light"] .project-file-search input {
+  color: #17191d;
+  background: transparent;
+  font-size: 14px;
+}
+:root[data-theme="light"] .project-file-search input::placeholder { color: #737d8b; }
+:root[data-theme="light"] .project-file-list,
+:root[data-theme="light"] .project-file-preview {
+  background: #fff;
+  border-color: #d9dee5;
+  box-shadow: 0 2px 8px rgba(16,24,40,.035);
+}
+:root[data-theme="light"] .project-file-item {
+  color: #4b5563;
+  background: #fff;
+  border-bottom-color: #e8ebef;
+}
+:root[data-theme="light"] .project-file-item strong { color: #17191d; font-size: 13px; }
+:root[data-theme="light"] .project-file-item small { color: #667085; font-size: 11px; }
+:root[data-theme="light"] .project-file-item:hover,
+:root[data-theme="light"] .project-file-item.selected {
+  color: #17191d;
+  background: #f5f6f8;
+}
+:root[data-theme="light"] .project-file-item.selected { box-shadow: inset 3px 0 #111827; }
+:root[data-theme="light"] .project-file-code {
+  color: #20242a;
+  background: #f8f9fb;
+  border-top: 1px solid #e8ebef;
+  font-size: 12px;
+}
+:root[data-theme="light"] .project-file-provenance {
+  color: #596474;
+  background: #fff;
+  border-top-color: #e8ebef;
+  font-size: 11px;
+}
+:root[data-theme="light"] .agent-config-card {
+  color: #17191d;
+  background: #fff;
+  border-color: #d9dee5;
+}
+:root[data-theme="light"] .agent-config-card-heading strong,
+:root[data-theme="light"] .agent-config-card label,
+:root[data-theme="light"] .memory-value-label,
+:root[data-theme="light"] .memory-form-grid label,
+:root[data-theme="light"] .skill-editor label:not(.skill-enabled) { color: #252a32; }
+:root[data-theme="light"] .agent-config-card-heading span:not(.task-count),
+:root[data-theme="light"] .agent-config-card > p,
+:root[data-theme="light"] .agent-editor-footer,
+:root[data-theme="light"] .agent-config-save > span { color: #596474; }
+:root[data-theme="light"] .project-notes-editor,
+:root[data-theme="light"] .agent-instructions-editor,
+:root[data-theme="light"] .skill-editor textarea,
+:root[data-theme="light"] .skill-editor input:not([type="checkbox"]),
+:root[data-theme="light"] .memory-form-grid input,
+:root[data-theme="light"] .memory-value-label textarea {
+  color: #17191d;
+  background: #fff;
+  border-color: #cbd2dc;
+  font-size: 14px;
+}
+:root[data-theme="light"] .project-notes-editor::placeholder,
+:root[data-theme="light"] .agent-instructions-editor::placeholder,
+:root[data-theme="light"] .memory-value-label textarea::placeholder { color: #737d8b; }
+:root[data-theme="light"] .skill-editor {
+  background: #f8f9fb;
+  border-color: #e1e5eb;
+}
+:root[data-theme="light"] .skill-enabled { color: #343b45; }
+:root[data-theme="light"] .approval-card {
+  background: #fff;
+  border-color: #e4c9c7;
+}
+:root[data-theme="light"] .approval-card h4 { color: #252a32; }
+:root[data-theme="light"] .approval-card p,
+:root[data-theme="light"] .approval-card summary { color: #4b5563; }
+:root[data-theme="light"] .approval-card pre {
+  color: #20242a;
+  background: #f3f5f7;
+}
+:root[data-theme="light"] .tool-inspector-item summary { color: #252a32; }
+:root[data-theme="light"] .tool-inspector-body > strong,
+:root[data-theme="light"] .tool-result-inspector > strong { color: #4b5563; }
+:root[data-theme="light"] .tool-inspector-body pre,
+:root[data-theme="light"] .tool-result-inspector pre {
+  color: #20242a;
+  background: #f3f5f7;
+}
+:root[data-theme="light"] .tool-result-inspector p { color: #a32320; }
+
+/* A modern monochrome action hierarchy: black primary buttons, quiet secondary actions. */
+:root[data-theme="light"] .primary-action,
+:root[data-theme="light"] .empty-action,
+:root[data-theme="light"] .modal-actions .primary-action {
+  color: #fff;
+  background: #17191d;
+  border: 1px solid #17191d;
+  box-shadow: 0 1px 2px rgba(16,24,40,.10);
+  font-weight: 600;
+}
+:root[data-theme="light"] .primary-action:hover:not(:disabled),
+:root[data-theme="light"] .empty-action:hover:not(:disabled),
+:root[data-theme="light"] .modal-actions .primary-action:hover:not(:disabled) {
+  color: #fff;
+  background: #30343b;
+  border-color: #30343b;
+}
+:root[data-theme="light"] .secondary-action {
+  color: #20242a;
+  background: #fff;
+  border: 1px solid #cbd2dc;
+  font-size: 13px;
+  font-weight: 550;
+}
+:root[data-theme="light"] .secondary-action:hover:not(:disabled) {
+  color: #111318;
+  background: #f1f3f6;
+  border-color: #aab2bf;
+}
+:root[data-theme="light"] .text-danger { color: #a32320; font-size: 12px; }
+:root[data-theme="light"] .agent-config-success { color: #176b3a; background: #f0faf3; border-color: #c7e8d1; }
+:root[data-theme="light"] .task-inline-error { color: #a32320; background: #fff5f4; border-color: #f0cecb; }
