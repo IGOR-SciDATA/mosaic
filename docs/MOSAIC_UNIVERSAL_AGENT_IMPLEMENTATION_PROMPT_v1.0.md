@@ -226,3 +226,34 @@ Entregar sempre:
 Construa o Mosaic para **concluir trabalho real com rastreabilidade**, e não para parecer autônomo. Priorize integração, validação, continuidade e segurança sobre a quantidade de ferramentas ou complexidade da arquitetura.
 
 Não reescreva o Core para acomodar a ideia de agente geral. Faça o Core existente sustentar o agente geral. Se uma capacidade exigir mudança de contrato, explique a necessidade, o benefício, as alternativas e os impactos, e aguarde decisão do MASTER antes de implementá-la.
+
+## 9. Observabilidade e autoverificação obrigatórias
+
+Observabilidade e verificação pertencem ao Core/Harness existente; não criar um segundo Core, agente verificador independente ou fonte paralela de estado.
+
+- Audite primeiro Task, ToolCall, ToolResult, Artifact, `task_events`, logs e validadores existentes.
+- Registre eventos operacionais correlacionados à Task: início/fim de etapa, ferramenta, duração, resultado, erro resumido, tentativa, mudança de estado e referências de evidência, conforme dados disponíveis.
+- Não registre chain-of-thought, credenciais, cookies ou segredos. Registre fatos operacionais e justificativas de política em nível auditável.
+- Defina critérios de aceite antes da execução. Use primeiro verificações determinísticas baratas; recorra ao modelo apenas para julgamentos semânticos que não possam ser automatizados de forma confiável.
+- Para artefatos, valide de fato: releia Markdown; reabra DOCX/PDF/XLSX/PPTX; confira estrutura e conteúdo esperado. Para software, execute testes/build/smoke aplicáveis. Nunca inferir sucesso apenas pela ausência de exceção.
+- Em falha, enviar ao modelo apenas o erro relevante e contexto mínimo; corrigir localmente; reexecutar apenas verificações afetadas quando seguro; limitar retries, tempo e custo; detectar ciclos e parar.
+- Evidência de validação deve identificar critério, resultado, referência/saída, timestamp e versão/hash quando aplicável. Invalide evidência quando entradas, artefato ou ambiente relevante mudar.
+- Não criar tabelas/campos novos antes de verificar se o schema aprovado e os eventos existentes cobrem a necessidade. Mudança de schema requer justificativa e compatibilidade com o contrato MVP.
+- UI e relatórios devem mostrar estados reais da Task, verificações aprovadas/reprovadas, bloqueios e artefatos. Percentual só com etapas mensuráveis conhecidas. Nunca mostrar progresso fictício.
+- A Task só pode ser concluída quando os critérios de aceite forem verificados; caso contrário, terminar explicitamente em falha/bloqueio/cancelamento.
+- Métricas de duração, tentativas e tokens/custo só devem ser registradas quando disponíveis. Não prometer redução de tokens sem medir; o objetivo é reduzir custo total e repetição desnecessária.
+
+### Critérios mínimos de aceite para o primeiro fluxo vertical
+
+Preservar o cenário manual reportado `.md → resumo → novo .md` e transformá-lo em regressão automatizada quando viável. Verificar leitura do arquivo, criação e releitura do artefato e critérios mínimos de conteúdo; registrar eventos do ciclo; testar falhas induzidas; provar retry limitado e parada; distinguir teste executado de teste não executado. Implementar e reportar uma fase por vez, aguardando aprovação do MASTER antes de avançar.
+
+## 10. Estados públicos de progresso
+
+Usar a mesma distinção em README, relatórios e entregas:
+- **Planejado:** requisito definido, sem implementação comprovada.
+- **Presente no código:** implementação identificada; comportamento ainda não comprovado.
+- **Testado:** teste/comando executado com resultado registrado.
+- **Validado ponta a ponta:** fluxo real executado e critérios de aceite verificados.
+- **Demonstrado manualmente:** usuário reportou uma execução concluída, sem presumir cobertura automatizada.
+
+Não elevar o estado de uma capacidade sem evidência. Ao final de cada fase, informar branch/commit, arquivos, comandos exatos, resultados, testes não executados, evidências de runtime, riscos e estado real de cada capacidade. Parar e aguardar o MASTER.

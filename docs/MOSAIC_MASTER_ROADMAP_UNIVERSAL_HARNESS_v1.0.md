@@ -545,3 +545,72 @@ Estas propostas não substituem os bloqueios da Fase 0, a política de seguranç
 5. conduzir uma investigação técnica separada sobre acesso por interfaces web, sem incorporá-la ao caminho crítico até demonstrar viabilidade, autorização e segurança.
 
 Cada item funcional deve ter escopo e evidências próprios. Não introduzir mudanças de schema, novos serviços ou infraestrutura apenas para antecipar essas propostas.
+
+---
+
+## 14. Observabilidade, autoverificação e progresso verificável
+
+**Decisão arquitetural:** observabilidade e verificação são capacidades transversais do Core/Harness, não um agente separado nem um segundo sistema de estado. O Mosaic deve conseguir explicar operacionalmente o que executou, quais evidências obteve, o que falhou e por que declarou uma tarefa concluída — sem expor raciocínio privado do modelo.
+
+### 14.1 Observabilidade operacional
+
+Registrar eventos estruturados e correlacionáveis por Task/subtask, Action, ToolCall e Artifact, reutilizando `task_events` e as entidades existentes sempre que possível. Inspecionar o schema atual antes de propor campos ou tabelas.
+
+Quando disponíveis e relevantes, eventos devem incluir: tipo do evento, timestamp, Task relacionada, componente/ferramenta, estado anterior e novo, duração, resultado, código de saída, erro resumido, número da tentativa, referência à evidência e metadados de custo/uso reportados pelo provider. Não inventar contagem de tokens quando o provider não a fornece.
+
+Não persistir chain-of-thought, credenciais, cookies, tokens de acesso ou conteúdo sensível desnecessário. Guardar explicações operacionais, decisões de política, entradas/saídas necessárias à auditoria e referências aos artefatos, com minimização de dados.
+
+### 14.2 Autoverificação baseada em evidências
+
+Cada Task deve definir critérios de aceite antes da execução, proporcionais ao tipo de trabalho. Depois de cada etapa relevante, verificar o resultado antes de continuar ou concluir.
+
+Ordem preferencial de verificação:
+1. validações determinísticas baratas (existência, tamanho, schema, JSON, hashes, códigos de saída, permissões, estrutura de arquivos);
+2. validadores específicos de formato (reabrir DOCX/PDF/XLSX/PPTX, inspecionar conteúdo e estrutura);
+3. testes de software, build, lint e smoke/E2E quando aplicáveis;
+4. avaliação por modelo somente quando os verificadores determinísticos não forem suficientes ou a qualidade for semântica.
+
+Uma chamada de ferramenta sem exceção não prova sucesso. Um teste não executado não é um teste aprovado. Uma resposta do modelo afirmando que verificou algo não substitui a evidência da verificação.
+
+Os resultados de verificação devem identificar o critério, status, evidência/referência, versão ou hash do artefato/entrada verificada e timestamp. Reutilizar evidências somente enquanto entradas, artefato e ambiente relevante não mudarem. Não adicionar tabela/entidade nova antes de verificar se `Artifact`, `ToolResult`, `Task` e `task_events` cobrem o caso; qualquer expansão de schema exige justificativa e decisão compatível com o contrato MVP.
+
+### 14.3 Correção econômica e limitada
+
+Quando uma verificação falhar:
+- diagnosticar com a menor evidência suficiente;
+- preferir código/validador a outra chamada de modelo;
+- enviar ao modelo somente erro relevante, trecho afetado, critério falho e contexto mínimo;
+- corrigir localmente e reexecutar apenas as verificações afetadas quando seguro;
+- limitar tentativas, tempo, tokens/custo quando mensurável e efeitos colaterais;
+- detectar ciclos repetitivos e parar;
+- ao esgotar limites, terminar como falha/bloqueio e informar o que foi e não foi verificado.
+
+Nunca repetir uma tarefa inteira por padrão quando a falha puder ser isolada. Operações com efeitos externos não devem ser repetidas sem idempotência ou nova autorização.
+
+### 14.4 Estados de progresso e interface
+
+A interface deve refletir estados persistidos pelo Core, não progresso inventado. Separar:
+- **estado da Task:** pending, planning, awaiting_approval, executing, validating, completed, failed, cancelled;
+- **etapa/evento operacional:** plano criado, ferramenta iniciada, resultado recebido, validação aprovada/reprovada, correção iniciada, artefato criado;
+- **estado de validação:** aprovado, reprovado, bloqueado ou não executado, sempre ligado a evidência.
+
+A UI deve mostrar, em nível resumido, etapa atual, progresso concluído, validações realizadas, falhas importantes, aprovações pendentes e artefatos produzidos. Percentual só pode aparecer quando houver base mensurável; caso contrário, usar etapa atual e contagem de etapas concluídas/total conhecidas. Não apresentar “100%” antes dos critérios de aceite.
+
+### 14.5 Critérios de aceite incrementais
+
+1. Auditar eventos, logs, ToolResult, Task e validadores já existentes antes de modificar schema.
+2. Transformar o fluxo já demonstrado manualmente `.md → resumo → novo .md` em regressão automatizada quando viável, verificando leitura, qualidade mínima do resumo, criação e releitura do artefato.
+3. Para esse fluxo, registrar eventos de início, execução da ferramenta, resultado, validação e conclusão/falha.
+4. Demonstrar pelo menos um caso de sucesso e falhas induzidas relevantes (arquivo ausente, conteúdo inválido ou escrita falha), sem alegar execução de testes não realizados.
+5. Demonstrar que uma falha provoca diagnóstico limitado, retry controlado quando apropriado e parada clara ao atingir o limite.
+6. Mostrar na UI estado real da Task e resultados de validação, sem criar uma nova fonte de verdade.
+7. Registrar métricas disponíveis de duração, tentativas e consumo; comparar antes/depois quando possível para verificar se a autoverificação reduz repetição e custo total, sem assumir antecipadamente que reduz tokens em todos os casos.
+
+### 14.6 Ordem de implementação
+
+- Primeiro: auditoria dinâmica do baseline e inventário das evidências já disponíveis.
+- Segundo: verificação e eventos no fluxo Markdown como primeiro vertical slice.
+- Terceiro: generalizar o contrato de verificação no Harness e aplicar a artefatos/ferramentas.
+- Quarto: exibir progresso e evidências na UI.
+- Quinto: adicionar métricas e avaliação de custo/qualidade.
+- Não construir observabilidade distribuída, tracing complexo ou dashboard independente sem necessidade demonstrada.
