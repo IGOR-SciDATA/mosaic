@@ -856,7 +856,7 @@ def _set_task_step_status(
     return plan
 
 
-def _set_all_task_steps_completed(task_id: int) -> dict[str, Any]:
+def _set_all_task_steps_completed(task_id: int, artifact: dict[str, Any] | None = None) -> dict[str, Any]:
     task = get_task(task_id)
     if task is None:
         raise ValueError("Task not found")
@@ -864,6 +864,14 @@ def _set_all_task_steps_completed(task_id: int) -> dict[str, Any]:
     for step in plan.get("steps", []):
         if isinstance(step, dict):
             step["status"] = "completed"
+            if artifact is not None and step.get("id") == "create_artifact":
+                step.update({
+                    "artifact_id": artifact.get("artifact_id"),
+                    "artifact_path": artifact.get("path"),
+                    "artifact_sha256": artifact.get("sha256"),
+                    "artifact_bytes": artifact.get("bytes"),
+                    "artifact_verified": artifact.get("verified") is True,
+                })
     plan["current_step"] = None
     update_task(task_id, plan=plan)
     return plan
@@ -1017,7 +1025,7 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
     if _goal_requires_file_artifact(goal):
         artifact = _verified_file_artifact(task_id, task.conversation_id, goal)
         if artifact is not None:
-            _set_all_task_steps_completed(task_id)
+            _set_all_task_steps_completed(task_id, artifact=artifact)
             result = {
                 "output": f"Arquivo criado e verificado: {artifact['path']}",
                 "iterations": 0,
@@ -1093,7 +1101,7 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
 
                 artifact = _verified_file_artifact(task_id, current.conversation_id, goal)
                 if artifact is not None:
-                    _set_all_task_steps_completed(task_id)
+                    _set_all_task_steps_completed(task_id, artifact=artifact)
                     result = {"output": decision.get("content", ""), "iterations": iteration, "artifact": artifact}
                     update_task(task_id, status="completed", result=result)
                     return {"status": "completed", **result}
