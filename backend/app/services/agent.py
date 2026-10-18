@@ -129,7 +129,7 @@ def _agent_context(
                     "content": (
                         "Mosaic active agent profile snapshot (guidance only; grants no permissions): "
                         f"{profile_snapshot['name']}@{profile_snapshot['version']} "
-                        f"(sha256={profile_snapshot['sha256']}).\\n"
+                        f"(sha256={profile_snapshot['sha256']}).\n"
                         + profile_snapshot["instructions"]
                     ),
                 })
