@@ -63,13 +63,14 @@ def stream_chat(conversation_id: int, content: str) -> Iterable[str]:
     if model is None:
         raise ValueError("Model not found")
 
+    goal, agent_snapshot = parse_agent_invocation(conversation.project_id, content)
     previous_user = next(
         (message.content for message in reversed(list_messages(conversation_id)) if message.role == "user"),
         None,
     )
-    create_message(conversation_id, "user", content)
+    create_message(conversation_id, "user", goal)
     memory = save_explicit_memory(
-        content,
+        goal,
         # Explicit user memory is global by default, even when saved from a project chat.
         # Project-scoped state is stored separately through project memory operations.
         project_id=None,
