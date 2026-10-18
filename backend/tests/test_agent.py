@@ -464,9 +464,9 @@ def test_markdown_summary_flow_reads_source_creates_and_reopens_verified_artifac
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     source_content = (
-        "# Plano do projeto\\n\\n"
-        "## Objetivo\\nConstruir um protótipo funcional.\\n\\n"
-        "## Etapas\\n- Implementar a API.\\n- Validar a interface.\\n"
+        "# Plano do projeto\n\n"
+        "## Objetivo\nConstruir um protótipo funcional.\n\n"
+        "## Etapas\n- Implementar a API.\n- Validar a interface.\n"
     )
     (workspace / "Documento.md").write_text(source_content, encoding="utf-8")
     project = create_project("Markdown regression", str(workspace))
@@ -475,16 +475,16 @@ def test_markdown_summary_flow_reads_source_creates_and_reopens_verified_artifac
     observed_contexts = []
 
     summary = (
-        "# Resumo do projeto\\n\\n"
-        "## Objetivo\\nConstruir um protótipo funcional.\\n\\n"
-        "## Etapas principais\\n"
-        "- Implementar e validar a API.\\n"
-        "- Validar a interface antes de concluir.\\n"
+        "# Resumo do projeto\n\n"
+        "## Objetivo\nConstruir um protótipo funcional.\n\n"
+        "## Etapas principais\n"
+        "- Implementar e validar a API.\n"
+        "- Validar a interface antes de concluir.\n"
     )
 
     def decide(context):
         observed_contexts.append(context)
-        evidence = "\\n".join(
+        evidence = "\n".join(
             item["content"] for item in context if item.get("role") == "system"
         )
         assert "Construir um protótipo funcional." in evidence
