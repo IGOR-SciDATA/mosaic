@@ -416,6 +416,35 @@ def _required_source_paths(goal: str) -> list[str]:
             unique.append(normalized)
     return unique
 
+def _verified_web_sources(task_id: int, conversation_id: int) -> list[dict[str, Any]]:
+    """Collect provenance only from successful web_fetch ToolResults owned by this Task."""
+    sources: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    for call in list_tool_calls(conversation_id):
+        if call.task_id != task_id or call.tool_name != "web_fetch":
+            continue
+        for result in list_tool_results(call.id):
+            if result.status != "completed" or not isinstance(result.data, dict):
+                continue
+            data = result.data
+            url = data.get("url")
+            content = data.get("content")
+            if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+                continue
+            if not isinstance(content, str) or not content.strip() or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            sources.append({
+                "url": url,
+                "title": str(data.get("title", ""))[:300],
+                "fetched_at": data.get("fetched_at"),
+                "content_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                "tool_call_id": call.id,
+                "tool_result_id": result.id,
+            })
+    return sources
+
+
 def _source_read_evidence(task_id: int, conversation_id: int, source: str) -> dict[str, Any]:
     """Return persisted provenance for a fully read source without copying content into the plan."""
     normalized_source = Path(source).as_posix().casefold()
@@ -1230,12 +1259,39 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                     return {"status": "failed", "error": error, "iterations": iteration}
 
                 step = _current_task_step(current.plan)
-                if step is not None and step.get("kind") in {"summarize_source", "transform_source", "draft_content"}:
+                output_sha256 = hashlib.sha256(artifact_content.encode("utf-8")).hexdigest()
+                if step is not None and step.get("kind") == "research_sources":
+                    sources = _verified_web_sources(task_id, current.conversation_id)
+                    if not sources:
+                        error = "A pesquisa não possui uma fonte web recuperada e verificável."
+                        update_task(task_id, status="failed", result={"error": error, "iterations": iteration})
+                        return {"status": "failed", "error": error, "iterations": iteration}
+                    cited_urls = [source["url"] for source in sources if source["url"] in artifact_content]
+                    if not cited_urls:
+                        error = "O relatório precisa citar pelo menos uma URL exata de uma fonte web recuperada."
+                        update_task(task_id, status="failed", result={"error": error, "iterations": iteration})
+                        return {"status": "failed", "error": error, "iterations": iteration}
                     _set_task_step_status(
                         task_id,
                         str(step["id"]),
                         "completed",
-                        output_sha256=hashlib.sha256(artifact_content.encode("utf-8")).hexdigest(),
+                        source_count=len(sources),
+                        sources=sources,
+                        cited_urls=cited_urls,
+                    )
+                    _set_task_step_status(
+                        task_id,
+                        "draft_content",
+                        "completed",
+                        output_sha256=output_sha256,
+                        output_chars=len(artifact_content),
+                    )
+                elif step is not None and step.get("kind") in {"summarize_source", "transform_source", "draft_content"}:
+                    _set_task_step_status(
+                        task_id,
+                        str(step["id"]),
+                        "completed",
+                        output_sha256=output_sha256,
                         output_chars=len(artifact_content),
                     )
                 _set_task_step_status(
