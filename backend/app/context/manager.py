@@ -278,7 +278,11 @@ def _lexical_artifact_context(workspace: str, query: str | None) -> list[dict[st
     return messages
 
 
-def build_context(conversation_id: int) -> list[dict[str, str]]:
+def build_context(
+    conversation_id: int,
+    *,
+    query: str | None = None,
+) -> list[dict[str, str]]:
     """Build deterministic, scope-aware context with bounded observations."""
     conversation = get_conversation(conversation_id)
     if conversation is None:
@@ -402,7 +406,7 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
     if memories:
         memory_text = _memory_context_text(
             memories,
-            current_user.content if current_user is not None else "",
+            query if query is not None else (current_user.content if current_user is not None else ""),
             conversation.project_id,
         )
         if memory_text:
