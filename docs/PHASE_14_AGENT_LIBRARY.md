@@ -20,7 +20,7 @@ Em uma conversa de projeto, escreva:
 
 O Core resolve o slug no projeto da conversa, remove o comando do objetivo persistido e injeta as instruções e Skills habilitadas somente nessa execução. Não cria nem troca de conversa. Slug inexistente, comando vazio e invocação sem projeto falham claramente.
 
-Em tarefas iniciadas por `POST /tasks/start`, o Core persiste um snapshot do agente dentro de `Task.plan.agent_library_snapshot`. A retomada usa esse snapshot, e não a versão atual da biblioteca. Snapshots são validados por SHA-256 antes de serem aplicados. A orientação do agente e as Skills nunca concedem permissões; políticas, ferramentas e aprovações continuam sob controle do Core.
+Em tarefas iniciadas por `POST /tasks/start` ou em Tasks pendentes executadas por `POST /tasks/{id}/run`, o Core persiste um snapshot do agente dentro de `Task.plan.agent_library_snapshot`. A retomada usa esse snapshot, e não a versão atual da biblioteca. Snapshots são validados por SHA-256 antes de serem aplicados. A orientação do agente e as Skills nunca concedem permissões; políticas, ferramentas e aprovações continuam sob controle do Core.
 
 ## API
 
