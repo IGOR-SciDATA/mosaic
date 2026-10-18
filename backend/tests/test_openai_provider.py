@@ -91,3 +91,32 @@ def test_http_error_never_includes_response_body_or_secret():
     )
     assert "authentication failed" in str(OpenAIProvider._http_error(exc)).lower()
     assert "secret-key-body" not in str(OpenAIProvider._http_error(exc))
+
+
+def test_model_configuration_rejects_secret_fields():
+    from app.api.models import _reject_secret_configuration
+
+    with pytest.raises(ValueError, match="must not contain secret fields"):
+        _reject_secret_configuration({"nested": {"openai_api_key": "should-not-be-stored"}})
+
+
+def test_model_configuration_allows_non_secret_settings():
+    from app.api.models import _reject_secret_configuration
+
+    _reject_secret_configuration({"temperature": 0.2, "num_predict": 500})
+
+
+def test_openai_status_reports_configuration_without_exposing_key(monkeypatch):
+    from app.api.models import model_provider_status
+
+    monkeypatch.setenv("OPENAI_API_KEY", "very-secret-value")
+    result = model_provider_status("openai")
+    assert result == {"provider": "openai", "online": True, "configured": True, "running_models": []}
+    assert "very-secret-value" not in repr(result)
+
+
+def test_openai_status_reports_missing_key(monkeypatch):
+    from app.api.models import model_provider_status
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert model_provider_status("openai")["configured"] is False
