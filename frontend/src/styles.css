@@ -2542,7 +2542,24 @@ body { overflow: hidden; }
 :root[data-theme="dark"] .home-welcome-subtitle,
 :root[data-theme="dark"] .home-welcome-hint { color: #a3aab5; }
 :root[data-theme="dark"] .home-welcome-hint strong { color: #e4e7eb; }
-:root[data-theme="dark"] .home-example { background: #fff; }
+:root[data-theme="dark"] .home-example {
+  color: #edf1f5;
+  background: #1d222a;
+  border-color: #343b45;
+  box-shadow: 0 3px 12px rgba(0,0,0,.12);
+}
+:root[data-theme="dark"] .home-example:hover {
+  background: #222a31;
+  border-color: #42755a;
+  box-shadow: 0 8px 22px rgba(0,0,0,.22);
+}
+:root[data-theme="dark"] .home-example-icon {
+  color: #63d6a3;
+  background: #17372a;
+  border-color: #28523e;
+}
+:root[data-theme="dark"] .home-example strong { color: #f0f2f5; }
+:root[data-theme="dark"] .home-example > div > span { color: #b2bac6; }
 
 
 /* Distinguish a project/workspace icon from the Mosaic product logo. */
