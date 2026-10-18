@@ -80,7 +80,8 @@ def _memory_context_text(memories: list[Any], query: str, project_id: int | None
     scored.sort(key=lambda item: (-item[1], item[2]))
 
     lines: list[str] = []
-    remaining = MEMORY_CONTEXT_MAX_CHARS - len(header)
+    # Reserve space for an explicit truncation marker so omissions never become silent.
+    remaining = MEMORY_CONTEXT_MAX_CHARS - len(header) - 100
     omitted = 0
     for memory, _score, _scope_rank in scored:
         if len(lines) >= MEMORY_CONTEXT_MAX_ITEMS:
@@ -106,10 +107,11 @@ def _memory_context_text(memories: list[Any], query: str, project_id: int | None
             omitted += 1
         lines.append(line)
         remaining -= separator + len(line)
-    if omitted and remaining > 0:
+    if omitted:
         separator = 1 if lines else 0
         marker = f"- [memory context truncated; {omitted} records omitted or clipped]"
-        available = remaining - separator
+        actual_remaining = MEMORY_CONTEXT_MAX_CHARS - len(header) - sum(len(line) for line in lines) - max(0, len(lines) - 1)
+        available = actual_remaining - separator
         if available > 0:
             lines.append(marker[:available])
     return header + "\n".join(lines)
