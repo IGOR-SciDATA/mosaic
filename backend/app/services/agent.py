@@ -363,6 +363,7 @@ def _artifact_verification_evidence(
     path: str,
     actual_bytes: bytes,
     operation: str,
+    tool_call_id: int,
     tool_result_id: int,
     recovered_after_verification_error: bool = False,
 ) -> dict[str, Any]:
@@ -377,7 +378,7 @@ def _artifact_verification_evidence(
                 task_id=task_id,
                 conversation_id=conversation_id,
                 project_id=task.project_id,
-                tool_call_id=None,
+                tool_call_id=tool_call_id,
                 component="verification",
                 event_name="artifact.verified",
                 message="Artifact bytes were reopened and matched the persisted write input.",
@@ -490,6 +491,7 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
                     path=candidate.relative_to(root).as_posix(),
                     actual_bytes=actual_bytes,
                     operation=str(data.get("operation", operation)),
+                    tool_call_id=call.id,
                     tool_result_id=result.id,
                 )
 
@@ -508,6 +510,7 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
                     path=candidate.relative_to(root).as_posix(),
                     actual_bytes=actual_bytes,
                     operation=operation,
+                    tool_call_id=call.id,
                     tool_result_id=result.id,
                     recovered_after_verification_error=True,
                 )
