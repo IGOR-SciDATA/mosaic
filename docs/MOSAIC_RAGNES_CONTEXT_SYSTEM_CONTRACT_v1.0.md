@@ -3,7 +3,9 @@
 **Status:** Proposed architecture contract  
 **Date:** 2026-10-13  
 **Authority:** MASTER / Architecture  
-**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md, MVP Implementation Contract v1.0 (caminho canônico pendente; ver [auditoria da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md))
+**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md, MVP Implementation Contract v1.0 (canonical repository path pending; see [Phase 0 audit](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md))
+
+> **Baseline note (2026-10-18):** the MVP Implementation Contract cited as a dependency is not yet versioned at its canonical path in `main`. This document defines target requirements but does not authorize schema changes or inferred deviations from the MVP. See the [Phase 0 audit](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) and wait for the contract to be canonicalized before changing persistence.
 
 ## 1. Purpose
 
@@ -313,7 +315,7 @@ OSAIC — RAGNES CONTEXT SYSTEM CONTRACT
 **Status:** Proposed architecture contract  
 **Date:** 2026-10-13  
 **Authority:** MASTER / Architecture  
-**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md, MVP Implementation Contract v1.0 (caminho canônico pendente; ver [auditoria da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md))
+**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md, Mosaic_MVP_Implementation_Contract.md
 
 ## 1. Purpose
 
