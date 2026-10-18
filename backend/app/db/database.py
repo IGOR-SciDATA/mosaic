@@ -169,6 +169,18 @@ def init_db() -> None:
         """)
 
         connection.execute("""
+            CREATE TABLE IF NOT EXISTS artifacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                path TEXT NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS tool_calls (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 conversation_id INTEGER NOT NULL,
@@ -253,6 +265,13 @@ def init_db() -> None:
         connection.execute("""
             CREATE INDEX IF NOT EXISTS idx_task_events_conversation
             ON task_events(conversation_id, id)
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
         """)
 
         connection.commit()
