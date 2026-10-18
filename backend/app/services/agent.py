@@ -1,3 +1,4 @@
+from app.models.artifact_repository import get_artifact
 from collections.abc import Callable
 import ast
 import hashlib
