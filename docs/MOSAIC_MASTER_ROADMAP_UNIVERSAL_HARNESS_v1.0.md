@@ -1,7 +1,7 @@
 # MOSAIC — Master Roadmap: Harness Universal
 
 **Versão:** 1.0  
-**Status:** Proposta oficial para validação do MASTER  
+**Status:** Roadmap normativo de implementação; baseline estático parcialmente auditado; validação dinâmica pendente  
 **Data:** 2026-10-17  
 **Repositório:** `IGOR-SciDATA/mosaic`  
 **Objetivo:** conduzir o Mosaic, incrementalmente, de seu Core atual a um Harness confiável, extensível e capaz de concluir tarefas variadas — inspirado nos princípios operacionais observáveis de ferramentas como Claude Code, sem copiar sua implementação proprietária.
@@ -39,11 +39,12 @@ Precedência dos contratos:
 2. [Harness Contract v1.2](MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md) para execução e ciclo do Harness, até ser substituído.
 3. [RAGNES Context System Contract v1.0](MOSAIC_RAGNES_CONTEXT_SYSTEM_CONTRACT_v1.0.md) para contexto, recuperação e compactação.
 4. [Frontend UX Contract v1.0](MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md) para interface e estados visíveis.
-5. Este roadmap para a ordem integrada de execução.
-6. MVP Implementation Contract v1.0 para entidades e schema, exceto alterações explícitas aprovadas.
-7. Código atual como verdade da implementação — nunca como justificativa para perpetuar falhas de segurança ou comportamento incompleto.
+5. Este roadmap para a ordem macro das fases.
+6. [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md) para tarefas operacionais e critérios de aceite.
+7. MVP Implementation Contract v1.0 para entidades e schema, após canonização no repositório e decisão explícita sobre divergências.
+8. Código atual como verdade da implementação — nunca como justificativa para perpetuar falhas de segurança ou comportamento incompleto.
 
-Se dois contratos entrarem em conflito, Chat 01 deve interromper a mudança afetada e solicitar decisão do MASTER; não deve inventar reconciliação silenciosa.
+Se dois contratos entrarem em conflito, Chat 01 deve interromper a mudança afetada e solicitar decisão do MASTER; não deve inventar reconciliação silenciosa. Para a divergência conhecida do schema, seguir a decisão normativa registrada na seção 6 do Plano de Implementação Passo a Passo: manter task_events e _mosaic_meta como tabelas internas e alinhar as entidades de domínio ao contrato MVP, incluindo artifacts e settings.
 
 ## 3. O que já existe — baseline a verificar
 
@@ -59,22 +60,24 @@ O repositório já possui uma fundação relevante, mas presença de módulos ou
 - Action/Permission layer, Tool Registry, ToolCall/ToolResult e ciclo de Agent.
 - APIs de conversas, mensagens, projetos e tarefas em diferentes estágios.
 - Contratos para Harness, RAGNES, UX, Skills, instruções de projeto e roadmap de implementação.
-- PR #53, em branch separada segundo a última revisão, documenta perfis de Agent e ferramentas de artefatos; deve ser reavaliada contra o estado atual antes de integração.
+- O documento de perfis de Agent e ferramentas de artefatos está versionado em `docs/MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md`; ele é uma proposta de evolução, não prova de implementação funcional.
 
-### 3.2 Lacunas ou riscos identificados anteriormente — confirmar na Fase 0
+### 3.2 Estado após inspeção estática de 2026-10-18
 
-- Integração real do provider com o ciclo do Harness, API e frontend não foi comprovada de ponta a ponta.
-- Aprovação, retomada após aprovação, cancelamento e recuperação após reinício precisam ser provados no fluxo integrado.
-- Segurança de filesystem, terminal e web fetch precisa ser verificada no código atual; auditorias anteriores apontaram risco de path arbitrário, shell irrestrito e proteção insuficiente contra SSRF/limites de resposta. Não assumir que esses problemas ainda existem nem que foram resolvidos sem inspecionar a branch alvo.
-- Eventos estruturados, reconexão SSE, APIs de aprovação, artefatos e painel de execução precisam ser reconciliados com a implementação atual.
-- A UI pode não refletir todo o fluxo de Task/Agent/arquivos que exista em branches ainda não integradas.
-- Persistência por conversa de perfil, instruções e Skills, snapshot imutável por Task e aplicação demonstrável das Skills ainda precisam ser provados.
-- A geração de arquivos Markdown, PDF, XLSX e PPTX deve ser validada por formato; não basta criar um arquivo vazio ou com extensão correta.
-- A busca na web, leitura de fontes, rastreabilidade das citações e salvamento de fontes precisam de teste integrado.
-- Existe histórico de divergência entre o schema documentado e tabelas criadas no bootstrap SQLite; reconciliar antes de alterar banco.
-- Build, testes completos e smoke test com Ollama não devem ser considerados aprovados sem execução registrada.
+O [Relatório de Auditoria da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) contém inventário e evidências por arquivo. Resumo:
 
-**Regra:** a Fase 0 atualiza esta baseline com caminhos de arquivo, testes executados, resultados, commits e lacunas reais. Não codificar com base apenas nesta lista histórica.
+- O provider está conectado ao endpoint de tarefas via `create_provider_decider`; o fluxo integrado completo ainda não foi executado nesta auditoria.
+- Os serviços de ferramentas contêm validação/aprovação e os testes cobrem casos negativos de filesystem, terminal e URLs; os testes não foram executados nesta auditoria.
+- `task_events`, endpoints de listagem e stream SSE existem; reconexão do frontend e retomada após reinício ainda precisam de demonstração E2E.
+- O frontend contém implementação de workspace e estados de aprovação; build e jornadas visuais não foram executados.
+- Perfis operacionais por conversa e snapshots imutáveis por Task não estão comprovados como completos.
+- A coordenação de subtarefas persistidas com dependências reais não está comprovada como completa.
+- O bootstrap SQLite cria `task_events` e `_mosaic_meta`, mas não cria as tabelas `artifacts` e `settings` listadas no contrato MVP. A divergência deve ser decidida antes de qualquer alteração de schema.
+- O MVP Implementation Contract v1.0 é citado por contratos, mas não está versionado no caminho esperado em `main`.
+- O documento de perfis e ferramentas de artefato está versionado em `docs/MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md`; sua presença é uma proposta documental, não evidência de que todos os artefatos ou perfis estejam implementados.
+- Pytest, build frontend, smoke test Ollama e E2E não foram executados nesta auditoria; não há execução de workflow retornada para o commit de referência.
+
+**Regra:** não inferir conclusão de fase a partir de arquivos existentes ou PRs mesclados. Cada capacidade exige teste relevante, integração e evidência reproduzível.
 
 ## 4. Arquitetura-alvo
 
@@ -145,17 +148,18 @@ Cada fase deve ser entregue em PR próprio, com testes e diff revisados. O MASTE
 
 ### Fase 0 — Auditoria e reconciliação do baseline
 
-**Objetivo:** descobrir o estado real de `main` e das branches relevantes antes de alterar arquitetura.
+**Objetivo:** estabelecer uma baseline verificável antes de autorizar o próximo incremento funcional.
 
-Entregas:
-- inventário de módulos, rotas, schema/migrations, testes, componentes frontend e ferramentas;
-- comparação de branches/PRs relevantes, incluindo #53 e branches de workspace/artefatos;
-- mapa do fluxo real: Conversation → ModelProvider → Task → Harness → Tool → ToolResult → UI;
-- identificar diferenças entre contratos e código, incluindo caminho exato do MVP contract no repo;
-- executar testes disponíveis, lint/build frontend e smoke test opcional com Ollama, registrando limitações do ambiente;
-- matriz de capacidades: existe / parcial / não existe / não verificado.
+**Progresso em 2026-10-18:** a inspeção estática de `main` e a revisão documental foram registradas em [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md). Foram inventariados componentes de API, schema, Agent/ferramentas, testes conhecidos e configuração do frontend. Foram identificados bloqueios documentais e divergências do schema.
 
-Aceite: relatório reproduzível com evidências e nenhuma alegação de funcionamento sem teste ou inspeção direta.
+**Ainda pendente para aceite completo:**
+- canonizar o MVP Implementation Contract no repositório e reconciliar entidades `Artifact`, `Setting` e `task_events`;
+- conferir branches/PRs relevantes contra o baseline, sem inferir que um PR merged equivale a validação funcional;
+- executar a suíte backend, o build do frontend e smoke test do provider local quando disponível;
+- testar jornadas ponta a ponta de execução, aprovação/rejeição, persistência de ToolResult, eventos/SSE, reconexão e retomada após reinício;
+- registrar comandos, ambiente, commit e resultados, incluindo falhas e testes não executados.
+
+**Aceite:** relatório com evidência estática e dinâmica reproduzível. A Fase 0 não está aprovada até os testes pendentes serem executados e as divergências contratuais bloqueadoras serem decididas.
 
 ### Fase 1 — Segurança e estados autoritativos
 
@@ -436,7 +440,7 @@ Uma capacidade só é considerada implementada quando:
 
 ## 10. Primeiro próximo passo
 
-**Executar a Fase 0.** Não iniciar uma reescrita do Harness nem implementar todas as ferramentas de uma vez. A primeira entrega deve mapear o que realmente está em `main`, o que existe em branches/PRs, quais testes passam e quais caminhos ponta a ponta já funcionam. Com essa evidência, o MASTER confirma a ordem exata das fases de implementação.
+**Concluir a validação dinâmica da Fase 0.** A inspeção estática e as divergências encontradas estão documentadas em [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md). Antes da próxima fase funcional, canonizar o contrato MVP, decidir as divergências de schema e executar testes/build/smoke/E2E no checkout do implementador. O MASTER autoriza um único próximo incremento após revisar essas evidências.
 
 ## 11. Definição de sucesso do projeto
 

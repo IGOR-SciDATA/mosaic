@@ -7,6 +7,8 @@
 **Repository:** https://github.com/IGOR-SciDATA/mosaic  
 **Implementation target:** existing `main` branch; incremental commits by Chat 01.
 
+> **Baseline note (2026-10-18):** the original MVP Contract v1.0 that this document amends is not currently versioned at its expected canonical path in `main`. Until it is committed and reconciled, this contract does not authorize implementers to guess unresolved MVP schema details. See [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md); changes to `Artifact`, `Setting`, or `task_events` require an explicit MASTER decision.
+
 ---
 
 ## 1. Why this contract exists
@@ -560,3 +562,10 @@ If implementation evidence requires a new capability not specified here, propose
 ---
 
 **Master decision:** Build the complete Harness as a modular subsystem of Mosaic Core, extending existing components where they fit and adding new components where justified by the execution, knowledge and observability contracts above. Prioritize end-to-end behavior, safety and inspectability over isolated feature count.
+
+
+---
+
+## Ordem de implementação
+
+Este contrato define o comportamento normativo do Harness. A sequência incremental, as tarefas e os critérios de aceite estão no [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md) e no [Roadmap Mestre](MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md). O Harness deve reutilizar o Core e o Task Engine existentes; não implementar um segundo sistema de estado.

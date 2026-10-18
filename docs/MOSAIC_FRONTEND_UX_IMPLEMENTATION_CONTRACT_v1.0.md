@@ -3,9 +3,11 @@
 **Status:** Proposed official frontend contract  
 **Date:** 2026-10-12  
 **Authority:** MASTER / Architecture  
-**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, Mosaic_MVP_Implementation_Contract.md
+**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MVP Implementation Contract v1.0 (caminho canônico pendente; ver [auditoria da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md))
 
 ---
+
+> **Baseline note (2026-10-18):** the MVP Implementation Contract cited as a dependency is not yet versioned at its canonical path in `main`. This document defines target UX requirements and does not authorize schema changes or inferred deviations from the MVP. See the [Phase 0 audit](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md); persistence changes must wait until the MVP contract is canonicalized.
 
 ## 1. Purpose
 
@@ -368,3 +370,12 @@ If this contract conflicts with the current backend API, do not hide the mismatc
 **Mosaic should feel simple to use, while its work remains inspectable and controllable.**
 
 The user sees the goal, meaningful progress, decisions that require them, and the result. The Core handles the complexity, security, state transitions, execution, and persistence.
+
+
+---
+
+## 15. Ordem de implementação
+
+Este contrato define o resultado esperado da experiência frontend, mas não cria uma sequência paralela de desenvolvimento. A ordem operacional e os critérios de aceite estão no [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md), especialmente na Fase 8 — Frontend.
+
+Prioridades de UX: chat como tela padrão, área de mensagens mais ampla, tipografia mais legível, hierarquia visual consistente, redução de espaços e controles redundantes, responsividade, acessibilidade, estados reais de tarefa e detalhes técnicos sob demanda. Nenhum controle pode aparentar funcionar sem suporte real no backend.

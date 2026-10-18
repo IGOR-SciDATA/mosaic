@@ -3,7 +3,9 @@
 **Status:** Proposed architecture contract  
 **Date:** 2026-10-13  
 **Authority:** MASTER / Architecture  
-**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md, Mosaic_MVP_Implementation_Contract.md
+**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md, MVP Implementation Contract v1.0 (canonical repository path pending; see [Phase 0 audit](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md))
+
+> **Baseline note (2026-10-18):** the MVP Implementation Contract cited as a dependency is not yet versioned at its canonical path in `main`. This document defines target requirements but does not authorize schema changes or inferred deviations from the MVP. See the [Phase 0 audit](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) and wait for the contract to be canonicalized before changing persistence.
 
 ## 1. Purpose
 
@@ -305,4 +307,19 @@ The vector/embedding stage is explicitly not a prerequisite for this first miles
 
 **RAGNES must optimize the context for the task, not optimize the task around the context window.**
 
-The model receives the smallest sufficient, evidence-grounded context Mosaic can assemble, while the original information remains retrievable and auditable.
+The model receives the smallest sufficient, evidence-grounded context Mosaic can assemble, while the original information remains retrievable and auditable.---
+
+> **Nota de baseline (2026-10-18):** o MVP Implementation Contract citado como dependência ainda não está versionado no caminho canônico em `main`. Este documento define requisitos-alvo, mas não autoriza mudanças de schema ou divergências do MVP por inferência. Consulte a [auditoria da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) e aguarde a canonização do contrato antes de alterar persistência.
+OSAIC — RAGNES CONTEXT SYSTEM CONTRACT
+**Version:** 1.0  
+**Status:** Proposed architecture contract  
+**Date:** 2026-10-13  
+**Authority:** MASTER / Architecture  
+**Depends on:** MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md, MOSAIC_FRONTEND_UX_IMPLEMENTATION_CONTRACT_v1.0.md, Mosaic_MVP_Implementation_Contract.md
+
+
+---
+
+## Ordem de implementação
+
+A sequência operacional para RAGNES está no [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md), Fase 6. Manter primeiro seleção determinística, leitura explícita, inventário e busca lexical avaliável. Embeddings, índices vetoriais e reranking só devem ser propostos quando métricas demonstrarem uma lacuna relevante.

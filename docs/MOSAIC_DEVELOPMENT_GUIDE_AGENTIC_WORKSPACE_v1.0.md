@@ -3,8 +3,8 @@
 **Status:** Guia operacional proposto para orientar implementação e revisão  
 **Data:** 2026-10-17  
 **Repositório:** IGOR-SciDATA/mosaic  
-**Base de referência:** `main` em `35570385743f4b4bdb0dec8acddd6459184fea5b`  
-**Documento complementar:** `MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md`
+**Baseline de auditoria:** `main` em `29f6af8e6ed1af9cb0a0160889c4d7ea56bd6912`; ver [relatório da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md).  
+**Documento complementar:** `MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md` (proposta subordinada ao Roadmap Mestre)
 
 ---
 
@@ -19,7 +19,7 @@ Ele explica:
 - quais evidências comprovam que uma funcionalidade realmente funciona;
 - como evitar que instruções, skills ou agentes contornem as políticas do Core.
 
-Este guia **não substitui os contratos oficiais** nem autoriza mudanças de schema ou de arquitetura por conta própria. Se houver conflito, registrar o conflito, explicar o impacto e propor a menor alteração necessária para aprovação.
+Este guia **não substitui os contratos oficiais**. Para a ordem prática das tarefas, seguir o [Plano de Implementação Passo a Passo](MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md). A divergência de schema identificada na baseline deve seguir a decisão normativa da seção 6 desse plano; não introduzir outras alterações de schema por conta própria. Se houver conflito, registrar o conflito, explicar o impacto e propor a menor alteração necessária para aprovação.
 
 ## 2. Hierarquia de fontes e decisões
 
@@ -29,8 +29,8 @@ Antes de iniciar qualquer mudança, consulte os documentos aplicáveis no reposi
 2. Contrato oficial do Harness para execução, políticas, ferramentas, aprovação, eventos e artefatos.
 3. Contrato RAGNES para seleção, filtragem, ranking, compactação e continuidade de contexto.
 4. Contrato de UX para a interface React.
-5. Contrato MVP para entidades, campos, estados, relações e persistência, salvo alteração formal aprovada.
-6. Roadmap mestre vigente.
+5. Roadmap mestre vigente: `MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md`.
+6. Contrato MVP para entidades, campos, estados, relações e persistência, salvo alteração formal aprovada.
 7. Este guia de desenvolvimento.
 8. Código atual como evidência do comportamento implementado — não como autorização para perpetuar lacunas.
 
@@ -248,21 +248,19 @@ Uma capacidade só pode ser considerada concluída quando:
 - testes relevantes passam;
 - limitações e testes não executados são explicitados.
 
-## 13. Sequência de desenvolvimento
+## 13. Ordem normativa e uso deste guia
 
-Seguir a sequência do roadmap complementar:
+A **única sequência normativa de implementação** é a do [Roadmap Mestre do Harness Universal](MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md). Este guia descreve práticas e critérios para implementar as fases; não cria uma ordem paralela nem autoriza saltar fases.
 
-1. Reconciliação e aprovação da arquitetura.
-2. Perfis por conversa e snapshot de skills.
-3. Qualidade e validação de Markdown.
-4. Geração e validação de PDF.
-5. Geração e validação de XLSX.
-6. Geração e validação de PPTX.
-7. Pesquisa com fontes persistidas e citações verificáveis.
-8. Coordenação sequencial de agentes para desenvolvimento de sites.
-9. UI integrada e testes end-to-end.
+A auditoria estática de 2026-10-18 está registrada em [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md). Ela identificou componentes já presentes no código e lacunas de contrato/schema, mas não executou testes, build ou smoke test. Portanto, módulos existentes não devem ser tratados automaticamente como fases aprovadas.
 
-Não iniciar todas as fases simultaneamente. Cada fase deve produzir uma melhoria funcional isolada, testada e revisável.
+Antes de qualquer incremento funcional:
+1. Canonizar o MVP Implementation Contract no repositório e corrigir suas referências.
+2. Obter decisão do MASTER para a divergência de schema envolvendo `Artifact`, `Setting` e `task_events`.
+3. Executar a validação dinâmica pendente da Fase 0 e registrar resultados.
+4. Só então implementar a próxima fase explicitamente autorizada no Roadmap Mestre, em um PR limitado.
+
+O documento complementar de perfis/artefatos é uma proposta de requisitos, não uma autorização para implementar todos os formatos ou coordenação de agentes antes das fases correspondentes. A sequência antiga abaixo foi removida porque competia com o Roadmap Mestre.
 
 ## 14. Decisões que exigem aprovação
 
