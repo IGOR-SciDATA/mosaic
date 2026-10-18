@@ -410,6 +410,8 @@ def _artifact_verification_evidence(
     }
     if event_id is not None:
         evidence["verification_event_id"] = event_id
+    if recovered_after_verification_error:
+        evidence["recovered_after_verification_error"] = True
     return evidence
 
 
