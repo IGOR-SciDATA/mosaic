@@ -186,7 +186,7 @@ def test_pdf_task_flow_requires_approval_then_completes_without_second_model_cal
     scheduled.func(*scheduled.args, **scheduled.kwargs)
 
     completed = get_task(task.id)
-    assert completed.status == "completed"
+    assert completed.status == "completed", completed.result
     assert completed.result["artifact"]["path"] == "Report.pdf"
     assert completed.result["artifact"]["artifact_id"] > 0
     assert completed.result["artifact"]["verification_event_recorded"] is True
