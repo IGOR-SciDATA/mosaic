@@ -581,6 +581,117 @@ def test_markdown_summary_flow_reads_source_creates_and_reopens_verified_artifac
     assert artifact_step["artifact_sha256"] == completed["artifact"]["sha256"]
     assert artifact_step["artifact_verified"] is True
 
+def test_web_research_report_fetches_source_and_persists_cited_url(tmp_path: Path, monkeypatch):
+    from email.message import Message
+    from io import BytesIO
+
+    workspace = tmp_path / "web-workspace"
+    workspace.mkdir()
+    project = create_project("Web research report", str(workspace))
+    conversation = _conversation(project.id)
+    goal = "pesquise na internet sobre o Mosaic e crie um relatório Markdown chamado Relatorio.md com referências"
+    task = create_task(
+        type="report",
+        mode="agent",
+        conversation_id=conversation.id,
+        project_id=project.id,
+        plan={"goal": goal},
+    )
+    search_html = (
+        b'<div class="result"><a class="result__a" href="https://example.com/mosaic">Mosaic source</a>'
+        b'<div class="result__snippet">A source about the Mosaic project.</div></div>'
+    )
+
+    class FakePage:
+        def __init__(self, url, body):
+            self._url = url
+            self._body = body
+            self.headers = Message()
+            self.headers["Content-Type"] = "text/html; charset=utf-8"
+
+        def read(self, limit=-1):
+            return self._body if limit < 0 else self._body[:limit]
+
+        def geturl(self):
+            return self._url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    page_html = (
+        b"<html><head><title>Mosaic source page</title></head>"
+        b"<body><main><p>Mosaic preserves task state and verified artifacts.</p></main></body></html>"
+    )
+
+    def fake_urlopen(request, timeout):
+        url = request.full_url
+        assert timeout == 10
+        if url.startswith("https://html.duckduckgo.com/html/?q="):
+            return BytesIO(search_html)
+        assert url == "https://example.com/mosaic"
+        return FakePage(url, page_html)
+
+    monkeypatch.setattr("app.tools.builtin.safe_urlopen", fake_urlopen)
+
+    search_call = create_tool_call(
+        conversation.id, "search", {"query": "Mosaic project"}, task_id=task.id
+    )
+    search_result = execute_tool_call(approve_tool_call(search_call))
+    assert search_result.status == "completed"
+    source_url = search_result.data["results"][0]["url"]
+
+    fetch_call = create_tool_call(
+        conversation.id, "web_fetch", {"url": source_url}, task_id=task.id
+    )
+    fetch_result = execute_tool_call(approve_tool_call(fetch_call))
+    assert fetch_result.status == "completed"
+    assert "Mosaic preserves task state" in fetch_result.data["content"]
+
+    report = (
+        "# Relatório sobre o Mosaic\n\n"
+        "O Mosaic preserva o estado das tarefas e verifica os artefatos produzidos.\n\n"
+        "## Referências\n"
+        f"- [Mosaic source]({source_url})"
+    )
+    pending = run_agent(task.id, lambda context: {"type": "final", "content": report})
+    assert pending["status"] == "awaiting_approval"
+
+    output_call = next(
+        call for call in list_tool_calls(conversation.id)
+        if call.task_id == task.id
+        and call.tool_name == "filesystem"
+        and call.arguments.get("operation") == "create"
+        and call.arguments.get("path") == "Relatorio.md"
+    )
+    write_result = execute_tool_call(approve_tool_call(output_call))
+    assert write_result.status == "completed"
+    update_task(task.id, status="executing")
+    completed = run_agent(
+        task.id,
+        lambda context: pytest.fail("A verified research report must finish without another model call"),
+    )
+
+    assert completed["status"] == "completed"
+    assert completed["artifact"]["path"] == "Relatorio.md"
+    assert completed["artifact"]["verified"] is True
+    reopened = (workspace / "Relatorio.md").read_text(encoding="utf-8")
+    assert source_url in reopened
+    persisted_plan = get_task(task.id).plan
+    steps = {step["id"]: step for step in persisted_plan["steps"]}
+    assert [step["kind"] for step in persisted_plan["steps"]] == [
+        "research_sources", "draft_content", "create_artifact"
+    ]
+    assert steps["research_sources"]["status"] == "completed"
+    assert steps["research_sources"]["sources"][0]["url"] == source_url
+    assert steps["research_sources"]["sources"][0]["tool_result_id"] == fetch_result.id
+    assert steps["research_sources"]["cited_urls"] == [source_url]
+    assert steps["draft_content"]["output_sha256"] == hashlib.sha256(reopened.encode("utf-8")).hexdigest()
+    assert steps["create_artifact"]["artifact_verified"] is True
+
+
 def test_tool_observation_is_bounded_and_marks_truncation():
     result = SimpleNamespace(status="completed", data={"content": "x" * 20_000}, error=None)
     observation = _tool_context(1, result)
