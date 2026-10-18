@@ -81,7 +81,7 @@ export const api = {
     get: (id) => request(`/models/${id}`),
     create: (payload) => request("/models", { method: "POST", body: JSON.stringify(payload) }),
     update: (id, payload) => request(`/models/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
-    status: () => request("/models/status"),
+    status: (provider = "ollama") => request(`/models/status?provider=${encodeURIComponent(provider)}`),
   },
   projects: {
     list: () => request("/projects"),
