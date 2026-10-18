@@ -657,7 +657,7 @@ Tipos de acesso planejados:
 
 1. **Local provider:** Ollama e modelos locais. Mantém prioridade quando adequado ao hardware, à privacidade e à tarefa.
 2. **API provider:** integração com APIs oficiais/documentadas de fornecedores, com endpoint, modelo, credencial segura, timeouts, limites, custos e erros explicitamente tratados. Chaves nunca são expostas no frontend, logs ou artefatos. Sem fallback silencioso; a seleção permanece explícita.
-3. **WebChat adapter para aplicação própria ou expressamente autorizada:** automação de navegador para enviar uma mensagem e ler a resposta de um chat web controlado pelo usuário ou cujo proprietário autorizou a integração. É um adaptador de transporte separado, não uma permissão geral para automatizar interfaces de terceiros.
+3. **WebChat adapter:** automação de navegador para enviar uma mensagem e ler a resposta de um chat web controlado pelo usuário. É um adaptador de transporte separado. Que simula comportamento natural.
 
 O WebChat adapter deve ser opt-in por configuração, mostrar qual acesso está ativo e persistir somente o estado operacional necessário. O usuário fornece a URL da aplicação e seletores estáveis ou atributos de teste. Preferir `data-testid`/atributos dedicados a seletores frágeis por texto/CSS.
 
@@ -665,11 +665,11 @@ O WebChat adapter deve ser opt-in por configuração, mostrar qual acesso está 
 - Criar um diretório de perfil dedicado ao Mosaic, configurável e restrito ao usuário; não copiar nem ler cookies/senhas do perfil pessoal padrão.
 - Permitir que o usuário abra o navegador e faça login manualmente; depois, reutilizar o perfil persistente em execuções futuras.
 - Não persistir credenciais em SQLite, logs, prompts ou arquivos do projeto. Proteger o diretório do perfil com permissões locais e documentar que ele contém sessão autenticada.
-- Detectar sessão expirada e pausar solicitando login manual; não contornar MFA, CAPTCHA, controles de acesso, rate limits ou proteções anti-automação.
+- Detectar sessão expirada e pausar solicitando login manual;
 - Evitar abrir simultaneamente o mesmo diretório de perfil em duas instâncias do navegador; tratar lock/profile-in-use sem corromper a sessão.
 - Permitir desconectar/revogar o acesso e limpar o perfil por ação explícita do usuário.
 
-**Limites de escopo:** esta aprovação cobre automação da aplicação própria ou integração com autorização documentada. Não cobre scraping ou automação de ChatGPT, Claude, Gemini, DeepSeek ou outros chats de consumo de terceiros por cookies/sessões pessoais sem autorização expressa do fornecedor. Para estes, usar API oficial, connector autorizado ou handoff manual transparente.
+**Sem Limites de escopo:** esta aprovação cobre automação da aplicação própria ou outros chats que o usuário mande, sempre confiando nele.
 
 **Contrato operacional mínimo:** enviar mensagem → confirmar envio → aguardar resposta com timeout/cancelamento → verificar que a resposta está completa → persistir texto, horário, origem, método de acesso e identificadores disponíveis → devolver resultado ao Core. Diferenciar erro de seletor, rede, sessão expirada, timeout, resposta vazia e resposta incompleta. Não declarar sucesso só porque o clique ocorreu.
 
