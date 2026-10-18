@@ -921,6 +921,43 @@ export default function App(){
   async function createProject(e){e.preventDefault();setSaving(true);const f=new FormData(e.currentTarget);const name=String(f.get("name")||"").trim();const description=String(f.get("description")||"").trim();try{const p=await api.projects.create({name,description:description||null,workspace:"./workspaces/"+slugify(name),metadata:{},state:{}});setProjects(x=>[...x,p]);setHomeActive(false);setProjectId(p.id);setConversationId(null);setModal(null);}catch(err){setError(err.message);}finally{setSaving(false);}}
   async function createConversation(e){e.preventDefault();setSaving(true);const f=new FormData(e.currentTarget);const title=String(f.get("title")||"Nova conversa").trim()||"Nova conversa";const modelId=Number(f.get("model_id"))||models.find(m=>m.enabled)?.id;if(!modelId){setError("Nenhum modelo habilitado está registrado no Mosaic.");setSaving(false);return;}try{const c=await api.conversations.create({title,model_id:modelId,project_id:projectId});setConversations(x=>[c,...x]);setHomeActive(false);setConversationId(c.id);setModal(null);}catch(err){setError(err.message);}finally{setSaving(false);}}
 
+  async function deleteConversationConfirmed(item){
+    setSaving(true); setError("");
+    try{
+      await api.conversations.remove(item.id);
+      const remaining=conversations.filter(c=>c.id!==item.id);
+      setConversations(remaining);
+      if(conversationId===item.id){
+        const next=remaining.find(c=>c.project_id===projectId) || remaining[0] || null;
+        setConversationId(next?.id ?? null); setMessages([]);
+        if(!next) setHomeActive(false);
+      }
+      setModal(null);
+    }catch(err){setError("Não foi possível excluir a conversa: "+err.message);}
+    finally{setSaving(false);}
+  }
+
+  async function deleteProjectConfirmed(item){
+    setSaving(true); setError("");
+    try{
+      await api.projects.remove(item.id);
+      const removedConversationIds=conversations.filter(c=>c.project_id===item.id).map(c=>c.id);
+      const remainingProjects=projects.filter(p=>p.id!==item.id);
+      const remainingConversations=conversations.filter(c=>c.project_id!==item.id);
+      setProjects(remainingProjects); setConversations(remainingConversations);
+      if(projectId===item.id){
+        const nextProject=remainingProjects[0] || null;
+        const nextConversation=remainingConversations.find(c=>c.project_id===nextProject?.id) || remainingConversations[0] || null;
+        setProjectId(nextProject?.id ?? null); setConversationId(nextConversation?.id ?? null);
+        setMessages([]); setMemories([]); setProjectTab("Conversa"); setHomeActive(!nextProject);
+      } else if(removedConversationIds.includes(conversationId)){
+        setConversationId(null); setMessages([]);
+      }
+      setModal(null);
+    }catch(err){setError("Não foi possível excluir o projeto: "+err.message);}
+    finally{setSaving(false);}
+  }
+
   async function sendMessage(content){
     if(!conversation||sending)return;
     setError("");
