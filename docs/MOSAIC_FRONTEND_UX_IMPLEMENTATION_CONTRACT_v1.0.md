@@ -7,7 +7,7 @@
 
 ---
 
-> **Nota de baseline (2026-10-18):** o MVP Implementation Contract citado como dependência ainda não está versionado no caminho canônico em `main`. Este documento define requisitos-alvo, mas não autoriza mudanças de schema ou divergências do MVP por inferência. Consulte a [auditoria da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) e aguarde a canonização do contrato antes de alterar persistência.
+ > **Baseline note (2026-10-18):** the MVP Implementation Contract cited as a dependency is not yet versioned at its canonical path in `main`. This document defines target UX requirements and does not authorize schema changes or inferred deviations from the MVP. See the [Phase 0 audit](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md); persistence changes must wait until the MVP contract is canonicalized.
 
 ## 1. Purpose
 
