@@ -108,7 +108,7 @@ function TopBar({ onMenu, project, conversation, models, onModelChange, modelSta
 
 function ProjectHeader({ project, tab, setTab }) {
   const tabs=[["note","Conversa"],["folder","Arquivos"],["check","Tarefas"],["memory","Memória"],["tool","Artefatos"],["settings","Agente"],["note","Notas"]];
-  return <section className="project-header"><div className="project-identity"><MosaicMark compact/><div><h1>{project?.name || "Mosaic"}</h1><p>{project?.description || "Workspace de desenvolvimento do Mosaic."}</p></div></div><nav className="project-tabs">{tabs.map(([i,l])=><button key={l} className={tab===l?"active":""} onClick={()=>setTab(l)}><Icon name={i} size={16}/><span>{l}</span></button>)}</nav></section>;
+  return <section className="project-header"><div className="project-identity"><span className="project-mark" aria-hidden="true"><Icon name="layers" size={23}/></span><div><h1>{project?.name || "Mosaic"}</h1><p>{project?.description || "Workspace de desenvolvimento do Mosaic."}</p></div></div><nav className="project-tabs">{tabs.map(([i,l])=><button key={l} className={tab===l?"active":""} onClick={()=>setTab(l)}><Icon name={i} size={16}/><span>{l}</span></button>)}</nav></section>;
 }
 
 function renderInline(text) {
