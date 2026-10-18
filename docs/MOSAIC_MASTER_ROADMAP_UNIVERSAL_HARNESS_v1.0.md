@@ -72,7 +72,7 @@ O [Relatório de Auditoria da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) con
 - O frontend contém implementação de workspace e estados de aprovação; build e jornadas visuais não foram executados.
 - Perfis operacionais por conversa e snapshots imutáveis por Task não estão comprovados como completos.
 - A coordenação de subtarefas persistidas com dependências reais não está comprovada como completa.
-- O bootstrap SQLite cria `task_events` e `_mosaic_meta`, mas não cria as tabelas `artifacts` e `settings` listadas no contrato MVP. A divergência deve ser decidida antes de qualquer alteração de schema.
+- No baseline original, o bootstrap SQLite criava `task_events` e `_mosaic_meta`, mas não `artifacts` e `settings`. A decisão de reconciliação está registrada na seção 6 do Plano de Implementação; a criação incremental dessas tabelas e sua validação dinâmica devem ser acompanhadas pelo relatório de baseline.
 - O MVP Implementation Contract v1.0 é citado por contratos, mas não está versionado no caminho esperado em `main`.
 - O documento de perfis e ferramentas de artefato está versionado em `docs/MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md`; sua presença é uma proposta documental, não evidência de que todos os artefatos ou perfis estejam implementados.
 - Pytest, build frontend, smoke test Ollama e E2E não foram executados nesta auditoria; não há execução de workflow retornada para o commit de referência.
@@ -153,13 +153,13 @@ Cada fase deve ser entregue em PR próprio, com testes e diff revisados. O MASTE
 **Progresso em 2026-10-18:** a inspeção estática de `main` e a revisão documental foram registradas em [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md). Foram inventariados componentes de API, schema, Agent/ferramentas, testes conhecidos e configuração do frontend. Foram identificados bloqueios documentais e divergências do schema.
 
 **Ainda pendente para aceite completo:**
-- canonizar o MVP Implementation Contract no repositório e reconciliar entidades `Artifact`, `Setting` e `task_events`;
+- confirmar a canonização do contrato MVP e aplicar a decisão já registrada para `Artifact`, `Setting`, `task_events` e `_mosaic_meta`;
 - conferir branches/PRs relevantes contra o baseline, sem inferir que um PR merged equivale a validação funcional;
 - executar a suíte backend, o build do frontend e smoke test do provider local quando disponível;
 - testar jornadas ponta a ponta de execução, aprovação/rejeição, persistência de ToolResult, eventos/SSE, reconexão e retomada após reinício;
 - registrar comandos, ambiente, commit e resultados, incluindo falhas e testes não executados.
 
-**Aceite:** relatório com evidência estática e dinâmica reproduzível. A Fase 0 não está aprovada até os testes pendentes serem executados e as divergências contratuais bloqueadoras serem decididas.
+**Aceite:** relatório com evidência estática e dinâmica reproduzível. A decisão de schema está documentada; a aprovação da Fase 0 depende dos testes/build e fluxos integrados registrados no relatório atualizado.
 
 ### Fase 1 — Segurança e estados autoritativos
 
