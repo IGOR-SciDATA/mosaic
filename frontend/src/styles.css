@@ -2872,3 +2872,63 @@ body { overflow: hidden; }
   .agent-code-editor, .agent-code-editor textarea, .agent-line-numbers,
   .agent-markdown-preview { min-height: 380px; }
 }
+
+
+/* The editor is a DIV, not a LABEL: explicitly span both columns of the form grid. */
+.agent-config-workspace .model-config-grid > .agent-document-field {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+}
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-file-toolbar,
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-code-editor,
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-markdown-preview,
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-file-footer {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-code-editor {
+  grid-template-columns: 54px minmax(0, 1fr);
+}
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-code-editor textarea {
+  min-width: 0;
+}
+
+
+/* Final light-theme accent audit: remove remaining red-toned component accents. */
+:root[data-theme="light"] .tool-result-inspector p,
+:root[data-theme="light"] .text-danger,
+:root[data-theme="light"] .task-inline-error {
+  color: #176b3c;
+}
+:root[data-theme="light"] .approval-card {
+  border-color: #cfe6d5;
+}
+:root[data-theme="light"] .task-inline-error,
+:root[data-theme="light"] .tool-result-inspector {
+  background-color: #f0faf3;
+  border-color: #c7e8d1;
+}
+:root[data-theme="light"] .project-identity .mosaic-mark {
+  color: #16834a;
+  filter: drop-shadow(0 2px 5px rgba(22,131,74,.16));
+}
+:root[data-theme="light"] .project-identity .mosaic-mark svg,
+:root[data-theme="light"] .project-identity .project-mark {
+  color: #16834a;
+}
+:root[data-theme="light"] .api-error,
+:root[data-theme="light"] .api-error button,
+:root[data-theme="light"] .modal-form input:focus,
+:root[data-theme="light"] .modal-form textarea:focus,
+:root[data-theme="light"] .modal-form select:focus {
+  border-color: rgba(22,131,74,.35);
+}
+:root[data-theme="light"] .modal-form input:focus,
+:root[data-theme="light"] .modal-form textarea:focus,
+:root[data-theme="light"] .modal-form select:focus {
+  box-shadow: 0 0 0 3px rgba(22,131,74,.08);
+}
+:root[data-theme="light"] .agent-document-field .agent-file-title svg { color: #16834a; }
