@@ -1,7 +1,7 @@
 # MOSAIC — Master Roadmap: Harness Universal
 
 **Versão:** 1.0  
-**Status:** Proposta oficial para validação do MASTER  
+**Status:** Roadmap normativo de implementação; baseline estático parcialmente auditado; validação dinâmica pendente  
 **Data:** 2026-10-17  
 **Repositório:** `IGOR-SciDATA/mosaic`  
 **Objetivo:** conduzir o Mosaic, incrementalmente, de seu Core atual a um Harness confiável, extensível e capaz de concluir tarefas variadas — inspirado nos princípios operacionais observáveis de ferramentas como Claude Code, sem copiar sua implementação proprietária.
@@ -59,9 +59,9 @@ O repositório já possui uma fundação relevante, mas presença de módulos ou
 - Action/Permission layer, Tool Registry, ToolCall/ToolResult e ciclo de Agent.
 - APIs de conversas, mensagens, projetos e tarefas em diferentes estágios.
 - Contratos para Harness, RAGNES, UX, Skills, instruções de projeto e roadmap de implementação.
-- PR #53, em branch separada segundo a última revisão, documenta perfis de Agent e ferramentas de artefatos; deve ser reavaliada contra o estado atual antes de integração.
+- O documento de perfis de Agent e ferramentas de artefatos está versionado em `docs/MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md`; ele é uma proposta de evolução, não prova de implementação funcional.
 
-### 3.2 Lacunas ou riscos identificados anteriormente — confirmar na Fase 0
+### 3.2 Lacunas e riscos — estado após inspeção estática de 2026-10-18
 
 - Integração real do provider com o ciclo do Harness, API e frontend não foi comprovada de ponta a ponta.
 - Aprovação, retomada após aprovação, cancelamento e recuperação após reinício precisam ser provados no fluxo integrado.
@@ -74,7 +74,7 @@ O repositório já possui uma fundação relevante, mas presença de módulos ou
 - Existe histórico de divergência entre o schema documentado e tabelas criadas no bootstrap SQLite; reconciliar antes de alterar banco.
 - Build, testes completos e smoke test com Ollama não devem ser considerados aprovados sem execução registrada.
 
-**Regra:** a Fase 0 atualiza esta baseline com caminhos de arquivo, testes executados, resultados, commits e lacunas reais. Não codificar com base apenas nesta lista histórica.
+**Estado da auditoria:** o inventário estático e as divergências documentais estão registrados em [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md). A suíte, build, smoke test com Ollama e validação E2E não foram executados nesta auditoria; por isso a Fase 0 continua pendente de validação dinâmica. Não tratar módulos existentes como fases aprovadas sem evidência.
 
 ## 4. Arquitetura-alvo
 
@@ -145,17 +145,18 @@ Cada fase deve ser entregue em PR próprio, com testes e diff revisados. O MASTE
 
 ### Fase 0 — Auditoria e reconciliação do baseline
 
-**Objetivo:** descobrir o estado real de `main` e das branches relevantes antes de alterar arquitetura.
+**Objetivo:** estabelecer uma baseline verificável antes de autorizar o próximo incremento funcional.
 
-Entregas:
-- inventário de módulos, rotas, schema/migrations, testes, componentes frontend e ferramentas;
-- comparação de branches/PRs relevantes, incluindo #53 e branches de workspace/artefatos;
-- mapa do fluxo real: Conversation → ModelProvider → Task → Harness → Tool → ToolResult → UI;
-- identificar diferenças entre contratos e código, incluindo caminho exato do MVP contract no repo;
-- executar testes disponíveis, lint/build frontend e smoke test opcional com Ollama, registrando limitações do ambiente;
-- matriz de capacidades: existe / parcial / não existe / não verificado.
+**Progresso em 2026-10-18:** a inspeção estática de `main` e a revisão documental foram registradas em [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md). Foram inventariados componentes de API, schema, Agent/ferramentas, testes conhecidos e configuração do frontend. Foram identificados bloqueios documentais e divergências do schema.
 
-Aceite: relatório reproduzível com evidências e nenhuma alegação de funcionamento sem teste ou inspeção direta.
+**Ainda pendente para aceite completo:**
+- canonizar o MVP Implementation Contract no repositório e reconciliar entidades `Artifact`, `Setting` e `task_events`;
+- conferir branches/PRs relevantes contra o baseline, sem inferir que um PR merged equivale a validação funcional;
+- executar a suíte backend, o build do frontend e smoke test do provider local quando disponível;
+- testar jornadas ponta a ponta de execução, aprovação/rejeição, persistência de ToolResult, eventos/SSE, reconexão e retomada após reinício;
+- registrar comandos, ambiente, commit e resultados, incluindo falhas e testes não executados.
+
+**Aceite:** relatório com evidência estática e dinâmica reproduzível. A Fase 0 não está aprovada até os testes pendentes serem executados e as divergências contratuais bloqueadoras serem decididas.
 
 ### Fase 1 — Segurança e estados autoritativos
 
@@ -436,7 +437,7 @@ Uma capacidade só é considerada implementada quando:
 
 ## 10. Primeiro próximo passo
 
-**Executar a Fase 0.** Não iniciar uma reescrita do Harness nem implementar todas as ferramentas de uma vez. A primeira entrega deve mapear o que realmente está em `main`, o que existe em branches/PRs, quais testes passam e quais caminhos ponta a ponta já funcionam. Com essa evidência, o MASTER confirma a ordem exata das fases de implementação.
+**Concluir a validação dinâmica da Fase 0.** A inspeção estática e as divergências encontradas estão documentadas em [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md). Antes da próxima fase funcional, canonizar o contrato MVP, decidir as divergências de schema e executar testes/build/smoke/E2E no checkout do implementador. O MASTER autoriza um único próximo incremento após revisar essas evidências.
 
 ## 11. Definição de sucesso do projeto
 
