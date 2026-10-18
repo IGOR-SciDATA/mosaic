@@ -22,6 +22,7 @@ from app.services.tools import approve_tool_call, execute_tool_call, resolve_too
 from app.models.tool_call_repository import get_tool_call, list_tool_calls, update_tool_call
 from app.services.agent_decision import create_provider_decider
 from app.services.task_coordinator import run_coordinated_task, validate_coordinator_plan
+from app.services.agent_library import parse_agent_invocation
 from app.models.task_repository import (
     create_task,
     delete_task,
@@ -396,23 +397,30 @@ def _run_provider_agent(task_id: int) -> None:
 @router.post("/start", response_model=Task, status_code=202)
 def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTasks) -> Task:
     """Persist the user's goal, create an agent Task, and start the provider-backed loop."""
-    goal = payload.goal.strip()
-    if not goal:
+    raw_goal = payload.goal.strip()
+    if not raw_goal:
         raise HTTPException(status_code=422, detail="Task goal must not be empty")
     conversation = get_conversation(payload.conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if payload.type not in {"code_project", "document", "analysis", "report", "generic"}:
         raise HTTPException(status_code=422, detail="Invalid task type")
-    # Persist the goal as a normal conversation message so it is part of the canonical context.
+    try:
+        goal, agent_snapshot = parse_agent_invocation(conversation.project_id, raw_goal)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # Persist the resolved goal as a normal conversation message and freeze the selected profile in Task.plan.
     create_message(conversation.id, "user", goal)
     try:
+        task_plan = {"goal": goal}
+        if agent_snapshot is not None:
+            task_plan["agent_library_snapshot"] = agent_snapshot
         task = create_task(
             type=payload.type,
             mode="agent",
             conversation_id=conversation.id,
             project_id=conversation.project_id,
-            plan={"goal": goal},
+            plan=task_plan,
         )
         claimed = update_task(task.id, status="executing")
     except Exception as exc:
