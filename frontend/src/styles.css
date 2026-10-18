@@ -3048,3 +3048,8 @@ body { overflow: hidden; }
 @media (hover: none) {
   .project-row .sidebar-delete-button, .conversation-row .sidebar-delete-button { opacity: 1; pointer-events: auto; }
 }
+
+/* Override the generic sidebar button sizing for compact destructive actions. */
+.side-primary .project-row .sidebar-delete-button, .side-primary .conversation-row .sidebar-delete-button { width: 28px !important; min-width: 28px !important; max-width: 28px; flex: 0 0 28px; min-height: 28px !important; height: 28px; padding: 0 !important; gap: 0; }
+.side-primary .project-row .sidebar-delete-button svg, .side-primary .conversation-row .sidebar-delete-button svg { flex: 0 0 auto; }
+.side-primary .project-row .project-expand { width: 24px; min-width: 24px; max-width: 24px; flex: 0 0 24px; }
