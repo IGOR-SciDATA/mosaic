@@ -476,7 +476,6 @@ function ProjectMemoryWorkspace({ projectId }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [instructionsMode, setInstructionsMode] = useState("edit");
-  const [instructionsMode, setInstructionsMode] = useState("edit");
 
   async function refresh() {
     if (!projectId) { setMemories([]); return; }
@@ -675,6 +674,7 @@ function AgentLibraryWorkspace({ projectId }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [instructionsMode, setInstructionsMode] = useState("edit");
 
   async function refresh(preferSlug = selectedSlug) {
     if (!projectId) { setAgents([]); return; }
