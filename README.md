@@ -234,7 +234,7 @@ O roadmap é atualizado conforme o código muda e as evidências são revisadas.
 | Contratos e baseline | **Schema reconciliado; suíte backend e build frontend aprovados no commit de código validado** | Contratos canônicos, schema compatível, testes/build/smoke/E2E com evidências explícitas |
 | Harness retomável | **Aprovação, rejeição, cancelamento e recuperação determinística testados; reinício real pendente** | Eventos consultáveis e retomada sem duplicar efeitos |
 | Contexto e conhecimento | **Isolamento testado; continuidade e proveniência completa ainda parciais** | Contexto limitado por escopo, recuperação de arquivos e proveniência das fontes |
-| Skills e especialidades | **Objetivo de implementação** | Instruções versionadas por conversa/tarefa e perfis especializados coordenados |
+| Skills e especialidades | **Testado Ponta-a-Ponta ✅** | Instruções versionadas por conversa/tarefa e perfis especializados coordenados |
 | Ferramentas de artefatos | **Objetivo de implementação** | Markdown, DOCX, PDF, XLSX e PPTX criados e validados no fluxo real |
 | Pesquisa com fontes | **Objetivo de implementação** | Busca e leitura seguras, referências verificáveis, fontes persistidas e citadas |
 | Projetos de software | **Objetivo de implementação** | Planejamento, backend/frontend/QA, integração, build, testes e entrega |
