@@ -238,6 +238,23 @@ def test_agent_creates_explicit_subtasks_for_read_summarize_create(tmp_path: Pat
     ]
     assert steps[0]["path"] == "docs/Documento.md"
     assert steps[2]["path"] == "docs/Resumo_Documento.md"
+    assert steps[0]["depends_on"] == []
+    assert steps[1]["depends_on"] == ["read_source_1"]
+    assert steps[2]["depends_on"] == ["summarize_source"]
+
+
+def test_task_step_cannot_start_before_dependencies_are_complete(tmp_path: Path):
+    from app.services.agent import _ensure_task_plan, _set_task_step_status
+
+    project = create_project("Task step dependencies", str(tmp_path))
+    task = _task(
+        plan={"goal": "leia Documento.md e crie um novo arquivo Resumo.md com um resumo"},
+        project_id=project.id,
+    )
+    _ensure_task_plan(task.id)
+
+    with pytest.raises(ValueError, match="dependencies are incomplete"):
+        _set_task_step_status(task.id, "summarize_source", "in_progress")
 
 
 def test_existing_file_update_is_planned_as_read_transform_write():
@@ -547,6 +564,22 @@ def test_markdown_summary_flow_reads_source_creates_and_reopens_verified_artifac
     assert verification_events[0].tool_call_id == output_call.id
     assert verification_events[0].metadata["tool_result_id"] > 0
     assert any(result.status == "completed" for result in list_tool_results(output_call.id))
+
+    persisted_plan = get_task(task.id).plan
+    persisted_steps = {step["id"]: step for step in persisted_plan["steps"]}
+    assert all(step["status"] == "completed" for step in persisted_steps.values())
+    source_step = persisted_steps["read_source_1"]
+    assert source_step["source_path"] == "Documento.md"
+    assert source_step["source_sha256"] == hashlib.sha256(source_content.encode("utf-8")).hexdigest()
+    assert source_step["tool_call_ids"]
+    assert source_step["tool_result_ids"]
+    summary_step = persisted_steps["summarize_source"]
+    assert summary_step["output_sha256"] == hashlib.sha256(reopened.encode("utf-8")).hexdigest()
+    assert summary_step["output_chars"] == len(reopened)
+    artifact_step = persisted_steps["create_artifact"]
+    assert artifact_step["artifact_path"] == "Resumo.md"
+    assert artifact_step["artifact_sha256"] == completed["artifact"]["sha256"]
+    assert artifact_step["artifact_verified"] is True
 
 def test_tool_observation_is_bounded_and_marks_truncation():
     result = SimpleNamespace(status="completed", data={"content": "x" * 20_000}, error=None)
