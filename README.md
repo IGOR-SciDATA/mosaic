@@ -323,6 +323,23 @@ Abra a URL local informada pelo Vite, normalmente http://localhost:5173.
 
 ---
 
+# Estado de validação
+
+**Baseline integrado:** commit `331f3a8b713031fc5b042b4e9a009bc921f8f97b`.  
+**CI:** [run #39113375125](https://github.com/IGOR-SciDATA/mosaic/actions/runs/39113375125) — **226 testes backend aprovados**, 1 aviso de depreciação e build frontend aprovado (18/10/2026).
+
+O Mosaic continua em desenvolvimento ativo. CI verde comprova a suíte automatizada e o build, mas não equivale a validação universal ou a execução com todos os providers externos.
+
+| Estado oficial | Significado |
+|---|---|
+| **Planejado** | Requisito definido, sem implementação comprovada |
+| **Presente no código** | Implementação identificada; comportamento ainda não comprovado |
+| **Testado** | Teste ou comando executado com resultado registrado |
+| **Validado ponta a ponta** | Fluxo real executado e critérios de aceite verificados |
+| **Demonstrado manualmente** | Execução reportada pelo usuário, sem presumir cobertura automatizada |
+
+**Limitações conhecidas:** o CI usa decisões determinísticas em parte dos testes; não inicia um Ollama real nem valida providers externos em rede real. Reinício real de processo, E2E visual em navegador, pesquisa que produza relatório com URLs efetivamente reabertas e construção de um sistema web completo continuam pendentes. Consulte a [matriz E2E](docs/MOSAIC_E2E_VALIDATION_MATRIX_v1.0.md) para as evidências e limitações por cenário.
+
 # 📚 Documentação
 
 - [Contrato de implementação do MVP](docs/MOSAIC_MVP_IMPLEMENTATION_CONTRACT_v1.0.md)
@@ -334,6 +351,9 @@ Abra a URL local informada pelo Vite, normalmente http://localhost:5173.
 - [Plano de implementação passo a passo](docs/MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md)
 - [Perfis de Agent e ferramentas de artefatos](docs/MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md)
 - [Sequência Mestre de Implementação por Fases](docs/MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md)
+- [Avaliação de acesso a modelos via web](docs/MOSAIC_WEB_MODEL_ACCESS_EVALUATION_v1.0.md)
+- [Matriz de validação E2E](docs/MOSAIC_E2E_VALIDATION_MATRIX_v1.0.md)
+- [Recuperação resiliente de Tasks](docs/MOSAIC_RESILIENCE_RECOVERY_v1.0.md)
 - [Auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md)
 - [Prompt normativo para implementação do agente geral](docs/MOSAIC_UNIVERSAL_AGENT_IMPLEMENTATION_PROMPT_v1.0.md)
 
