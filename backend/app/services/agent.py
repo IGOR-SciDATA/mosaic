@@ -287,7 +287,7 @@ def _goal_updates_existing_file(goal: str) -> bool:
 
 
 def _artifact_format(goal: str) -> str:
-    """Resolve the requested output format without mistaking an earlier source path for the target."""
+    """Resolve an explicitly requested output format without treating a source extension as output."""
     creation_verbs = (
         r"create|make|build|write|save|generate|export|compose|update|edit|modify|replace|overwrite|"
         r"crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|elabore|elaborar|prepare|preparar|"
@@ -296,25 +296,38 @@ def _artifact_format(goal: str) -> str:
     )
     action = re.search(rf"\b(?:{creation_verbs})\b", goal, flags=re.IGNORECASE)
     output_instruction = goal[action.end():] if action else goal
-    if re.search(r"\b(?:pdf|portable document format)\b", output_instruction, re.IGNORECASE):
+    if re.match(r"\s*(?:(?:a|the|um|uma|o|a)\s+)?pdf\b", output_instruction, re.IGNORECASE):
         return "pdf"
-    if re.search(r"\b(?:docx|word document|documento word)\b", output_instruction, re.IGNORECASE):
+    if re.match(r"\s*(?:(?:a|the|um|uma|o|a)\s+)?docx\b", output_instruction, re.IGNORECASE):
         return "docx"
-    if re.search(r"\b(?:xlsx|spreadsheet|planilha|excel workbook)\b", output_instruction, re.IGNORECASE):
+    if re.match(r"\s*(?:(?:a|the|um|uma|o|a)\s+)?xlsx\b", output_instruction, re.IGNORECASE):
         return "xlsx"
-    if re.search(r"\b(?:pptx|powerpoint|presentation|apresentação|apresentacao)\b", output_instruction, re.IGNORECASE):
+    if re.match(r"\s*(?:(?:a|the|um|uma|o|a)\s+)?pptx\b", output_instruction, re.IGNORECASE):
         return "pptx"
-    if re.search(r"\b(?:markdown|\.md)\b", output_instruction, re.IGNORECASE):
+    if re.match(r"\s*(?:(?:a|the|um|uma|o|a)\s+)?markdown\b", output_instruction, re.IGNORECASE):
         return "markdown"
-    extension = re.search(r"(?<![A-Za-z0-9_./-])[A-Za-z0-9_./-]+\.(md|markdown|pdf|docx|xlsx|pptx)\b", output_instruction, re.IGNORECASE)
-    if extension:
-        suffix = Path(extension.group(0)).suffix.lower()
-        return {".md": "markdown", ".markdown": "markdown", ".pdf": "pdf", ".docx": "docx", ".xlsx": "xlsx", ".pptx": "pptx"}[suffix]
+    if re.search(r"\b(?:spreadsheet|planilha|excel workbook)\b", output_instruction, re.IGNORECASE):
+        return "xlsx"
+    if re.search(r"\b(?:word document|documento word)\b", output_instruction, re.IGNORECASE):
+        return "docx"
+    if re.search(r"\b(?:powerpoint|presentation|apresentação|apresentacao)\b", output_instruction, re.IGNORECASE):
+        return "pptx"
+
+    explicit_names = [
+        r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como)\s+['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+        r"\b(?:file|arquivo|documento|document|report|relatório|relatorio|planilha|spreadsheet|presentation|apresentação|apresentacao)\s+['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+        r"^\s+(?:(?:a|the|um|uma|o|a)\s+)?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+    ]
+    for pattern in explicit_names:
+        match = re.search(pattern, output_instruction, re.IGNORECASE)
+        if match:
+            suffix = Path(match.group(1)).suffix.lower()
+            return {".md": "markdown", ".markdown": "markdown", ".pdf": "pdf", ".docx": "docx", ".xlsx": "xlsx", ".pptx": "pptx"}[suffix]
     return "markdown"
 
 
 def _goal_requires_file_artifact(goal: str) -> bool:
-    """Detect explicit file output intent for all supported artifact formats."""
+    """Detect explicit file output intent for supported formats."""
     creation_verbs = (
         r"create|make|build|write|save|generate|export|compose|update|edit|modify|replace|overwrite|"
         r"crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|elabore|elaborar|prepare|preparar|"
@@ -325,20 +338,26 @@ def _goal_requires_file_artifact(goal: str) -> bool:
     if action is None:
         return False
     output_instruction = goal[action.end():]
-    output_format = re.search(
-        r"\b(?:markdown|pdf|docx|xlsx|pptx|spreadsheet|planilha|powerpoint|presentation|apresentação|apresentacao)\b|"
-        r"\.(?:md|markdown|pdf|docx|xlsx|pptx)\b",
+    format_at_start = re.match(
+        r"\s*(?:(?:a|the|um|uma|o|a)\s+)?(?:pdf|docx|xlsx|pptx|markdown)\b",
         output_instruction,
-        flags=re.IGNORECASE,
+        re.IGNORECASE,
+    )
+    named_output = any(
+        re.search(pattern, output_instruction, re.IGNORECASE)
+        for pattern in (
+            r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como)\s+['\"]?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx)\b",
+            r"\b(?:file|arquivo|documento|document|report|relatório|relatorio|planilha|spreadsheet|presentation|apresentação|apresentacao)\s+['\"]?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx)\b",
+            r"^\s+(?:(?:a|the|um|uma|o|a)\s+)?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx)\b",
+        )
     )
     mentions_file = re.search(
         r"\b(?:file|document|arquivo|documento|report|relatório|relatorio|spreadsheet|planilha|presentation|apresentação|apresentacao)\b",
         output_instruction,
-        flags=re.IGNORECASE,
+        re.IGNORECASE,
     )
-    return bool(output_format or mentions_file)
-
-
+    mentions_format = bool(re.search(r"\b(?:spreadsheet|planilha|word document|documento word|powerpoint|presentation|apresentação|apresentacao)\b", output_instruction, re.IGNORECASE))
+    return bool(format_at_start or named_output or mentions_file or mentions_format)
 
 
 
@@ -620,7 +639,7 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
     return None
 
 def _artifact_output_path(goal: str) -> str:
-    """Resolve an explicit output filename, defaulting by requested format."""
+    """Resolve a named output file; never mistake a source path for the target."""
     output_verbs = (
         r"create|crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|"
         r"elabore|elaborar|prepare|preparar|write|save|generate|export|salve|salvar|"
@@ -629,12 +648,17 @@ def _artifact_output_path(goal: str) -> str:
     )
     action = re.search(rf"\b(?:{output_verbs})\b", goal, flags=re.IGNORECASE)
     output_instruction = goal[action.end():] if action else goal
-    pattern = r"(?<![A-Za-z0-9_./-])([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b"
-    match = re.search(pattern, output_instruction, flags=re.IGNORECASE)
-    if match:
-        candidate = Path(match.group(1))
-        if candidate.name and candidate.suffix.lower() in {".md", ".markdown", ".pdf", ".docx", ".xlsx", ".pptx"}:
-            return candidate.as_posix()
+    patterns = (
+        r"\b(?:called|named|chamado|chamada|com\s+o\s+nome|como)\s+['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+        r"\b(?:file|arquivo|documento|document|report|relatório|relatorio|planilha|spreadsheet|presentation|apresentação|apresentacao)\s+['\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+        r"^\s+(?:(?:a|the|um|uma|o|a)\s+)?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|markdown|pdf|docx|xlsx|pptx))\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, output_instruction, re.IGNORECASE)
+        if match:
+            candidate = Path(match.group(1))
+            if candidate.name:
+                return candidate.as_posix()
 
     sources = _required_source_paths(goal)
     fmt = _artifact_format(goal)
@@ -642,14 +666,13 @@ def _artifact_output_path(goal: str) -> str:
     if sources:
         source = Path(sources[0])
         return (source.parent / f"Resumo_{source.stem}{extension}").as_posix()
-    defaults = {
+    return {
         "markdown": "Resumo.md",
         "pdf": "Relatorio.pdf",
         "docx": "Documento.docx",
         "xlsx": "Planilha.xlsx",
         "pptx": "Apresentacao.pptx",
-    }
-    return defaults[fmt]
+    }[fmt]
 
 
 def _artifact_operation(goal: str) -> str:
