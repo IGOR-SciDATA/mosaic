@@ -3,7 +3,7 @@
 **Status:** Guia operacional proposto para orientar implementação e revisão  
 **Data:** 2026-10-17  
 **Repositório:** IGOR-SciDATA/mosaic  
-**Snapshot da auditoria inicial:** `main` em `35570385743f4b4bdb0dec8acddd6459184fea5b` (referência histórica; conferir a branch atual antes de implementar)  
+**Baseline de auditoria:** `main` em `29f6af8e6ed1af9cb0a0160889c4d7ea56bd6912`; ver [relatório da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md).  
 **Documento complementar:** `MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md` (proposta subordinada ao Roadmap Mestre)
 
 ---
