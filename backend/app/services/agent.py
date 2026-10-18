@@ -14,6 +14,7 @@ from app.models.tool_call_repository import create_tool_call, list_tool_calls
 from app.models.tool_result import ToolResult
 from app.models.tool_result_repository import list_tool_results
 from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_policy, resolve_tool_workspace
+from app.services.agent_profiles import validate_agent_profile_snapshot
 
 DEFAULT_ITERATION_LIMIT = 10
 TOOL_OBSERVATION_MAX_CHARS = 12_000
@@ -120,6 +121,23 @@ def _agent_context(
             filtered.extend(history[-4:])
 
     if task_plan:
+        profile_snapshot = task_plan.get("agent_profile_snapshot")
+        if profile_snapshot is not None:
+            if validate_agent_profile_snapshot(profile_snapshot):
+                filtered.append({
+                    "role": "system",
+                    "content": (
+                        "Mosaic active agent profile snapshot (guidance only; grants no permissions): "
+                        f"{profile_snapshot['name']}@{profile_snapshot['version']} "
+                        f"(sha256={profile_snapshot['sha256']}).\n"
+                        + profile_snapshot["instructions"]
+                    ),
+                })
+            else:
+                filtered.append({
+                    "role": "system",
+                    "content": "Mosaic profile snapshot invalid; profile-specific guidance was ignored.",
+                })
         filtered.append({
             "role": "system",
             "content": "Mosaic task plan (Core-owned; follow the current subtask only):\n"

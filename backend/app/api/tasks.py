@@ -11,13 +11,14 @@ from app.models.conversation_repository import get_conversation
 from app.models.message_repository import create_message
 from app.models.task import Task
 from app.models.task_event import TaskEvent
-from app.models.task_event_repository import list_task_events
+from app.models.task_event_repository import create_task_event, list_task_events
 from app.models.action_repository import list_actions
 from app.permissions import cancel_action
 from app.services.agent import run_agent
 from app.services.tools import approve_tool_call, execute_tool_call
 from app.models.tool_call_repository import get_tool_call, list_tool_calls, update_tool_call
 from app.services.agent_decision import create_provider_decider
+from app.services.task_coordinator import run_coordinated_task, validate_coordinator_plan
 from app.models.task_repository import (
     create_task,
     delete_task,
@@ -163,6 +164,68 @@ def delete_task_endpoint(task_id: int) -> dict[str, bool]:
 
 
 
+def _resume_coordinator_for_child(task_id: int) -> None:
+    child = get_task(task_id)
+    if child is None or child.status not in {"completed", "failed", "cancelled"}:
+        return
+    child_plan = child.plan if isinstance(child.plan, dict) else {}
+    parent_id = child_plan.get("coordinator_task_id")
+    if not isinstance(parent_id, int):
+        return
+    parent = get_task(parent_id)
+    if parent is None or parent.status in {"completed", "failed", "cancelled"}:
+        return
+    try:
+        run_coordinated_task(parent_id)
+    except Exception as exc:
+        parent = get_task(parent_id)
+        if parent is None:
+            return
+        if parent.status in {"pending", "planning", "executing", "awaiting_approval", "validating"}:
+            try:
+                parent = update_task(
+                    parent_id,
+                    status="failed",
+                    result={"error_type": type(exc).__name__, "coordinator_resume_failed": True},
+                )
+            except ValueError:
+                parent = get_task(parent_id) or parent
+        try:
+            create_task_event(
+                task_id=parent_id,
+                conversation_id=parent.conversation_id,
+                project_id=parent.project_id,
+                component="coordinator",
+                event_name="coordinator.resume_failed",
+                message="Coordinator could not resume after child Task completion.",
+                status="failed",
+                level="error",
+                metadata={"child_task_id": task_id, "error_type": type(exc).__name__},
+            )
+        except Exception:
+            return
+
+
+@router.post("/{task_id}/coordinate", response_model=Task)
+def coordinate_task_endpoint(task_id: int, background_tasks: BackgroundTasks) -> Task:
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.mode != "agent" or task.conversation_id is None:
+        raise HTTPException(status_code=422, detail="Coordinated Tasks require agent mode and a conversation")
+    if task.status != "pending":
+        raise HTTPException(status_code=409, detail="Only a pending Task can start coordination")
+    try:
+        validate_coordinator_plan(task.plan)
+        planning = update_task(task_id, status="planning")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if planning is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    background_tasks.add_task(run_coordinated_task, task_id)
+    return planning
+
+
 @router.post("/{task_id}/cancel", response_model=Task)
 def cancel_task_endpoint(task_id: int) -> Task:
     task = get_task(task_id)
@@ -193,6 +256,20 @@ def cancel_task_endpoint(task_id: int) -> Task:
             except ValueError:
                 # Preserve the authoritative result of a concurrent state transition.
                 pass
+
+    plan = cancelled.plan if isinstance(cancelled.plan, dict) else {}
+    coordinator = plan.get("coordinator") if isinstance(plan.get("coordinator"), dict) else {}
+    child_ids = coordinator.get("children") if isinstance(coordinator.get("children"), dict) else {}
+    for child_id in child_ids.values():
+        if not isinstance(child_id, int):
+            continue
+        child = get_task(child_id)
+        if child is not None and child.status not in {"completed", "failed", "cancelled"}:
+            try:
+                cancel_task_endpoint(child_id)
+            except HTTPException:
+                pass
+    _resume_coordinator_for_child(task_id)
     return cancelled
 
 
@@ -238,6 +315,7 @@ def _run_provider_agent(task_id: int) -> None:
             except ValueError:
                 # A concurrent cancellation or terminal transition remains authoritative.
                 pass
+    _resume_coordinator_for_child(task_id)
 
 
 @router.post("/start", response_model=Task, status_code=202)
