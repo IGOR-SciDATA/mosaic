@@ -1765,3 +1765,172 @@ body { overflow: hidden; }
 .model-event-preview { flex-basis: 100%; margin-top: 5px; padding: 9px; border-radius: 6px; background: rgba(0,0,0,.22); }
 .model-event-preview strong { display: block; margin-bottom: 5px; color: #e0e0e3; font-size: 10px; }
 .model-event-preview p { margin: 0; color: #d2d2d5; font-size: 10px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+
+/* Theme controls and semantic light palette. Dark remains the default. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.theme-toggle:hover { border-color: var(--red); background: var(--red-soft); }
+.theme-toggle:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  color: #202124;
+  background: #f4f5f7;
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --surface-3: #eef0f3;
+  --border: rgba(25, 30, 38, .14);
+  --border-soft: rgba(25, 30, 38, .09);
+  --text: #202124;
+  --muted: #5f6670;
+  --dim: #777e88;
+  --red: #d92722;
+  --red-bright: #c92520;
+  --red-soft: rgba(217, 39, 34, .09);
+  --green: #13834a;
+}
+:root[data-theme="light"] body {
+  color: var(--text);
+  background: radial-gradient(circle at 63% 5%, rgba(217,39,34,.045), transparent 23rem), #f4f5f7;
+}
+:root[data-theme="light"] .app-shell {
+  background: linear-gradient(125deg, rgba(255,255,255,.7), transparent 30%), #f4f5f7;
+}
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .app-main,
+:root[data-theme="light"] .workspace,
+:root[data-theme="light"] .topbar,
+:root[data-theme="light"] .project-header,
+:root[data-theme="light"] .context-panel,
+:root[data-theme="light"] .composer,
+:root[data-theme="light"] .modal,
+:root[data-theme="light"] .modal-content,
+:root[data-theme="light"] .task-card,
+:root[data-theme="light"] .task-detail,
+:root[data-theme="light"] .related-item,
+:root[data-theme="light"] .memory-card,
+:root[data-theme="light"] .note-card,
+:root[data-theme="light"] .file-card,
+:root[data-theme="light"] .artifact-card {
+  color: var(--text);
+  background-color: var(--surface);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .sidebar {
+  background: linear-gradient(155deg, #fff, #f8f9fb 72%);
+  box-shadow: 0 5px 24px rgba(22, 28, 38, .05);
+}
+:root[data-theme="light"] .sidebar::after { opacity: .12; }
+:root[data-theme="light"] .brand-row,
+:root[data-theme="light"] .project-tabs,
+:root[data-theme="light"] .topbar,
+:root[data-theme="light"] .context-panel { border-color: var(--border-soft); }
+:root[data-theme="light"] .wordmark,
+:root[data-theme="light"] .project-identity h1,
+:root[data-theme="light"] .top-project strong,
+:root[data-theme="light"] .message-bubble,
+:root[data-theme="light"] .assistant-copy,
+:root[data-theme="light"] .context-panel strong,
+:root[data-theme="light"] .modal h2,
+:root[data-theme="light"] .modal-title {
+  color: var(--text);
+}
+:root[data-theme="light"] .side-primary button,
+:root[data-theme="light"] .side-bottom button,
+:root[data-theme="light"] .section-heading,
+:root[data-theme="light"] .top-link,
+:root[data-theme="light"] .top-project small,
+:root[data-theme="light"] .project-identity p,
+:root[data-theme="light"] .context-panel p,
+:root[data-theme="light"] .context-panel small,
+:root[data-theme="light"] .composer-model,
+:root[data-theme="light"] .modal-hint,
+:root[data-theme="light"] .sidebar-empty,
+:root[data-theme="light"] .conversation-item,
+:root[data-theme="light"] .message-bubble p {
+  color: #59616c;
+}
+:root[data-theme="light"] .side-primary button:hover,
+:root[data-theme="light"] .side-bottom button:hover,
+:root[data-theme="light"] .top-link:hover,
+:root[data-theme="light"] .related-item:hover {
+  color: #202124;
+  background: rgba(25, 30, 38, .055);
+}
+:root[data-theme="light"] .side-project.active {
+  color: #202124;
+  background: linear-gradient(90deg, rgba(217,39,34,.09), rgba(25,30,38,.025));
+}
+:root[data-theme="light"] .project-tabs button { color: #59616c; }
+:root[data-theme="light"] .project-tabs button.active { color: var(--red); }
+:root[data-theme="light"] .project-tabs button.active::after { background: var(--red); }
+:root[data-theme="light"] .message-bubble {
+  background: #f0f2f5;
+  border-color: rgba(25,30,38,.08);
+}
+:root[data-theme="light"] .user-message .message-bubble {
+  color: #25272b;
+  background: #fbe9e8;
+  border-color: rgba(217,39,34,.16);
+}
+:root[data-theme="light"] .composer {
+  background: rgba(255,255,255,.97);
+  box-shadow: 0 10px 35px rgba(25,30,38,.08);
+}
+:root[data-theme="light"] .composer textarea,
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea,
+:root[data-theme="light"] .model-select {
+  color: #202124;
+  background-color: #fff;
+  border-color: rgba(25,30,38,.18);
+}
+:root[data-theme="light"] .composer textarea::placeholder,
+:root[data-theme="light"] input::placeholder,
+:root[data-theme="light"] textarea::placeholder { color: #8b919a; }
+:root[data-theme="light"] .composer-tools button,
+:root[data-theme="light"] .composer-submit button,
+:root[data-theme="light"] .model-config-button,
+:root[data-theme="light"] .theme-toggle {
+  color: #454b54;
+  background: #f8f9fb;
+  border-color: rgba(25,30,38,.14);
+}
+:root[data-theme="light"] .chat-scroll,
+:root[data-theme="light"] .workspace-grid { background: transparent; }
+:root[data-theme="light"] .context-item,
+:root[data-theme="light"] .context-row,
+:root[data-theme="light"] .task-row,
+:root[data-theme="light"] .file-row,
+:root[data-theme="light"] .memory-row { border-color: var(--border-soft); }
+:root[data-theme="light"] .api-error {
+  color: #8f211d;
+  background: #fff0ef;
+  border-color: rgba(217,39,34,.25);
+}
+:root[data-theme="light"] .api-error button {
+  color: #7c2521;
+  background: #fff;
+  border-color: rgba(217,39,34,.2);
+}
+:root[data-theme="light"] .avatar { color: #fff; }
+:root[data-theme="light"] .status-dot { border-color: rgba(25,30,38,.12); }
+@media (max-width: 620px) {
+  .theme-toggle { min-width: 34px; padding: 0 8px; }
+  .theme-toggle span { display: none; }
+}
