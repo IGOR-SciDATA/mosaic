@@ -61,20 +61,22 @@ O repositório já possui uma fundação relevante, mas presença de módulos ou
 - Contratos para Harness, RAGNES, UX, Skills, instruções de projeto e roadmap de implementação.
 - O documento de perfis de Agent e ferramentas de artefatos está versionado em `docs/MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md`; ele é uma proposta de evolução, não prova de implementação funcional.
 
-### 3.2 Lacunas e riscos — estado após inspeção estática de 2026-10-18
+### 3.2 Estado após inspeção estática de 2026-10-18
 
-- Integração real do provider com o ciclo do Harness, API e frontend não foi comprovada de ponta a ponta.
-- Aprovação, retomada após aprovação, cancelamento e recuperação após reinício precisam ser provados no fluxo integrado.
-- Segurança de filesystem, terminal e web fetch precisa ser verificada no código atual; auditorias anteriores apontaram risco de path arbitrário, shell irrestrito e proteção insuficiente contra SSRF/limites de resposta. Não assumir que esses problemas ainda existem nem que foram resolvidos sem inspecionar a branch alvo.
-- Eventos estruturados, reconexão SSE, APIs de aprovação, artefatos e painel de execução precisam ser reconciliados com a implementação atual.
-- A UI pode não refletir todo o fluxo de Task/Agent/arquivos que exista em branches ainda não integradas.
-- Persistência por conversa de perfil, instruções e Skills, snapshot imutável por Task e aplicação demonstrável das Skills ainda precisam ser provados.
-- A geração de arquivos Markdown, PDF, XLSX e PPTX deve ser validada por formato; não basta criar um arquivo vazio ou com extensão correta.
-- A busca na web, leitura de fontes, rastreabilidade das citações e salvamento de fontes precisam de teste integrado.
-- Existe histórico de divergência entre o schema documentado e tabelas criadas no bootstrap SQLite; reconciliar antes de alterar banco.
-- Build, testes completos e smoke test com Ollama não devem ser considerados aprovados sem execução registrada.
+O [Relatório de Auditoria da Fase 0](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) contém inventário e evidências por arquivo. Resumo:
 
-**Estado da auditoria:** o inventário estático e as divergências documentais estão registrados em [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md). A suíte, build, smoke test com Ollama e validação E2E não foram executados nesta auditoria; por isso a Fase 0 continua pendente de validação dinâmica. Não tratar módulos existentes como fases aprovadas sem evidência.
+- O provider está conectado ao endpoint de tarefas via `create_provider_decider`; o fluxo integrado completo ainda não foi executado nesta auditoria.
+- Os serviços de ferramentas contêm validação/aprovação e os testes cobrem casos negativos de filesystem, terminal e URLs; os testes não foram executados nesta auditoria.
+- `task_events`, endpoints de listagem e stream SSE existem; reconexão do frontend e retomada após reinício ainda precisam de demonstração E2E.
+- O frontend contém implementação de workspace e estados de aprovação; build e jornadas visuais não foram executados.
+- Perfis operacionais por conversa e snapshots imutáveis por Task não estão comprovados como completos.
+- A coordenação de subtarefas persistidas com dependências reais não está comprovada como completa.
+- O bootstrap SQLite cria `task_events` e `_mosaic_meta`, mas não cria as tabelas `artifacts` e `settings` listadas no contrato MVP. A divergência deve ser decidida antes de qualquer alteração de schema.
+- O MVP Implementation Contract v1.0 é citado por contratos, mas não está versionado no caminho esperado em `main`.
+- O documento de perfis e ferramentas de artefato está versionado em `docs/MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md`; sua presença é uma proposta documental, não evidência de que todos os artefatos ou perfis estejam implementados.
+- Pytest, build frontend, smoke test Ollama e E2E não foram executados nesta auditoria; não há execução de workflow retornada para o commit de referência.
+
+**Regra:** não inferir conclusão de fase a partir de arquivos existentes ou PRs mesclados. Cada capacidade exige teste relevante, integração e evidência reproduzível.
 
 ## 4. Arquitetura-alvo
 
