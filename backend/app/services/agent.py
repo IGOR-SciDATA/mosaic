@@ -159,7 +159,14 @@ def _agent_context(
                     f"{current_step.get('instruction', '')}"
                 ),
             })
-            if current_step.get("kind") in {"summarize_source", "transform_source", "answer_from_source", "draft_content", "create_artifact", "write_artifact"}:
+            allowed_for_step = current_step.get("allowed_tools")
+            if isinstance(allowed_for_step, list):
+                names = [name for name in allowed_for_step if isinstance(name, str)]
+                filtered.append({
+                    "role": "system",
+                    "content": "Mosaic allowed tools: " + (", ".join(names) if names else "none"),
+                })
+            elif current_step.get("kind") in {"summarize_source", "transform_source", "answer_from_source", "draft_content", "create_artifact", "write_artifact"}:
                 filtered.append({
                     "role": "system",
                     "content": "Mosaic allowed tools: none",
@@ -1087,6 +1094,9 @@ def _allowed_tools_for_step(plan: dict[str, Any] | None) -> set[str] | None:
     step = _current_task_step(plan)
     if step is None:
         return None
+    if step.get("kind") == "research_sources":
+        allowed = step.get("allowed_tools", [])
+        return {name for name in allowed if isinstance(name, str)}
     if step.get("kind") in {"summarize_source", "transform_source", "answer_from_source", "draft_content", "create_artifact", "write_artifact"}:
         return set()
     return None
