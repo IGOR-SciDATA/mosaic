@@ -11,7 +11,7 @@
 
 Este documento converte a arquitetura do Mosaic em uma sequência executável de trabalho. O agente de implementação deve seguir as etapas na ordem definida, trabalhar em incrementos pequenos e apresentar evidências antes de avançar.
 
-O resultado esperado é um Mosaic capaz de preservar memória e contexto, executar tarefas por meio de um Harness confiável, utilizar ferramentas sob controle do Core, retomar trabalho e apresentar tudo isso em uma interface clara.
+O resultado esperado é um Mosaic capaz de concluir tarefas gerais com rastreabilidade: pesquisar na internet e citar fontes realmente consultadas; criar e validar documentos, planilhas e apresentações; desenvolver projetos de software com especialidades coordenadas; preservar contexto e retomar tarefas; e apresentar plano, estado, evidências e artefatos em uma interface clara. O Harness é o mecanismo de execução desse produto, não o objetivo final isolado. Para orientar a implementação a partir dessa visão, consultar também [o Prompt Normativo do Agente de Propósito Geral](MOSAIC_UNIVERSAL_AGENT_IMPLEMENTATION_PROMPT_v1.0.md).
 
 **Não implementar todas as etapas em um único PR.** Cada etapa deve ter seu próprio escopo, testes, resumo de diff e critério de aceite. O MASTER valida a etapa antes da seguinte.
 
