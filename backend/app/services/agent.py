@@ -1,4 +1,5 @@
 from collections.abc import Callable
+import ast
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -19,6 +20,23 @@ TOOL_OBSERVATION_MAX_CHARS = 12_000
 
 
 MAX_AUTOMATIC_READ_CHUNKS = 100
+
+
+def _project_state_without_skills(content: str) -> str | None:
+    """Keep project continuity state but omit skill definitions that are not an explicit request."""
+    prefix = "Mosaic project state:"
+    if not content.startswith(prefix):
+        return None
+    try:
+        state = ast.literal_eval(content[len(prefix):].strip())
+    except (SyntaxError, ValueError):
+        return None
+    if not isinstance(state, dict):
+        return None
+    sanitized = dict(state)
+    sanitized.pop("agent_skills", None)
+    sanitized.pop("skills", None)
+    return prefix + " " + json.dumps(sanitized, ensure_ascii=False, sort_keys=True)
 
 
 def _agent_context(
@@ -61,8 +79,12 @@ def _agent_context(
             continue
         if content.startswith(allowed_system_prefixes):
             filtered.append({"role": "system", "content": content})
-        elif (project_state_requested or history_requested) and content.startswith("Mosaic project state:"):
+        elif project_state_requested and content.startswith("Mosaic project state:"):
             filtered.append({"role": "system", "content": content})
+        elif history_requested and content.startswith("Mosaic project state:"):
+            sanitized_state = _project_state_without_skills(content)
+            if sanitized_state is not None:
+                filtered.append({"role": "system", "content": sanitized_state})
         elif memory_requested and content.startswith("Mosaic memory:"):
             filtered.append({"role": "system", "content": content})
 
