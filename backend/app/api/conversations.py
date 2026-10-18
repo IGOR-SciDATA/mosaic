@@ -69,6 +69,10 @@ def update_conversation_endpoint(
 
 @router.delete("/{conversation_id}")
 def delete_conversation_endpoint(conversation_id: int) -> dict[str, bool]:
-    if not delete_conversation(conversation_id):
+    try:
+        deleted = delete_conversation(conversation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"deleted": True}
