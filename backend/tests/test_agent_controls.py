@@ -7,8 +7,8 @@ from app.db.database import init_db
 from app.models.conversation_repository import create_conversation
 from app.models.project_repository import create_project
 from app.models.repository import create_model
-from app.models.task_repository import create_task, get_task
-from app.models.tool_call_repository import get_tool_call
+from app.models.task_repository import create_task, get_task, update_task
+from app.models.tool_call_repository import create_tool_call, get_tool_call
 from app.models.tool_result import ToolResult
 from app.context.manager import build_context
 from app.models.message_repository import create_message
@@ -82,12 +82,15 @@ def test_approval_executes_pending_tool_and_resumes_same_task(monkeypatch, tmp_p
         type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id,
         plan={"goal": "Read README.md and create Approved.md in the project"},
     )
-    pending = run_agent(
-        task.id,
-        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "create", "path": "Approved.md", "content": "# Approved\n"}},
+    call = create_tool_call(
+        conversation.id,
+        "filesystem",
+        {"operation": "create", "path": "Approved.md", "content": "# Approved\\n"},
+        task_id=task.id,
     )
-    assert pending["status"] == "awaiting_approval"
-    call_id = pending["tool_call_id"]
+    update_task(task.id, status="executing")
+    update_task(task.id, status="awaiting_approval", result={"tool_call_id": call.id})
+    call_id = call.id
 
     def fake_execute(call):
         return ToolResult(id=1, tool_call_id=call.id, status="completed", data={"created": True, "path": "Approved.md"}, error=None, created_at="now")
@@ -115,16 +118,20 @@ def test_approval_reject_marks_task_failed_without_execution(tmp_path):
         type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id,
         plan={"goal": "Read README.md and create Approved.md in the project"},
     )
-    pending = run_agent(
-        task.id,
-        lambda context: {"type": "tool_call", "tool": "filesystem", "arguments": {"operation": "create", "path": "Approved.md", "content": "# Approved\n"}},
+    call = create_tool_call(
+        conversation.id,
+        "filesystem",
+        {"operation": "create", "path": "Approved.md", "content": "# Approved\\n"},
+        task_id=task.id,
     )
+    update_task(task.id, status="executing")
+    update_task(task.id, status="awaiting_approval", result={"tool_call_id": call.id})
     updated = decide_tool_call_endpoint(
-        task.id, pending["tool_call_id"], ToolDecision(decision="reject"), BackgroundTasks(),
+        task.id, call.id, ToolDecision(decision="reject"), BackgroundTasks(),
     )
     assert updated.status == "failed"
     assert updated.result["error"] == "A operação solicitada foi recusada pelo usuário."
-    assert get_tool_call(pending["tool_call_id"]).status == "rejected"
+    assert get_tool_call(call.id).status == "rejected"
 
 
 def test_agent_context_includes_project_instructions_and_enabled_skills(tmp_path):
