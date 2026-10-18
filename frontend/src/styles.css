@@ -2131,3 +2131,139 @@ body { overflow: hidden; }
   :root[data-theme="light"] .top-actions { gap: 7px; }
   :root[data-theme="light"] .model-provider { display: none; }
 }
+
+
+/* Light workspace surfaces: remove the inherited dark treatment from every project tab. */
+:root[data-theme="light"] .project-header {
+  color: #17191d;
+  background: linear-gradient(135deg, #ffffff 0%, #fbfcfd 62%, #f3f5f8 100%);
+  border-bottom-color: #dfe3e8;
+  box-shadow: 0 1px 0 rgba(16,24,40,.025);
+}
+:root[data-theme="light"] .project-header::after {
+  border-color: rgba(100,116,139,.10);
+  background: linear-gradient(135deg, transparent 48%, rgba(201,35,32,.055) 49%, transparent 51%);
+}
+:root[data-theme="light"] .project-identity h1 { color: #111318; }
+:root[data-theme="light"] .project-identity p { color: #5b6472; }
+:root[data-theme="light"] .project-tabs { background: transparent; }
+:root[data-theme="light"] .project-tabs button {
+  color: #4b5563;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 7px 7px 0 0;
+  transition: color .16s ease, background-color .16s ease;
+}
+:root[data-theme="light"] .project-tabs button:hover {
+  color: #17191d;
+  background: #f1f3f6;
+}
+:root[data-theme="light"] .project-tabs button.active {
+  color: #b91f1b;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #e2e5e9;
+  box-shadow: inset 0 -2px #c92320;
+}
+:root[data-theme="light"] .project-tabs button.active::after { display: none; }
+
+/* Tasks: bright cards and readable copy, including history, details and model results. */
+:root[data-theme="light"] .task-workspace { color: #17191d; background: #fff; }
+:root[data-theme="light"] .task-start-form,
+:root[data-theme="light"] .task-list-panel,
+:root[data-theme="light"] .task-detail-panel,
+:root[data-theme="light"] .task-result,
+:root[data-theme="light"] .task-notice {
+  color: #17191d;
+  background: #fff;
+  border-color: #d9dee5;
+  box-shadow: 0 2px 8px rgba(16,24,40,.025);
+}
+:root[data-theme="light"] .task-start-form label { color: #252a32; }
+:root[data-theme="light"] .task-start-form textarea {
+  color: #17191d;
+  background: #fff;
+  border-color: #cbd2dc;
+}
+:root[data-theme="light"] .task-start-form textarea::placeholder { color: #737d8b; }
+:root[data-theme="light"] .task-panel-heading,
+:root[data-theme="light"] .task-timeline-heading {
+  color: #17191d;
+  background: #f8f9fb;
+  border-bottom-color: #e3e7ec;
+}
+:root[data-theme="light"] .task-panel-heading strong,
+:root[data-theme="light"] .task-timeline-heading strong,
+:root[data-theme="light"] .task-list-copy strong,
+:root[data-theme="light"] .task-detail-heading h3,
+:root[data-theme="light"] .timeline-event-head strong,
+:root[data-theme="light"] .task-empty strong,
+:root[data-theme="light"] .task-progress-meta strong { color: #17191d; }
+:root[data-theme="light"] .task-list-copy small,
+:root[data-theme="light"] .task-timeline-heading span,
+:root[data-theme="light"] .timeline-event-head time,
+:root[data-theme="light"] .task-timeline li small,
+:root[data-theme="light"] .task-progress-meta span,
+:root[data-theme="light"] .task-muted,
+:root[data-theme="light"] .task-empty,
+:root[data-theme="light"] .task-empty span,
+:root[data-theme="light"] .task-start-footer > span,
+:root[data-theme="light"] .task-detail-actions > span { color: #596474; }
+:root[data-theme="light"] .task-list-item {
+  background: #fff;
+  border-bottom-color: #edf0f3;
+}
+:root[data-theme="light"] .task-list-item:hover,
+:root[data-theme="light"] .task-list-item.selected { background: #f7f8fa; }
+:root[data-theme="light"] .task-list-item.selected { box-shadow: inset 3px 0 #c92320; }
+:root[data-theme="light"] .task-panel-heading button { color: #596474; }
+:root[data-theme="light"] .task-panel-heading button:hover { color: #17191d; background: #edf0f3; }
+:root[data-theme="light"] .task-status { color: #4b5563; background: #f8f9fb; border-color: #d9dee5; }
+:root[data-theme="light"] .status-executing,
+:root[data-theme="light"] .status-planning,
+:root[data-theme="light"] .status-validating { color: #8a5200; background: #fff7e6; border-color: #f0d69c; }
+:root[data-theme="light"] .status-awaiting_approval { color: #a62a24; background: #fff0ef; border-color: #f0c2bf; }
+:root[data-theme="light"] .status-completed { color: #176b3a; background: #eaf8ef; border-color: #b9e5c8; }
+:root[data-theme="light"] .status-failed,
+:root[data-theme="light"] .status-cancelled { color: #a32320; background: #fff0ef; border-color: #f0c2bf; }
+:root[data-theme="light"] .task-timeline li { border-bottom-color: #edf0f3; }
+:root[data-theme="light"] .timeline-marker { box-shadow: 0 0 0 3px #f0f2f5; }
+:root[data-theme="light"] .task-progress-track { background: #e9edf2; }
+:root[data-theme="light"] .task-result { background: #f0faf3; border-color: #c7e8d1; }
+:root[data-theme="light"] .task-result > strong { color: #176b3a; }
+:root[data-theme="light"] .task-result .formatted-response,
+:root[data-theme="light"] .task-result .formatted-response * { color: #20242a; }
+:root[data-theme="light"] .task-notice { color: #8f2924; background: #fff5f4; border-color: #f0cecb; }
+:root[data-theme="light"] .danger-action { color: #a32320; background: #fff5f4; border-color: #e8c0bd; }
+:root[data-theme="light"] .danger-action:hover:not(:disabled) { background: #ffebe9; }
+
+/* Ensure file, artifact, memory, agent and notes workspaces inherit the same light surfaces. */
+:root[data-theme="light"] .file-browser,
+:root[data-theme="light"] .file-preview,
+:root[data-theme="light"] .file-list,
+:root[data-theme="light"] .file-row,
+:root[data-theme="light"] .file-card,
+:root[data-theme="light"] .artifact-card,
+:root[data-theme="light"] .memory-card,
+:root[data-theme="light"] .note-card,
+:root[data-theme="light"] .agent-config-card,
+:root[data-theme="light"] .notes-editor,
+:root[data-theme="light"] .project-notes-editor {
+  color: #17191d;
+  background-color: #fff;
+  border-color: #d9dee5;
+}
+:root[data-theme="light"] .file-row:hover,
+:root[data-theme="light"] .file-card:hover,
+:root[data-theme="light"] .artifact-card:hover,
+:root[data-theme="light"] .memory-card:hover,
+:root[data-theme="light"] .note-card:hover { background-color: #f8f9fb; }
+:root[data-theme="light"] .file-browser button,
+:root[data-theme="light"] .file-preview button,
+:root[data-theme="light"] .file-row,
+:root[data-theme="light"] .file-card,
+:root[data-theme="light"] .artifact-card,
+:root[data-theme="light"] .memory-card,
+:root[data-theme="light"] .note-card { color: #20242a; }
+:root[data-theme="light"] .file-preview pre,
+:root[data-theme="light"] .file-preview code,
+:root[data-theme="light"] .project-notes-editor { color: #20242a; background: #f8f9fb; }
