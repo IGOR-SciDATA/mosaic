@@ -13,11 +13,13 @@ from app.api.models import router as models_router
 from app.api.tasks import router as tasks_router
 from app.api.tool_calls import router as tool_calls_router
 from app.db.database import init_db
+from app.services.recovery import recover_interrupted_tasks
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    recover_interrupted_tasks()
     yield
 
 

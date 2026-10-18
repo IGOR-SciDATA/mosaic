@@ -9,7 +9,7 @@ from app.models.project_repository import create_project
 from app.models.repository import create_model
 from app.models.task_event_repository import list_task_events
 from app.models.task_repository import get_task
-from app.models.tool_call_repository import list_tool_calls
+from app.models.tool_call_repository import get_tool_call, list_tool_calls
 from app.services.agent import run_agent
 
 
@@ -105,3 +105,74 @@ def test_http_task_approval_artifact_and_event_replay_end_to_end(e2e_environment
     event_names = [event["event_name"] for event in events.json()]
     assert "tool.result_recorded" in event_names
     assert "artifact.verified" in event_names
+
+
+
+def test_http_rejection_keeps_artifact_uncreated_and_task_failed(e2e_environment):
+    client = e2e_environment["client"]
+    conversation = e2e_environment["conversation"]
+    workspace = e2e_environment["workspace"]
+
+    started = client.post(
+        "/tasks/start",
+        json={
+            "conversation_id": conversation.id,
+            "goal": "Create a PDF report named Rejected.pdf",
+            "type": "report",
+        },
+    )
+    assert started.status_code == 202
+    task_id = started.json()["id"]
+    assert client.get(f"/tasks/{task_id}").json()["status"] == "awaiting_approval"
+    call = next(
+        call for call in list_tool_calls(conversation.id)
+        if call.task_id == task_id and call.tool_name == "artifact"
+    )
+
+    rejected = client.post(
+        f"/tasks/{task_id}/tool-calls/{call.id}/decision",
+        json={"decision": "reject"},
+    )
+    assert rejected.status_code == 202
+    assert client.get(f"/tasks/{task_id}").json()["status"] == "failed"
+    assert get_task(task_id).result["error"].startswith("A operação solicitada foi recusada")
+    assert not (workspace / "Rejected.pdf").exists()
+    assert client.get(f"/tasks/{task_id}/artifacts").json()["items"] == []
+    assert any(
+        event.event_name == "tool.rejected"
+        for event in list_task_events(task_id)
+    )
+
+
+def test_http_cancel_preserves_authority_and_cancels_pending_approval(e2e_environment):
+    client = e2e_environment["client"]
+    conversation = e2e_environment["conversation"]
+    workspace = e2e_environment["workspace"]
+
+    started = client.post(
+        "/tasks/start",
+        json={
+            "conversation_id": conversation.id,
+            "goal": "Create a PDF report named Cancelled.pdf",
+            "type": "report",
+        },
+    )
+    assert started.status_code == 202
+    task_id = started.json()["id"]
+    assert client.get(f"/tasks/{task_id}").json()["status"] == "awaiting_approval"
+    call = next(
+        call for call in list_tool_calls(conversation.id)
+        if call.task_id == task_id and call.tool_name == "artifact"
+    )
+
+    cancelled = client.post(f"/tasks/{task_id}/cancel")
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    assert client.get(f"/tasks/{task_id}").json()["status"] == "cancelled"
+    assert get_tool_call(call.id).status == "cancelled"
+    assert not (workspace / "Cancelled.pdf").exists()
+    assert client.get(f"/tasks/{task_id}/artifacts").json()["items"] == []
+    assert any(
+        event.event_name == "tool.cancelled"
+        for event in list_task_events(task_id)
+    )
