@@ -151,6 +151,31 @@ A memória deve existir fora dos pesos do modelo. O contexto deve ser montado pe
 
 ---
 
+# 🧬 O que deve permanecer quando o modelo muda
+
+O Core foi pensado para manter fora do modelo as informações que precisam sobreviver entre conversas e versões de tecnologia:
+
+- **Identidade e princípios:** regras estáveis do sistema, não reconstruídas a cada sessão.
+- **Memória:** fatos declarados, preferências, decisões e experiências com origem identificável.
+- **Estado de projeto:** objetivo, fase atual, tarefas, bloqueios e próximos passos.
+- **Histórico:** conversas, execuções, chamadas de ferramentas e resultados persistidos.
+- **Contexto:** seleção limitada e relevante dessas informações para cada tarefa.
+- **Arquivos e artefatos:** conteúdo de trabalho no workspace, separado da janela de contexto do modelo.
+
+Essas são responsabilidades arquiteturais. A cobertura, a recuperação e a experiência completa de cada capacidade devem ser demonstradas por testes; a lista não significa que toda a visão de longo prazo já esteja pronta.
+
+---
+
+# 🧩 Simplicidade por design
+
+O Mosaic deve evoluir por incrementos verificáveis, não começar como uma plataforma distribuída.
+
+**Não são objetivos do estágio atual:** infraestrutura cloud obrigatória, microsserviços, Kubernetes, banco vetorial obrigatório, roteamento automático de modelos, execução paralela de agentes ou marketplace de plugins.
+
+RAG e embeddings só devem ser ampliados quando a avaliação demonstrar uma lacuna real na recuperação lexical/contextual. Paralelismo só pode ser considerado depois de provar isolamento, concorrência, cancelamento e recuperação. O princípio é simples: **modular por desenho; complexidade somente quando necessária**.
+
+---
+
 # 🚦 Estado real do projeto
 
 A inspeção estática da branch `main` encontrou:
