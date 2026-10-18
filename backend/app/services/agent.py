@@ -337,7 +337,7 @@ def _artifact_format(goal: str) -> str:
 def _goal_requires_web_research(goal: str) -> bool:
     """Detect explicit requests to research public web sources for a task."""
     return bool(re.search(
-        r"\\b(?:research|researching|search the web|search online|look up|find sources|web research|online sources|pesquise|pesquisar|pesquisa|busque fontes|buscar fontes|na internet|pela internet|fontes online)\\b",
+        r"\b(?:research|researching|search the web|search online|look up|find sources|web research|online sources|pesquise|pesquisar|pesquisa|busque fontes|buscar fontes|na internet|pela internet|fontes online)\b",
         goal,
         flags=re.IGNORECASE,
     ))
