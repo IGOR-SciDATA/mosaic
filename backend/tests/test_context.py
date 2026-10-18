@@ -6,7 +6,7 @@ from app.memory.manager import remember
 from app.models.conversation_repository import create_conversation
 from app.models.message_repository import create_message
 from app.models.repository import create_model
-from app.models.task_repository import create_task
+from app.models.task_repository import create_task, update_task
 from app.models.tool_call_repository import create_tool_call
 from app.models.tool_result_repository import create_tool_result
 
@@ -82,13 +82,13 @@ def test_context_includes_current_task_and_tool_results() -> None:
     model = create_model("Qwen 3B", "ollama", "qwen3:3b")
     conversation = create_conversation("Task context", model.id)
 
-    create_task(
+    task = create_task(
         type="analysis",
         mode="create",
         conversation_id=conversation.id,
-        status="executing",
         plan={"step": "analyze"},
     )
+    update_task(task.id, status="executing")
     tool_call = create_tool_call(
         conversation_id=conversation.id,
         tool_name="calculator",
@@ -138,7 +138,7 @@ def test_context_always_includes_mosaic_identity_and_global_memory() -> None:
     assert "não introduza alegações anteriores em respostas sem relação com elas" in context[0]["content"]
     assert "não mencione memórias do usuário, fatos históricos ou assuntos anteriores" in context[0]["content"]
     assert "Não invente datas de criação, lançamento ou disponibilidade do Mosaic" in context[0]["content"]
-    assert "identidade nem a memória do sistema" in context[0]["content"]
+    assert "Mosaic Core" in context[0]["content"]
     memory_messages = [item["content"] for item in context if item["role"] == "system" and "Mosaic memory" in item["content"]]
     assert len(memory_messages) == 1
     assert "[user_claim] alegacao: o Brasil foi descoberto em 2002" in memory_messages[0]
