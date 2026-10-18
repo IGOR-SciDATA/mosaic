@@ -199,3 +199,12 @@ Depois disso, o MASTER deve autorizar **um único próximo incremento**, com cri
 - devolver o relatório de divergências para decisão do MASTER antes de começar a próxima fase funcional.
 
 A Fase 0 estará **dinamicamente validada** somente após as verificações executáveis serem realizadas e documentadas.
+
+
+---
+
+## Adendo — fluxo funcional reportado após a auditoria estática (2026-10-18)
+
+Após a redação desta auditoria, o usuário confirmou a conclusão manual de uma tarefa na versão atual: o agente leu um arquivo `.md`, resumiu seu conteúdo e criou um novo arquivo `.md` com o resumo. O fluxo foi acompanhado até a conclusão e o usuário confirmou o artefato de saída.
+
+Esta informação complementa, mas não invalida, o escopo original de auditoria estática. A auditoria inicial não executou testes automatizados/build/E2E. O fluxo acima é **evidência manual reportada pelo usuário**, e não um teste executado por esta auditoria. Deve ser reproduzido e convertido em teste de regressão pelo implementador.

@@ -456,3 +456,23 @@ O Mosaic terá atingido o objetivo principal quando um usuário puder, em uma co
 - encerrar somente quando critérios de conclusão forem verificados.
 
 A ambição é um Harness robusto e geral. A promessa de capacidade deve crescer conforme cresce a matriz de cenários testados — nunca antes.
+
+
+## 12. Evidência de capacidade já demonstrada — 2026-10-18
+
+O usuário confirmou que, na versão atual do protótipo, concluiu manualmente o seguinte fluxo pelo agente:
+
+1. selecionar/fornecer um arquivo Markdown (`.md`);
+2. o agente ler o arquivo;
+3. resumir seu conteúdo;
+4. criar um novo arquivo Markdown com o resumo;
+5. acompanhar o fluxo até a conclusão e confirmar a criação do artefato.
+
+Esta é uma evidência manual reportada pelo usuário e deve ser registrada como **fluxo funcional demonstrado no protótipo**. Ela demonstra uma primeira cadeia integrada de leitura de arquivo, transformação de conteúdo e escrita de artefato. Não prova, por si só, a robustez de retomada, segurança de todos os caminhos, execução com qualquer arquivo ou suporte a DOCX/PDF/PPTX/XLSX, pesquisa web ou projetos de software.
+
+### Ação de continuidade
+
+- Preservar o fluxo como cenário de regressão prioritário.
+- Quando o ambiente de desenvolvimento estiver disponível, automatizar teste de leitura/resumo/escrita com fixture Markdown e validar o conteúdo do arquivo gerado.
+- Não substituir o resultado manual reportado por uma afirmação de teste automatizado até que o teste seja implementado e executado.
+- Atualizar o estado do README conforme novas evidências forem produzidas.
