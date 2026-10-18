@@ -6,13 +6,7 @@ from app.models.message import Message
 from app.models.message_repository import create_message, list_messages
 from app.memory.manager import save_explicit_memory
 from app.models.repository import get_model
-from app.providers.ollama import OllamaProvider
-
-
-def _get_provider(provider_name: str):
-    if provider_name == "ollama":
-        return OllamaProvider()
-    raise ValueError(f"Unsupported model provider: {provider_name}")
+from app.providers.factory import resolve_model_provider
 
 
 def chat(conversation_id: int, content: str) -> Message:
@@ -44,7 +38,7 @@ def chat(conversation_id: int, content: str) -> Message:
         )
     messages = build_context(conversation_id)
 
-    provider = _get_provider(model.provider)
+    provider = resolve_model_provider(model)
     response = provider.generate(
         messages=messages,
         model_name=model.model_name,
@@ -81,7 +75,7 @@ def stream_chat(conversation_id: int, content: str) -> Iterable[str]:
         create_message(conversation_id, "assistant", response)
         return
     messages = build_context(conversation_id)
-    provider = _get_provider(model.provider)
+    provider = resolve_model_provider(model)
 
     chunks: list[str] = []
     for chunk in provider.stream(
