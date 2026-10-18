@@ -1,4 +1,6 @@
 import ast
+import hashlib
+import io
 from datetime import datetime, timezone
 import json
 from itertools import islice
@@ -15,6 +17,7 @@ import threading
 import time
 from typing import Any, Callable
 from urllib.parse import quote
+from xml.sax.saxutils import escape
 from urllib.request import Request
 
 from app.tools.safe_http import safe_urlopen
@@ -545,6 +548,270 @@ class _SearchResultsParser:
         self.parser.close()
 
 
+class ArtifactTool(Tool):
+    name = "artifact"
+    description = "Create Markdown, PDF, DOCX, XLSX or PPTX artifacts and validate them after reopening."
+    permission_policy = {"approval_required": True, "scope": "active_workspace"}
+    input_schema = {
+        "type": "object",
+        "required": ["format", "path", "content"],
+        "additionalProperties": False,
+        "properties": {
+            "format": {"type": "string", "enum": ["markdown", "pdf", "docx", "xlsx", "pptx"]},
+            "path": {"type": "string", "minLength": 1, "maxLength": 300},
+            "content": {"type": "string", "maxLength": 50_000},
+            "title": {"type": "string", "maxLength": 300},
+        },
+    }
+    _EXTENSIONS = {
+        "markdown": {".md"}, "pdf": {".pdf"}, "docx": {".docx"},
+        "xlsx": {".xlsx"}, "pptx": {".pptx"},
+    }
+
+    def validate(self, arguments: dict[str, Any]) -> None:
+        super().validate(arguments)
+        fmt = arguments["format"]
+        if Path(arguments["path"]).suffix.lower() not in self._EXTENSIONS[fmt]:
+            raise ValueError(f"Artifact path extension does not match format {fmt}")
+        if fmt == "xlsx":
+            self._parse_workbook_content(arguments["content"])
+
+    @staticmethod
+    def _markdown_blocks(content: str) -> list[tuple[str, int, str]]:
+        blocks = []
+        for raw_line in content.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            heading = re.match(r"^(#{1,3})\s+(.+)$", line)
+            if heading:
+                blocks.append(("heading", len(heading.group(1)), heading.group(2).strip()))
+            elif re.match(r"^(?:[-*])\s+", line):
+                blocks.append(("bullet", 0, re.sub(r"^(?:[-*])\s+", "", line, count=1)))
+            elif re.match(r"^\d+[.)]\s+", line):
+                blocks.append(("number", 0, re.sub(r"^\d+[.)]\s+", "", line, count=1)))
+            else:
+                blocks.append(("paragraph", 0, line))
+        return blocks
+
+    @staticmethod
+    def _parse_workbook_content(content: str) -> dict[str, Any]:
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise ValueError("XLSX content must be JSON with a sheets array") from exc
+        sheets = payload.get("sheets") if isinstance(payload, dict) else None
+        if not isinstance(sheets, list) or not 1 <= len(sheets) <= 20:
+            raise ValueError("XLSX content must contain 1 to 20 sheets")
+        names, total_cells = set(), 0
+        for sheet in sheets:
+            if not isinstance(sheet, dict):
+                raise ValueError("Each XLSX sheet must be an object")
+            name, rows = sheet.get("name"), sheet.get("rows")
+            if not isinstance(name, str) or not name.strip() or len(name) > 31:
+                raise ValueError("XLSX sheet names must contain 1 to 31 characters")
+            if any(char in name for char in "[]:*?/\\") or name in names:
+                raise ValueError("XLSX sheet name is invalid or duplicated")
+            names.add(name)
+            if not isinstance(rows, list) or not 1 <= len(rows) <= 1_000:
+                raise ValueError(f"Sheet {name} must contain 1 to 1000 rows")
+            for row in rows:
+                if not isinstance(row, list) or not 1 <= len(row) <= 100:
+                    raise ValueError(f"Rows in sheet {name} must contain 1 to 100 cells")
+                total_cells += len(row)
+                for value in row:
+                    if value is None or isinstance(value, (str, int, float, bool)):
+                        if isinstance(value, str) and len(value) > 10_000:
+                            raise ValueError("XLSX cell text exceeds 10000 characters")
+                    elif not (
+                        isinstance(value, dict) and set(value) == {"formula"}
+                        and isinstance(value["formula"], str)
+                        and value["formula"].startswith("=") and len(value["formula"]) <= 1_000
+                    ):
+                        raise ValueError("XLSX cells must be scalar values or explicit formula objects")
+        if total_cells > 10_000:
+            raise ValueError("XLSX content exceeds 10000 cells")
+        return payload
+
+    def _render_pdf(self, content: str, title: str) -> bytes:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+        buffer = io.BytesIO()
+        document = SimpleDocTemplate(buffer, pagesize=A4, title=title)
+        styles, story = getSampleStyleSheet(), []
+        for kind, level, text in self._markdown_blocks(content):
+            rendered = escape(text)
+            if kind in {"bullet", "number"}:
+                rendered = "&#8226; " + rendered
+            story.extend([Paragraph(rendered, styles[f"Heading{level}"] if kind == "heading" else styles["BodyText"]), Spacer(1, 5)])
+        if not story:
+            raise ValueError("PDF content must not be empty")
+        document.build(story)
+        return buffer.getvalue()
+
+    def _render_docx(self, content: str, title: str) -> bytes:
+        from docx import Document
+
+        document = Document()
+        document.core_properties.title = title
+        for kind, level, text in self._markdown_blocks(content):
+            if kind == "heading":
+                document.add_heading(text, level=level)
+            elif kind == "bullet":
+                document.add_paragraph(text, style="List Bullet")
+            elif kind == "number":
+                document.add_paragraph(text, style="List Number")
+            else:
+                document.add_paragraph(text)
+        if not any(paragraph.text.strip() for paragraph in document.paragraphs):
+            raise ValueError("DOCX content must not be empty")
+        buffer = io.BytesIO()
+        document.save(buffer)
+        return buffer.getvalue()
+
+    def _render_xlsx(self, content: str) -> bytes:
+        from openpyxl import Workbook
+
+        payload = self._parse_workbook_content(content)
+        workbook = Workbook()
+        workbook.remove(workbook.active)
+        for sheet_data in payload["sheets"]:
+            worksheet = workbook.create_sheet(sheet_data["name"])
+            for row in sheet_data["rows"]:
+                output_row = []
+                for value in row:
+                    if isinstance(value, dict) and set(value) == {"formula"}:
+                        output_row.append(value["formula"])
+                    elif isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+                        output_row.append("'" + value)
+                    else:
+                        output_row.append(value)
+                worksheet.append(output_row)
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        return buffer.getvalue()
+
+    def _render_pptx(self, content: str, title: str) -> bytes:
+        from pptx import Presentation
+
+        presentation = Presentation()
+        default_title = title or "Presentation"
+        slides, current_title, current_blocks = [], default_title, []
+        for block in self._markdown_blocks(content):
+            kind, _level, text = block
+            if kind == "heading":
+                if current_blocks or current_title != default_title:
+                    slides.append((current_title, current_blocks))
+                current_title, current_blocks = text, []
+            else:
+                current_blocks.append(block)
+        if current_blocks or not slides:
+            slides.append((current_title, current_blocks))
+        if len(slides) > 100:
+            raise ValueError("PPTX content exceeds 100 slides")
+        for slide_title, blocks in slides:
+            slide = presentation.slides.add_slide(presentation.slide_layouts[1])
+            slide.shapes.title.text = slide_title[:250]
+            frame = slide.placeholders[1].text_frame
+            frame.clear()
+            for index, (kind, _level, text) in enumerate(blocks):
+                paragraph = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
+                paragraph.text = text
+                if kind in {"bullet", "number"}:
+                    paragraph.level = 0
+        buffer = io.BytesIO()
+        presentation.save(buffer)
+        return buffer.getvalue()
+
+    @staticmethod
+    def _expected_marker(content: str) -> str:
+        for line in content.splitlines():
+            line = line.strip()
+            if line:
+                line = re.sub(r"^#{1,3}\s+", "", line)
+                return re.sub(r"^(?:[-*]|\d+[.)])\s+", "", line)[:100]
+        return ""
+
+    def _validate_reopened(self, fmt: str, data: bytes, content: str) -> dict[str, Any]:
+        marker = self._expected_marker(content)
+        if fmt == "markdown":
+            reopened = data.decode("utf-8")
+            if reopened != content or not reopened.strip():
+                raise ValueError("Markdown re-open validation failed")
+            return {"valid": True, "method": "utf8_exact_content", "characters": len(reopened)}
+        if fmt == "pdf":
+            from pypdf import PdfReader
+            document = PdfReader(io.BytesIO(data))
+            extracted = "\n".join(page.extract_text() or "" for page in document.pages)
+            if not document.pages or not extracted.strip() or (marker and marker not in extracted):
+                raise ValueError("PDF re-open validation failed")
+            return {"valid": True, "method": "pypdf_reopen_and_text_check", "pages": len(document.pages)}
+        if fmt == "docx":
+            from docx import Document
+            document = Document(io.BytesIO(data))
+            extracted = "\n".join(paragraph.text for paragraph in document.paragraphs)
+            if not extracted.strip() or (marker and marker not in extracted):
+                raise ValueError("DOCX re-open validation failed")
+            return {"valid": True, "method": "python_docx_reopen_and_text_check", "paragraphs": len(document.paragraphs)}
+        if fmt == "xlsx":
+            from openpyxl import load_workbook
+            workbook = load_workbook(io.BytesIO(data), data_only=False, read_only=True)
+            cells = sum(sheet.max_row * sheet.max_column for sheet in workbook.worksheets)
+            if not workbook.sheetnames or cells <= 0:
+                raise ValueError("XLSX re-open validation failed")
+            return {"valid": True, "method": "openpyxl_reopen_and_structure_check", "sheets": workbook.sheetnames, "cells": cells}
+        if fmt == "pptx":
+            from pptx import Presentation
+            presentation = Presentation(io.BytesIO(data))
+            extracted = "\n".join(shape.text for slide in presentation.slides for shape in slide.shapes if hasattr(shape, "text"))
+            if not presentation.slides or not extracted.strip() or (marker and marker not in extracted):
+                raise ValueError("PPTX re-open validation failed")
+            return {"valid": True, "method": "python_pptx_reopen_and_text_check", "slides": len(presentation.slides)}
+        raise ValueError(f"Unsupported artifact format: {fmt}")
+
+    def execute(self, arguments: dict[str, Any], *, workspace: Path | None = None, cancel_check: Callable[[], bool] | None = None) -> dict[str, Any]:
+        root = _require_workspace(workspace)
+        fmt, relative_path = arguments["format"], arguments["path"]
+        title = arguments.get("title") or Path(relative_path).stem
+        if cancel_check and cancel_check():
+            return {"status": "cancelled", "path": relative_path, "format": fmt}
+        target = _workspace_path(root, relative_path)
+        if target.exists():
+            raise FileExistsError(f"Artifact already exists: {relative_path}")
+        content = arguments["content"]
+        if fmt == "markdown":
+            data = content.encode("utf-8")
+        elif fmt == "pdf":
+            data = self._render_pdf(content, title)
+        elif fmt == "docx":
+            data = self._render_docx(content, title)
+        elif fmt == "xlsx":
+            data = self._render_xlsx(content)
+        else:
+            data = self._render_pptx(content, title)
+        if not data or len(data) > MAX_FILE_BYTES:
+            raise ValueError(f"Generated artifact must be between 1 and {MAX_FILE_BYTES} bytes")
+        self._validate_reopened(fmt, data, content)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target = _workspace_path(root, relative_path)
+        if target.exists():
+            raise FileExistsError(f"Artifact already exists: {relative_path}")
+        with target.open("xb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        reopened = target.read_bytes()
+        validation = self._validate_reopened(fmt, reopened, content)
+        return {
+            "status": "success", "operation": "create",
+            "path": target.relative_to(root).as_posix(), "format": fmt,
+            "bytes": len(reopened), "sha256": hashlib.sha256(reopened).hexdigest(),
+            "validation": validation, "reopened": True,
+        }
+
+
 class WeatherTool(Tool):
     name = "weather"
     description = "Retrieve current weather for a latitude and longitude."
@@ -665,6 +932,6 @@ class WebFetchTool(Tool):
 
 def register_builtin_tools() -> None:
     from app.tools.registry import registry
-    for tool in (FilesystemTool(), TerminalTool(), SearchTool(), WebFetchTool(), CalculatorTool(), WeatherTool()):
+    for tool in (FilesystemTool(), ArtifactTool(), TerminalTool(), SearchTool(), WebFetchTool(), CalculatorTool(), WeatherTool()):
         if registry.get(tool.name) is None:
             registry.register(tool)
