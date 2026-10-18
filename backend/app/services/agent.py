@@ -922,7 +922,7 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
     # Rebuild only the stable project guidance and this Task's persisted observations.
     # No prior user/assistant turns are copied into the model prompt.
     context = _agent_context(
-        build_context(task.conversation_id),
+        build_context(task.conversation_id, query=goal),
         goal,
         plan,
     )
