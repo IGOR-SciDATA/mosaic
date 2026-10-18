@@ -1,12 +1,15 @@
 import asyncio
+import hashlib
 import json
 import time
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
+from app.models.artifact_repository import list_artifacts
 from app.models.conversation_repository import get_conversation
 from app.models.message_repository import create_message
 from app.models.task import Task
@@ -15,7 +18,7 @@ from app.models.task_event_repository import create_task_event, list_task_events
 from app.models.action_repository import list_actions
 from app.permissions import cancel_action
 from app.services.agent import run_agent
-from app.services.tools import approve_tool_call, execute_tool_call
+from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_workspace
 from app.models.tool_call_repository import get_tool_call, list_tool_calls, update_tool_call
 from app.services.agent_decision import create_provider_decider
 from app.services.task_coordinator import run_coordinated_task, validate_coordinator_plan
@@ -204,6 +207,78 @@ def _resume_coordinator_for_child(task_id: int) -> None:
             )
         except Exception:
             return
+
+
+@router.get("/{task_id}/artifacts")
+def list_task_artifacts_endpoint(task_id: int) -> dict[str, Any]:
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    recent_events = list_task_events(task_id, after_id=0, limit=200)
+    items = []
+    for artifact in list_artifacts(task_id):
+        expected_hash = artifact.metadata.get("sha256")
+        tool_call_id = artifact.metadata.get("tool_call_id")
+        tool_call = get_tool_call(tool_call_id) if isinstance(tool_call_id, int) else None
+        current_hash = None
+        reason = "workspace_unavailable"
+        if tool_call is not None:
+            try:
+                root = resolve_tool_workspace(tool_call)
+                candidate = (root / artifact.path).resolve(strict=True)
+                candidate.relative_to(root)
+                if candidate.is_file():
+                    current_hash = hashlib.sha256(candidate.read_bytes()).hexdigest()
+                    reason = "hash_mismatch" if current_hash != expected_hash else "valid"
+                else:
+                    reason = "missing"
+            except (OSError, RuntimeError, ValueError):
+                reason = "missing_or_outside_workspace"
+
+        current_verification = "valid" if reason == "valid" else "invalidated"
+        if current_verification == "invalidated":
+            already_recorded = any(
+                event.event_name == "artifact.evidence_invalidated"
+                and event.metadata.get("artifact_id") == artifact.id
+                and event.metadata.get("expected_sha256") == expected_hash
+                and event.metadata.get("current_sha256") == current_hash
+                and event.metadata.get("reason") == reason
+                for event in recent_events
+            )
+            if not already_recorded:
+                try:
+                    create_task_event(
+                        task_id=task_id,
+                        conversation_id=task.conversation_id,
+                        project_id=task.project_id,
+                        tool_call_id=tool_call_id if isinstance(tool_call_id, int) else None,
+                        component="verification",
+                        event_name="artifact.evidence_invalidated",
+                        message="Previously verified Artifact no longer matches its recorded bytes.",
+                        status="invalidated",
+                        level="warning",
+                        metadata={
+                            "artifact_id": artifact.id,
+                            "path": artifact.path,
+                            "expected_sha256": expected_hash,
+                            "current_sha256": current_hash,
+                            "reason": reason,
+                        },
+                    )
+                except Exception:
+                    pass
+        items.append({
+            "id": artifact.id,
+            "task_id": artifact.task_id,
+            "type": artifact.type,
+            "path": artifact.path,
+            "metadata": artifact.metadata,
+            "created_at": artifact.created_at,
+            "current_verification": current_verification,
+            "current_sha256": current_hash,
+        })
+    return {"items": items}
 
 
 @router.post("/{task_id}/coordinate", response_model=Task)
