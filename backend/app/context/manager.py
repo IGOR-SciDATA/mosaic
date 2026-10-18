@@ -333,6 +333,7 @@ def build_context(
             # Do not leak disabled skill definitions through the raw project-state dump.
             visible_project_state = dict(project.state)
             visible_project_state.pop("agent_skills", None)
+            visible_project_state.pop("agent_library", None)
             if visible_project_state:
                 context.append({
                     "role": "system",

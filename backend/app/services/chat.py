@@ -7,6 +7,7 @@ from app.models.message_repository import create_message, list_messages
 from app.memory.manager import save_explicit_memory
 from app.models.repository import get_model
 from app.providers.factory import resolve_model_provider
+from app.services.agent_library import agent_snapshot_messages, parse_agent_invocation
 
 
 def chat(conversation_id: int, content: str) -> Message:
@@ -18,13 +19,14 @@ def chat(conversation_id: int, content: str) -> Message:
     if model is None:
         raise ValueError("Model not found")
 
+    goal, agent_snapshot = parse_agent_invocation(conversation.project_id, content)
     previous_user = next(
         (message.content for message in reversed(list_messages(conversation_id)) if message.role == "user"),
         None,
     )
-    create_message(conversation_id, "user", content)
+    create_message(conversation_id, "user", goal)
     memory = save_explicit_memory(
-        content,
+        goal,
         # Explicit user memory is global by default, even when saved from a project chat.
         # Project-scoped state is stored separately through project memory operations.
         project_id=None,
@@ -37,6 +39,10 @@ def chat(conversation_id: int, content: str) -> Message:
             f"Memória salva no Mosaic como {memory.type}: {memory.value}",
         )
     messages = build_context(conversation_id)
+    if agent_snapshot is not None:
+        profile_messages = agent_snapshot_messages(agent_snapshot)
+        insertion = len(messages) - 1 if messages and messages[-1].get("role") == "user" else len(messages)
+        messages[insertion:insertion] = profile_messages
 
     provider = resolve_model_provider(model)
     response = provider.generate(
@@ -57,13 +63,14 @@ def stream_chat(conversation_id: int, content: str) -> Iterable[str]:
     if model is None:
         raise ValueError("Model not found")
 
+    goal, agent_snapshot = parse_agent_invocation(conversation.project_id, content)
     previous_user = next(
         (message.content for message in reversed(list_messages(conversation_id)) if message.role == "user"),
         None,
     )
-    create_message(conversation_id, "user", content)
+    create_message(conversation_id, "user", goal)
     memory = save_explicit_memory(
-        content,
+        goal,
         # Explicit user memory is global by default, even when saved from a project chat.
         # Project-scoped state is stored separately through project memory operations.
         project_id=None,
@@ -75,6 +82,10 @@ def stream_chat(conversation_id: int, content: str) -> Iterable[str]:
         create_message(conversation_id, "assistant", response)
         return
     messages = build_context(conversation_id)
+    if agent_snapshot is not None:
+        profile_messages = agent_snapshot_messages(agent_snapshot)
+        insertion = len(messages) - 1 if messages and messages[-1].get("role") == "user" else len(messages)
+        messages[insertion:insertion] = profile_messages
     provider = resolve_model_provider(model)
 
     chunks: list[str] = []

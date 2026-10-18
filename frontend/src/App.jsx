@@ -108,7 +108,7 @@ function TopBar({ onMenu, project, conversation, models, onModelChange, modelSta
 }
 
 function ProjectHeader({ project, tab, setTab }) {
-  const tabs=[["note","Conversa"],["folder","Arquivos"],["check","Tarefas"],["memory","Memória"],["tool","Artefatos"],["settings","Agente"],["note","Notas"]];
+  const tabs=[["note","Conversa"],["folder","Arquivos"],["check","Tarefas"],["memory","Memória"],["tool","Artefatos"],["settings","Agente"],["layers","Biblioteca"],["note","Notas"]];
   return <section className="project-header"><div className="project-identity"><span className="project-mark" aria-hidden="true"><Icon name="layers" size={23}/></span><div><h1>{project?.name || "Mosaic"}</h1><p>{project?.description || "Workspace de desenvolvimento do Mosaic."}</p></div></div><nav className="project-tabs">{tabs.map(([i,l])=><button key={l} className={tab===l?"active":""} onClick={()=>setTab(l)}><Icon name={i} size={16}/><span>{l}</span></button>)}</nav></section>;
 }
 
@@ -661,6 +661,124 @@ function AgentConfigWorkspace({ projectId }) {
   </section>;
 }
 
+function AgentLibraryWorkspace({ projectId }) {
+  const [agents, setAgents] = useState([]);
+  const [selectedSlug, setSelectedSlug] = useState("");
+  const [slug, setSlug] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [skills, setSkills] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function refresh(preferSlug = selectedSlug) {
+    if (!projectId) { setAgents([]); return; }
+    const data = await api.projects.agents(projectId);
+    setAgents(data);
+    if (preferSlug && data.some(agent => agent.slug === preferSlug)) {
+      setSelectedSlug(preferSlug);
+    } else {
+      setSelectedSlug("");
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    if (!projectId) { setAgents([]); resetForm(); return undefined; }
+    setLoading(true); setError("");
+    api.projects.agents(projectId).then(data => {
+      if (!active) return;
+      setAgents(data);
+      setSelectedSlug("");
+      resetForm();
+    }).catch(err => { if (active) setError("Não foi possível carregar a biblioteca: " + err.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [projectId]);
+
+  function resetForm() {
+    setSelectedSlug(""); setSlug(""); setName(""); setDescription(""); setInstructions(""); setSkills([]);
+    setError(""); setNotice("");
+  }
+
+  function editAgent(agent) {
+    setSelectedSlug(agent.slug); setSlug(agent.slug); setName(agent.name);
+    setDescription(agent.description || ""); setInstructions(agent.instructions || "");
+    setSkills(Array.isArray(agent.skills) ? agent.skills.map(skill => ({...skill})) : []);
+    setError(""); setNotice("");
+  }
+
+  function updateSkill(index, patch) {
+    setSkills(items => items.map((skill, i) => i === index ? {...skill, ...patch} : skill));
+  }
+
+  async function save(event) {
+    event.preventDefault();
+    if (!projectId || saving) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      const payload = {
+        name: name.trim(), description, instructions,
+        skills: skills.map(skill => ({name: skill.name, content: skill.content || "", enabled: skill.enabled !== false})),
+      };
+      const saved = selectedSlug
+        ? await api.projects.updateAgent(projectId, selectedSlug, payload)
+        : await api.projects.createAgent(projectId, { ...payload, slug: slug.trim() });
+      await refresh(saved.slug);
+      editAgent(saved);
+      setNotice("Agente salvo. Versão " + saved.version + " · SHA-256 " + saved.sha256.slice(0, 12) + "…");
+    } catch (err) { setError("Não foi possível salvar o agente: " + err.message); }
+    finally { setSaving(false); }
+  }
+
+  async function removeAgent() {
+    if (!projectId || !selectedSlug || saving) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      await api.projects.deleteAgent(projectId, selectedSlug);
+      await refresh("");
+      resetForm();
+      setNotice("Agente removido da biblioteca deste projeto. Snapshots de Tasks existentes permanecem preservados.");
+    } catch (err) { setError("Não foi possível remover o agente: " + err.message); }
+    finally { setSaving(false); }
+  }
+
+  if (!projectId) return <div className="agent-config-workspace"><div className="task-empty"><Icon name="layers" size={25}/><strong>Selecione um projeto</strong><span>A biblioteca de agentes pertence a um projeto.</span></div></div>;
+  return <section className="agent-config-workspace">
+    <div className="task-workspace-heading"><div><span className="eyebrow">BIBLIOTECA DO PROJETO</span><h2>Agentes reutilizáveis</h2><p>Crie perfis com instruções e Skills versionadas. Em qualquer conversa deste projeto, invoque um perfil escrevendo <code>/slug</code> antes da solicitação. A invocação vale apenas para aquela execução.</p></div><span className="task-count">{agents.length} / 30 agentes</span></div>
+    <div className="agent-config-card">
+      <div className="agent-config-card-heading"><div><strong>Perfis cadastrados</strong><span>Isolados por projeto</span></div><button type="button" className="secondary-action" onClick={resetForm}>+ Novo agente</button></div>
+      {loading ? <div className="task-muted">Carregando biblioteca…</div> : !agents.length ? <div className="task-muted">Nenhum agente cadastrado. Crie um perfil para poder invocá-lo com /slug.</div> : <div className="agent-library-list">{agents.map(agent => <button type="button" key={agent.slug} className={selectedSlug === agent.slug ? "project-file-item selected" : "project-file-item"} onClick={() => editAgent(agent)}><Icon name="layers" size={16}/><span><strong>/{agent.slug} — {agent.name}</strong><small>v{agent.version} · {agent.skills.filter(skill => skill.enabled).length} Skills ativas · SHA {agent.sha256.slice(0, 12)}…</small></span></button>)}</div>}
+    </div>
+    <form onSubmit={save}>
+      <section className="agent-config-card">
+        <div className="agent-config-card-heading"><div><strong>{selectedSlug ? "Editar agente" : "Novo agente"}</strong><span>{selectedSlug ? "Alterações criam uma nova versão; Tasks iniciadas não mudam." : "Slug único dentro deste projeto."}</span></div>{selectedSlug && <button type="button" className="text-danger" onClick={removeAgent} disabled={saving}>Remover</button>}</div>
+        <div className="model-config-grid">
+          <label>Slug <input value={slug} onChange={event => setSlug(event.target.value.toLowerCase())} disabled={!!selectedSlug} pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={80} placeholder="ex.: revisor-backend" required /></label>
+          <label>Nome <input value={name} onChange={event => setName(event.target.value)} maxLength={100} placeholder="Revisor de backend" required /></label>
+          <label className="full">Descrição <input value={description} onChange={event => setDescription(event.target.value)} maxLength={500} placeholder="Responsabilidades principais do agente" /></label>
+          <label className="full">Instruções <textarea value={instructions} onChange={event => setInstructions(event.target.value)} rows={7} maxLength={12000} placeholder="Função, procedimentos e critérios de qualidade. Instruções não concedem permissões." required /></label>
+        </div>
+      </section>
+      <section className="agent-config-card">
+        <div className="agent-config-card-heading"><div><strong>Skills do agente</strong><span>Conteúdo com versão e hash individual</span></div><button type="button" className="secondary-action" onClick={() => setSkills(items => items.length < 12 ? [...items, {name:"",content:"",enabled:true}] : items)} disabled={skills.length >= 12}>+ Adicionar skill</button></div>
+        {!skills.length && <div className="task-muted">Nenhuma Skill definida. Os agentes podem funcionar apenas com as instruções principais.</div>}
+        {skills.map((skill,index) => <article className="skill-editor" key={index}>
+          <div className="skill-editor-head"><label className="skill-enabled"><input type="checkbox" checked={skill.enabled !== false} onChange={event => updateSkill(index,{enabled:event.target.checked})}/> Ativa</label><span className="task-count">{skill.version ? "v"+skill.version+" · SHA "+String(skill.sha256 || "").slice(0,10)+"…" : "Nova Skill"}</span><button type="button" className="text-danger" onClick={() => setSkills(items => items.filter((_,i) => i !== index))}>Remover</button></div>
+          <label>Nome da Skill <input value={skill.name} onChange={event => updateSkill(index,{name:event.target.value})} maxLength={80} required placeholder="Ex.: Revisão de segurança"/></label>
+          <label>Instruções da Skill <textarea value={skill.content || ""} onChange={event => updateSkill(index,{content:event.target.value})} maxLength={4000} rows={4} placeholder="Procedimento reutilizável e critérios verificáveis."/></label>
+        </article>)}
+        <div className="agent-editor-footer"><span>Máximo de 12 Skills; 4.000 caracteres por Skill e 12.000 caracteres ativos.</span></div>
+      </section>
+      {error && <div className="task-inline-error" role="alert">{error}</div>}{notice && <div className="agent-config-success" role="status">{notice}</div>}
+      <div className="agent-config-save"><span>Skills são orientação, nunca permissão. O Core mantém o controle de ferramentas e aprovações.</span><button className="primary-action" type="submit" disabled={saving || loading}>{saving ? "Salvando…" : selectedSlug ? "Salvar nova versão" : "Criar agente"}</button></div>
+    </form>
+  </section>;
+}
+
 function ContextRow({icon,label,children}){return <div className="context-row"><span className="context-row-icon"><Icon name={icon} size={18}/></span><span className="context-row-label">{label}</span><div className="context-row-value">{children}</div></div>;}
 function ContextPanel({tab,setTab,project,conversation,model,memoryCount,messageCount,memories}) {
   return <aside className="context-panel"><nav className="context-tabs">{["Contexto","Memória"].map(x=><button key={x} className={tab===x?"active":""} onClick={()=>setTab(x)}>{x}</button>)}</nav>
@@ -803,7 +921,7 @@ export default function App(){
   }
 
   return <div className="app-shell"><Sidebar projects={projects} conversations={projectConversations} activeProjectId={projectId} activeConversationId={homeActive ? null : conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>{setHomeActive(false);setModal("conversation");}} onModelSettings={()=>setModal({type:"models"})} onHelp={()=>setModal({type:"help"})} onHome={()=>{setHomeActive(true);setConversationId(null);setMessages([]);setProjectTab("Conversa");setMobile(false);localStorage.removeItem("mosaic.activeConversationId");}} mobileOpen={mobile} onClose={()=>setMobile(false)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
-    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab} theme={theme} onToggleTheme={()=>setTheme(current=>current==="dark"?"light":"dark")}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null}/> : projectTab === "Agente" ? <AgentConfigWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : homeActive ? <HomeWelcome/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage} onFiles={()=>setProjectTab("Arquivos")} onAgent={()=>setProjectTab("Agente")}/></>}</main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
+    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab} theme={theme} onToggleTheme={()=>setTheme(current=>current==="dark"?"light":"dark")}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null}/> : projectTab === "Agente" ? <AgentConfigWorkspace projectId={project?.id ?? null}/> : projectTab === "Biblioteca" ? <AgentLibraryWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : homeActive ? <HomeWelcome/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage} onFiles={()=>setProjectTab("Arquivos")} onAgent={()=>setProjectTab("Agente")}/></>}</main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
     {modal?.type==="help"&&<Modal title="Ajuda" onClose={()=>setModal(null)}><div className="modal-form"><p className="modal-hint">O Mosaic é uma interface conectada ao Mosaic Core. O estado persistente vem do backend; esta interface apresenta e controla esse estado.</p><div className="help-block"><strong>Começando</strong><span>Crie um projeto, depois crie uma conversa e selecione um modelo registrado no Core.</span></div><div className="help-block"><strong>Modelos</strong><span>Use Configurações para cadastrar e ajustar modelos. O status consulta o Ollama local ou verifica se OPENAI_API_KEY está configurada no backend para a OpenAI.</span></div><div className="help-block"><strong>Contexto</strong><span>O painel lateral mostra projeto, modelo, memória e histórico reais da conversa ativa.</span></div></div></Modal>}
     {modal?.type==="models"&&<Modal title="Modelos e configurações" onClose={()=>!saving&&setModal(null)}><div className="modal-form"><p className="modal-hint">Os valores abaixo são persistidos no Core e enviados ao provider quando a conversa usa este modelo.</p>{models.map(m=><button key={m.id} type="button" className="related-item" onClick={()=>setModal({type:"model",modelId:m.id})}><span className="status-dot"/><span>{m.name}</span><span className="model-provider">{m.provider} · {m.model_name}</span></button>)}<button type="button" className="primary-action" onClick={()=>setModal({type:"new-model"})}>+ Cadastrar modelo</button></div></Modal>}
     {modal?.type==="model"&&(()=>{const m=models.find(x=>x.id===modal.modelId);if(!m)return null;const c=m.configuration||{};return <Modal title={"Configurar "+m.name} onClose={()=>!saving&&setModal(null)}><form className="modal-form modal-wide" onSubmit={saveModel}><input type="hidden" name="id" value={m.id}/><label>Nome<input name="name" defaultValue={m.name} required/></label><div className="model-config-grid"><label>Temperature<input type="number" name="temperature" step="0.1" min="0" max="2" defaultValue={c.temperature ?? 0.7}/></label><label>Top P<input type="number" name="top_p" step="0.05" min="0" max="1" defaultValue={c.top_p ?? 0.9}/></label><label>Top K<input type="number" name="top_k" min="0" max="100" defaultValue={c.top_k ?? 40}/></label><label>Contexto<input type="number" name="num_ctx" min="256" max="131072" defaultValue={c.num_ctx ?? 4096}/></label><label>Máx. tokens<input type="number" name="num_predict" min="-1" max="131072" defaultValue={c.num_predict ?? -1}/></label><label className="model-config-toggle">Ativo<input type="checkbox" name="enabled" defaultChecked={m.enabled}/></label></div><p className="model-config-status">Provider: {m.provider} · Identificador: {m.model_name}</p><div className="modal-actions"><button type="button" onClick={()=>setModal({type:"models"})}>Voltar</button><button className="primary-action" disabled={saving}>{saving?"Salvando…":"Salvar configurações"}</button></div></form></Modal>})()}
