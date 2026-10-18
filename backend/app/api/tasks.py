@@ -439,7 +439,8 @@ def run_task_endpoint(task_id: int, background_tasks: BackgroundTasks) -> Task:
         raise HTTPException(status_code=404, detail="Task not found")
     if task.mode != "agent":
         raise HTTPException(status_code=409, detail="Task must use agent mode")
-    if task.conversation_id is None or get_conversation(task.conversation_id) is None:
+    conversation = get_conversation(task.conversation_id) if task.conversation_id is not None else None
+    if conversation is None:
         raise HTTPException(status_code=400, detail="Agent Task requires a valid conversation")
     if task.status != "pending":
         raise HTTPException(status_code=409, detail=f"Task cannot start from status: {task.status}")
