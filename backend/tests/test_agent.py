@@ -459,6 +459,81 @@ def test_agent_completes_file_creation_goal_only_after_artifact_is_verified(tmp_
     assert (workspace / "Resumo_Documento.md").is_file()
 
 
+
+def test_markdown_summary_flow_reads_source_creates_and_reopens_verified_artifact(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    source_content = (
+        "# Plano do projeto\n\n"
+        "## Objetivo\nConstruir um protótipo funcional.\n\n"
+        "## Etapas\n- Implementar a API.\n- Validar a interface.\n"
+    )
+    (workspace / "Documento.md").write_text(source_content, encoding="utf-8")
+    project = create_project("Markdown regression", str(workspace))
+    goal = "leia Documento.md e crie um novo arquivo Resumo.md com um resumo"
+    task = _task(plan={"goal": goal}, project_id=project.id)
+    observed_contexts = []
+
+    summary = (
+        "# Resumo do projeto\n\n"
+        "## Objetivo\nConstruir um protótipo funcional.\n\n"
+        "## Etapas principais\n"
+        "- Implementar e validar a API.\n"
+        "- Validar a interface antes de concluir.\n"
+    )
+
+    def decide(context):
+        observed_contexts.append(context)
+        evidence = "\n".join(
+            item["content"] for item in context if item.get("role") == "system"
+        )
+        assert "Construir um protótipo funcional." in evidence
+        assert "Implementar a API." in evidence
+        assert context[-1] == {"role": "user", "content": goal}
+        return {"type": "final", "content": summary}
+
+    pending = run_agent(task.id, decide)
+    assert pending["status"] == "awaiting_approval"
+    assert len(observed_contexts) == 1
+
+    calls = [call for call in list_tool_calls(task.conversation_id) if call.task_id == task.id]
+    source_reads = [
+        call for call in calls
+        if call.tool_name == "filesystem" and call.arguments.get("operation") == "read"
+        and call.arguments.get("path") == "Documento.md"
+    ]
+    output_call = next(
+        call for call in calls
+        if call.tool_name == "filesystem"
+        and call.arguments.get("operation") == "create"
+        and call.arguments.get("path") == "Resumo.md"
+    )
+    assert source_reads
+    assert output_call.status == "pending"
+    assert output_call.arguments["content"].startswith("# Resumo do projeto")
+    assert "## Objetivo" in output_call.arguments["content"]
+    assert "## Etapas principais" in output_call.arguments["content"]
+
+    write_result = execute_tool_call(approve_tool_call(output_call))
+    assert write_result.status == "completed"
+    update_task(task.id, status="executing")
+    completed = run_agent(
+        task.id,
+        lambda context: pytest.fail("A verified Markdown artifact must complete without another model call"),
+    )
+
+    artifact_path = workspace / "Resumo.md"
+    assert completed["status"] == "completed"
+    assert completed["artifact"]["path"] == "Resumo.md"
+    assert artifact_path.is_file()
+    reopened = artifact_path.read_text(encoding="utf-8")
+    assert reopened == output_call.arguments["content"]
+    assert reopened.startswith("# Resumo do projeto")
+    assert "Construir um protótipo funcional." in reopened
+    assert "## Etapas principais" in reopened
+    assert len(reopened.encode("utf-8")) == completed["artifact"]["bytes"]
+    assert any(result.status == "completed" for result in list_tool_results(output_call.id))
+
 def test_tool_observation_is_bounded_and_marks_truncation():
     result = SimpleNamespace(status="completed", data={"content": "x" * 20_000}, error=None)
     observation = _tool_context(1, result)
