@@ -144,6 +144,7 @@ class OpenAIProvider(ModelProvider):
             "model": model_name.strip(),
             "input": input_messages,
             "stream": stream,
+            "store": False,
         }
         max_tokens = configuration.get("max_output_tokens", configuration.get("num_predict"))
         if max_tokens is not None:
