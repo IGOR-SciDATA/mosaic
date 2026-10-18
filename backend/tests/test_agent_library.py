@@ -138,3 +138,65 @@ def test_agent_library_is_stored_in_project_state_without_schema_changes():
     create_project_agent(project.id, _payload())
     stored = get_project(project.id)
     assert stored.state["agent_library"]["backend-reviewer"]["version"] == 1
+
+
+def test_task_start_persists_snapshot_and_strips_command_from_goal():
+    from fastapi import BackgroundTasks
+    from app.api.tasks import TaskStart, start_agent_task_endpoint
+    from app.models.task_repository import get_task
+
+    project = _project()
+    model = create_model("Test", "ollama", "test:model")
+    conversation = create_conversation("Task conversation", model.id, project_id=project.id)
+    create_project_agent(project.id, _payload())
+    started = start_agent_task_endpoint(
+        TaskStart(conversation_id=conversation.id, goal="/backend-reviewer Inspect this API"),
+        BackgroundTasks(),
+    )
+    task = get_task(started.id)
+    assert task.plan["goal"] == "Inspect this API"
+    assert task.plan["agent_library_snapshot"]["slug"] == "backend-reviewer"
+    assert validate_agent_snapshot(task.plan["agent_library_snapshot"])
+
+
+def test_task_start_rejects_unknown_agent_before_persisting_goal():
+    from fastapi import BackgroundTasks, HTTPException
+    from app.api.tasks import TaskStart, start_agent_task_endpoint
+    from app.models.message_repository import list_messages
+
+    project = _project()
+    model = create_model("Test", "ollama", "test:model")
+    conversation = create_conversation("Task conversation", model.id, project_id=project.id)
+    with pytest.raises(HTTPException) as exc:
+        start_agent_task_endpoint(
+            TaskStart(conversation_id=conversation.id, goal="/missing Do something"),
+            BackgroundTasks(),
+        )
+    assert exc.value.status_code == 422
+    assert list_messages(conversation.id) == []
+
+
+def test_chat_injects_agent_profile_for_current_execution(monkeypatch):
+    import app.services.chat as chat_service
+    project = _project()
+    model = create_model("Test", "ollama", "test:model")
+    conversation = create_conversation("Chat", model.id, project_id=project.id)
+    create_project_agent(project.id, _payload())
+    observed = {}
+
+    class Provider:
+        def generate(self, messages, model_name, configuration):
+            observed["messages"] = messages
+            return "Done"
+
+    monkeypatch.setattr(chat_service, "build_context", lambda conversation_id: [
+        {"role": "system", "content": "Mosaic identity"},
+        {"role": "user", "content": "Inspect this endpoint"},
+    ])
+    monkeypatch.setattr(chat_service, "resolve_model_provider", lambda selected_model: Provider())
+    response = chat_service.chat(conversation.id, "/backend-reviewer Inspect this endpoint")
+    flattened = "\n".join(message["content"] for message in observed["messages"])
+    assert response.content == "Done"
+    assert "Backend Reviewer" in flattened
+    assert "Check status codes and schemas." in flattened
+    assert observed["messages"][-1] == {"role": "user", "content": "Inspect this endpoint"}
