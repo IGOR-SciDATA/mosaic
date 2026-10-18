@@ -109,7 +109,7 @@ Esse é um marco concreto: o protótipo já demonstrou uma tarefa de leitura de 
 - Pesquisa web com fontes lidas e citações rastreáveis de ponta a ponta.
 - Geração e validação integrada de PDF, DOCX, PPTX, XLSX e projetos de software.
 - Coordenação sequencial de especialidades, integração entre subtarefas e QA real.
-- Suíte backend completa e build frontend executados no GitHub Actions na branch de validação; smoke test com Ollama e validação ponta a ponta com provider real ainda pendentes.
+- Suíte backend completa e build frontend aprovados no GitHub Actions para o commit de código integrado `331f3a8`; smoke test com Ollama real e validação ponta a ponta com provider real continuam pendentes.
 
 **Estados de evidência usados neste README:**
 - **Planejado:** requisito definido, sem implementação comprovada.
@@ -118,7 +118,7 @@ Esse é um marco concreto: o protótipo já demonstrou uma tarefa de leitura de 
 - **Validado ponta a ponta:** jornada real foi executada e os critérios de aceite foram verificados.
 - **Demonstrado manualmente:** evidência reportada pelo usuário, ainda sem equivalência automática presumida.
 
-**Atualização de validação (18/10/2026):** o GitHub Actions executou a suíte backend completa — **197 testes passaram, 1 aviso** — e o build frontend passou no commit de validação `4dac3ad` da branch `codex/phase0-full-validation-ci`. A branch ainda não foi integrada à `main`; não houve smoke test com Ollama nem jornada E2E com provider real. A demonstração manual do fluxo Markdown continua separada da regressão automatizada, que está em validação na [PR #63](https://github.com/IGOR-SciDATA/mosaic/pull/63). Ver [auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md).
+**Atualização de validação (18/10/2026):** a suíte backend completa passou com **226 testes aprovados e 1 aviso**, e o build frontend passou no [GitHub Actions #39113375125](https://github.com/IGOR-SciDATA/mosaic/actions/runs/39113375125), no commit de código integrado `331f3a8b713031fc5b042b4e9a009bc921f8f97b`. O `main` atual (`0725859180112a2c0dbb8618b3e0adc23642bdaf`) inclui depois a PR documental #75; não há execução de CI diretamente associada a esse commit. A regressão automatizada Markdown da [PR #63](https://github.com/IGOR-SciDATA/mosaic/pull/63) já está mesclada e coberta pela suíte. Smoke test com Ollama real, reinício real de processo e validações E2E com provider real continuam pendentes. Ver [auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) e [matriz E2E](docs/MOSAIC_E2E_VALIDATION_MATRIX_v1.0.md).
 
 ---
 
@@ -228,12 +228,12 @@ O roadmap é atualizado conforme o código muda e as evidências são revisadas.
 
 | Marco | Estado no baseline | Objetivo / saída verificável |
 |---|---|---|
-| Fundação do Core | **Presente no código; validação dinâmica pendente** | Persistência, conversas, projetos, memórias, modelos e tarefas coerentes |
-| Agent, ferramentas e autoverificação | **Fluxo Markdown → resumo → novo Markdown demonstrado manualmente; regressão automatizada e observabilidade a validar** | Registrar eventos operacionais, verificar artefatos com evidências, corrigir falhas com limites e preservar esse fluxo como regressão |
-| Segurança e estado | **Trabalho necessário; revisar branch/PR e executar testes** | Workspace confinado, terminal controlado, validação estrita, políticas e transições consistentes |
-| Contratos e baseline | **Documentação consolidada; baseline dinâmico pendente** | Contratos canônicos, schema reconciliado, testes/build/smoke/E2E com evidências |
-| Harness retomável | **Objetivo de implementação** | Aprovação, eventos, cancelamento, reconexão e retomada sem duplicar efeitos |
-| Contexto e conhecimento | **Base parcial; evolução planejada** | Contexto limitado por escopo, recuperação de arquivos e proveniência das fontes |
+| Fundação do Core | **Testado no CI; provider real pendente** | Persistência, conversas, projetos, memórias, modelos e tarefas coerentes |
+| Agent, ferramentas e autoverificação | **Regressão Markdown e validação de artefatos testadas; E2E com provider real pendente** | Registrar eventos operacionais, verificar artefatos com evidências, corrigir falhas com limites e preservar regressões |
+| Segurança e estado | **Testado no CI; crash/restart real pendente** | Workspace confinado, terminal controlado, validação estrita, políticas e transições consistentes |
+| Contratos e baseline | **Schema reconciliado; suíte backend e build frontend aprovados no commit de código validado** | Contratos canônicos, schema compatível, testes/build/smoke/E2E com evidências explícitas |
+| Harness retomável | **Aprovação, rejeição, cancelamento e recuperação determinística testados; reinício real pendente** | Eventos consultáveis e retomada sem duplicar efeitos |
+| Contexto e conhecimento | **Isolamento testado; continuidade e proveniência completa ainda parciais** | Contexto limitado por escopo, recuperação de arquivos e proveniência das fontes |
 | Skills e especialidades | **Objetivo de implementação** | Instruções versionadas por conversa/tarefa e perfis especializados coordenados |
 | Ferramentas de artefatos | **Objetivo de implementação** | Markdown, DOCX, PDF, XLSX e PPTX criados e validados no fluxo real |
 | Pesquisa com fontes | **Objetivo de implementação** | Busca e leitura seguras, referências verificáveis, fontes persistidas e citadas |
@@ -245,8 +245,8 @@ O roadmap é atualizado conforme o código muda e as evidências são revisadas.
 ## Próximos objetivos de maior prioridade
 
 1. **Consolidar a verdade documental:** manter contratos, notas de baseline e a sequência Mestre atual alinhados; a sequência vigente está em [MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md](docs/MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md).
-2. **Preservar e automatizar o fluxo já demonstrado:** a suíte backend completa e o build frontend já passaram na branch de validação; a regressão determinística de leitura → resumo → escrita aprovada → releitura está em revisão na [PR #63](https://github.com/IGOR-SciDATA/mosaic/pull/63). O smoke test com provider real permanece pendente.
-3. **Fechar segurança e transições:** autorização no backend, limites de execução e estados consistentes.
+2. **Executar validação com provider real:** a regressão determinística de leitura → resumo → escrita aprovada → releitura já está mesclada e coberta no CI; falta smoke test com Ollama/modelo selecionado e comprovação de uma jornada real completa.
+3. **Fechar os gaps E2E restantes:** reinício real de processo, pesquisa com relatório e URLs reabertas, construção de sistema web completo e validação visual acessível em navegador.
 4. **Provar o Harness com o modelo da conversa:** ferramenta → resultado → observação → continuação/conclusão.
 5. **Construir persistência e retomada:** eventos, aprovação, cancelamento e recuperação da mesma Task.
 6. **Adicionar capacidades completas por família:** pesquisa com fontes, documentos, planilhas, apresentações e projetos de software, sempre com validadores.
