@@ -2410,3 +2410,10 @@ body { overflow: hidden; }
 :root[data-theme="light"] .project-identity .mosaic-mark svg {
   display: block;
 }
+
+
+/* Sidebar brand mark: deep, luminous green accent. */
+:root[data-theme="light"] .brand-row > .mosaic-mark {
+  color: #16845b;
+  filter: drop-shadow(0 1px 4px rgba(22, 132, 91, 0.28));
+}
