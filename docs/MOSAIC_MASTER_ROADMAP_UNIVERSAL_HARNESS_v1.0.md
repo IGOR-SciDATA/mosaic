@@ -6,6 +6,8 @@
 **Repositório:** `IGOR-SciDATA/mosaic`  
 **Objetivo:** conduzir o Mosaic, incrementalmente, de seu Core atual a um Harness confiável, extensível e capaz de concluir tarefas variadas — inspirado nos princípios operacionais observáveis de ferramentas como Claude Code, sem copiar sua implementação proprietária.
 
+> **Sequência vigente (2026-10-18):** a ordem operacional atual é definida por [MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md](MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md). Este roadmap preserva requisitos e detalhes técnicos, mas sua numeração de fases anterior não prevalece sobre a sequência mais recente aprovada pelo MASTER.
+
 ---
 
 ## 1. Decisões arquiteturais fixas
