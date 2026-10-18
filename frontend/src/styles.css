@@ -2710,3 +2710,67 @@ body { overflow: hidden; }
  .agent-file-title span { display:none; }
  .agent-code-editor,.agent-code-editor textarea,.agent-markdown-preview { min-height:300px; }
 }
+
+
+/* Regression fix: ensure the IDE tab state exists and light mode stays readable. */
+:root[data-theme="light"] .assistant-copy,
+:root[data-theme="light"] .assistant-copy > p,
+:root[data-theme="light"] .formatted-response,
+:root[data-theme="light"] .formatted-response p,
+:root[data-theme="light"] .formatted-response li,
+:root[data-theme="light"] .formatted-response blockquote,
+:root[data-theme="light"] .formatted-response td,
+:root[data-theme="light"] .formatted-response th,
+:root[data-theme="light"] .message-bubble,
+:root[data-theme="light"] .message-bubble p,
+:root[data-theme="light"] .model-response-panel > p,
+:root[data-theme="light"] .assistant-empty > p {
+  color: #111827;
+}
+:root[data-theme="light"] .formatted-response h1,
+:root[data-theme="light"] .formatted-response h2,
+:root[data-theme="light"] .formatted-response h3,
+:root[data-theme="light"] .formatted-response h4,
+:root[data-theme="light"] .formatted-response strong,
+:root[data-theme="light"] .formatted-response em {
+  color: #101913;
+}
+:root[data-theme="light"] .formatted-response li::marker,
+:root[data-theme="light"] .assistant-empty {
+  border-left-color: rgba(22,131,74,.55);
+}
+:root[data-theme="light"] .formatted-response code {
+  color: #116b3b;
+  background: #edf7f0;
+  border-color: #d5e9db;
+}
+:root[data-theme="light"] .model-response-panel {
+  background: #f3faf5;
+  border-color: #d1e7d7;
+}
+:root[data-theme="light"] .project-identity .project-mark {
+  color: #16834a;
+  background: #eaf6ee;
+  border-color: #cfe6d5;
+}
+:root[data-theme="light"] .user-message .message-bubble {
+  color: #17231b;
+  background: #edf7f0;
+  border-color: #d5e9db;
+}
+:root[data-theme="light"] .formatted-response pre {
+  color: #f3f4f6;
+  background: #17211a;
+  border-color: #d3e1d6;
+}
+:root[data-theme="light"] .formatted-response pre code { color: inherit; background: transparent; border: 0; }
+:root[data-theme="light"] .agent-config-workspace,
+:root[data-theme="light"] .agent-config-card { color: #111827; }
+:root[data-theme="light"] .agent-config-card-heading strong,
+:root[data-theme="light"] .agent-config-card-heading span,
+:root[data-theme="light"] .agent-editor-footer,
+:root[data-theme="light"] .task-muted,
+:root[data-theme="light"] .agent-config-save > span { color: #27352b; }
+:root[data-theme="light"] .project-tabs button.active { color: #126c3c; }
+:root[data-theme="light"] .project-identity .project-mark,
+:root[data-theme="light"] .agent-file-title svg { color: #16834a; }
