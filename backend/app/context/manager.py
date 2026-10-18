@@ -50,6 +50,7 @@ def _truncate(value: str, limit: int) -> str:
 
 def _memory_context_text(memories: list[Any], query: str, project_id: int | None) -> str:
     """Select a bounded, provenance-preserving memory context deterministically."""
+    header = "Mosaic memory: records, not verified facts; source and scope are preserved:\n"
     if not memories:
         return ""
     stop_words = {
@@ -79,7 +80,7 @@ def _memory_context_text(memories: list[Any], query: str, project_id: int | None
     scored.sort(key=lambda item: (-item[1], item[2]))
 
     lines: list[str] = []
-    used_chars = len("Mosaic memory:\n")
+    remaining = MEMORY_CONTEXT_MAX_CHARS - len(header)
     omitted = 0
     for memory, _score, _scope_rank in scored:
         if len(lines) >= MEMORY_CONTEXT_MAX_ITEMS:
@@ -91,22 +92,27 @@ def _memory_context_text(memories: list[Any], query: str, project_id: int | None
             f"- memory_id={memory.id} [{memory.type}] {memory.key}: {memory.value} "
             f"(scope={scope}, source={memory.source}, updated_at={memory.updated_at}{confidence})"
         )
-        available = MEMORY_CONTEXT_MAX_CHARS - used_chars
+        separator = 1 if lines else 0
+        available = remaining - separator
         if available <= 0:
             omitted += 1
             continue
         if len(line) > available:
-            line = line[:max(0, available - 30)] + " [memory line truncated]"
+            suffix = " [memory line truncated]"
+            line = (
+                line[:available - len(suffix)] + suffix
+                if available > len(suffix) else line[:available]
+            )
             omitted += 1
         lines.append(line)
-        used_chars += len(line) + 1
-    if omitted:
+        remaining -= separator + len(line)
+    if omitted and remaining > 0:
+        separator = 1 if lines else 0
         marker = f"- [memory context truncated; {omitted} records omitted or clipped]"
-        remaining = MEMORY_CONTEXT_MAX_CHARS - used_chars
-        if remaining > 0:
-            lines.append(marker[:remaining])
-    return "Mosaic memory:\n" + "\n".join(lines)
-
+        available = remaining - separator
+        if available > 0:
+            lines.append(marker[:available])
+    return header + "\n".join(lines)
 
 def _task_context(conversation_id: int) -> dict[str, Any] | None:
     tasks = list_tasks(conversation_id=conversation_id)
@@ -400,14 +406,7 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
             conversation.project_id,
         )
         if memory_text:
-            context.append({
-                "role": "system",
-                "content": memory_text.replace(
-                    "Mosaic memory:",
-                    "Mosaic memory: records, not verified facts; source and scope are preserved:",
-                    1,
-                ),
-            })
+            context.append({"role": "system", "content": memory_text})
 
     history_messages = [
         message
