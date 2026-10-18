@@ -12,9 +12,11 @@ from app.models.message_repository import create_message
 from app.models.task import Task
 from app.models.task_event import TaskEvent
 from app.models.task_event_repository import list_task_events
+from app.models.action_repository import list_actions
+from app.permissions import cancel_action
 from app.services.agent import run_agent
 from app.services.tools import approve_tool_call, execute_tool_call
-from app.models.tool_call_repository import get_tool_call, update_tool_call
+from app.models.tool_call_repository import get_tool_call, list_tool_calls, update_tool_call
 from app.services.agent_decision import create_provider_decider
 from app.models.task_repository import (
     create_task,
@@ -152,8 +154,11 @@ def update_task_endpoint(task_id: int, payload: TaskUpdate) -> Task:
 
 @router.delete("/{task_id}")
 def delete_task_endpoint(task_id: int) -> dict[str, bool]:
-    if not delete_task(task_id):
-        raise HTTPException(status_code=404, detail="Task not found")
+    try:
+        if not delete_task(task_id):
+            raise HTTPException(status_code=404, detail="Task not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"deleted": True}
 
 
@@ -169,6 +174,25 @@ def cancel_task_endpoint(task_id: int) -> Task:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if cancelled is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    # A cancelled Task must not leave unstarted child work available for later execution.
+    # In-flight work is deliberately not force-transitioned here: its executor owns the
+    # outcome of an operation that may already have produced side effects.
+    if cancelled.conversation_id is not None:
+        for call in list_tool_calls(cancelled.conversation_id):
+            if call.task_id == task_id and call.status in {"pending", "approved"}:
+                try:
+                    update_tool_call(call.id, status="cancelled")
+                except ValueError:
+                    # A concurrent executor/decision may have advanced the call already.
+                    pass
+    for action in list_actions(task_id):
+        if action.status in {"pending", "approved"}:
+            try:
+                cancel_action(action)
+            except ValueError:
+                # Preserve the authoritative result of a concurrent state transition.
+                pass
     return cancelled
 
 

@@ -122,6 +122,8 @@ def test_task_update_and_delete() -> None:
     assert updated.result == {"artifact": "draft.md"}
     assert updated.updated_at >= task.updated_at
 
+    update_task(task.id, status="executing")
+    update_task(task.id, status="completed")
     assert delete_task(task.id) is True
     assert get_task(task.id) is None
 

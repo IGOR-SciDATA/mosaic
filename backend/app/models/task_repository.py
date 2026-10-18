@@ -248,10 +248,29 @@ def update_task(
 
 
 def delete_task(task_id: int) -> bool:
+    """Delete only terminal Tasks so active execution cannot lose its state record."""
+    terminal_statuses = {"completed", "failed", "cancelled"}
     with get_connection() as connection:
-        cursor = connection.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        row = connection.execute(
+            "SELECT status FROM tasks WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        if row["status"] not in terminal_statuses:
+            raise ValueError("Only terminal Tasks can be deleted; cancel or finish the Task first")
+
+        cursor = connection.execute(
+            """
+            DELETE FROM tasks
+            WHERE id = ? AND status IN ('completed', 'failed', 'cancelled')
+            """,
+            (task_id,),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("Task state changed while deleting; retry after reloading the Task")
         connection.commit()
-        return cursor.rowcount > 0
+        return True
 
 
 def _row_to_task(row) -> Task:
