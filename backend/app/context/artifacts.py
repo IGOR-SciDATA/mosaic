@@ -101,6 +101,7 @@ def list_workspace_artifacts(
             })
 
     walk(root, 1)
+    entries.sort(key=lambda entry: entry["path"].casefold())
     return {
         "workspace": ".",
         "entries": entries,
