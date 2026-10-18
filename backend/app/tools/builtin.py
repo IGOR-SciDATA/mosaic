@@ -558,13 +558,28 @@ class WeatherTool(Tool):
     permission_policy = {"approval_required": True, "scope": "public_web"}
 
     def execute(self, arguments: dict[str, Any], *, workspace: Path | None = None, cancel_check: Callable[[], bool] | None = None) -> Any:
+        retrieved_at = datetime.now(timezone.utc).isoformat()
         url = (
             "https://api.open-meteo.com/v1/forecast"
             f"?latitude={arguments['latitude']}&longitude={arguments['longitude']}"
             "&current=temperature_2m,relative_humidity_2m,wind_speed_10m"
         )
         with safe_urlopen(url, timeout=10) as response:
-            return json.loads(response.read(500_001).decode("utf-8"))
+            payload = json.loads(response.read(500_001).decode("utf-8"))
+        if not isinstance(payload, dict) or payload.get("error") or not isinstance(payload.get("current"), dict):
+            return {
+                "status": "provider_error",
+                "provider": "Open-Meteo",
+                "retrieved_at": retrieved_at,
+                "error": str(payload.get("reason", "Weather response did not contain current conditions"))[:500]
+                if isinstance(payload, dict) else "Invalid weather response",
+            }
+        return {
+            "status": "success",
+            "provider": "Open-Meteo",
+            "retrieved_at": retrieved_at,
+            "data": payload,
+        }
 
 
 

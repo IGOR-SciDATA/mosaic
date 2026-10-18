@@ -186,7 +186,9 @@ def execute_tool_call(tool_call: ToolCall) -> ToolResult:
         _record_tool_result_event(executing, result, started_at, error_type=type(exc).__name__)
         return result
 
-    if isinstance(data, dict) and data.get("status") in {"timeout", "cancelled", "launch_failure"}:
+    if isinstance(data, dict) and data.get("status") in {
+        "timeout", "cancelled", "launch_failure", "provider_error", "error", "failed"
+    }:
         call_status = "cancelled" if data["status"] == "cancelled" else "failed"
         update_tool_call(executing.id, status=call_status)
         result = create_tool_result(
