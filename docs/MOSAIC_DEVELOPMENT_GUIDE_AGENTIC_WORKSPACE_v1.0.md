@@ -4,7 +4,7 @@
 **Data:** 2026-10-17  
 **Repositório:** IGOR-SciDATA/mosaic  
 **Snapshot da auditoria inicial:** `main` em `35570385743f4b4bdb0dec8acddd6459184fea5b` (referência histórica; conferir a branch atual antes de implementar)  
-**Documento complementar:** `MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md`
+**Documento complementar:** `MOSAIC_AGENT_PROFILES_AND_ARTIFACT_TOOLS_ROADMAP_v1.0.md` (proposta subordinada ao Roadmap Mestre)
 
 ---
 
@@ -248,21 +248,19 @@ Uma capacidade só pode ser considerada concluída quando:
 - testes relevantes passam;
 - limitações e testes não executados são explicitados.
 
-## 13. Sequência de desenvolvimento
+## 13. Ordem normativa e uso deste guia
 
-A sequência normativa é a do **Roadmap Mestre do Harness Universal**: `docs/MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md`. Este guia descreve práticas de implementação e critérios técnicos; não cria uma sequência de fases concorrente.
+A **única sequência normativa de implementação** é a do [Roadmap Mestre do Harness Universal](MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md). Este guia descreve práticas e critérios para implementar as fases; não cria uma ordem paralela nem autoriza saltar fases.
 
-Resumo da ordem vigente:
+A auditoria estática de 2026-10-18 está registrada em [MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md](MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md). Ela identificou componentes já presentes no código e lacunas de contrato/schema, mas não executou testes, build ou smoke test. Portanto, módulos existentes não devem ser tratados automaticamente como fases aprovadas.
 
-1. **Fase 0 — Baseline:** auditar a branch atual, contratos, testes e fluxos reais.
-2. **Fases 1–3 — Confiabilidade:** segurança e estados, integração do Harness com o modelo escolhido na conversa, eventos e retomada.
-3. **Fases 4–6 — Agent e contexto:** perfil/instruções/Skills persistentes com snapshots, coordenador de subtarefas e RAGNES.
-4. **Fases 7–9 — Capacidades e integração:** ferramentas seguras, artefatos/validadores e experiência de execução.
-5. **Fase 10 — Redesign do frontend:** auditoria da UX, redução de ruído e ampliação da área de chat.
-6. **Fases 11–12 — Validação:** cenários completos por tipo de tarefa, avaliação, resiliência e autonomia limitada.
-7. **Fase 13 — Paralelismo:** somente após os pré-requisitos de isolamento, concorrência, cancelamento e recuperação.
+Antes de qualquer incremento funcional:
+1. Canonizar o MVP Implementation Contract no repositório e corrigir suas referências.
+2. Obter decisão do MASTER para a divergência de schema envolvendo `Artifact`, `Setting` e `task_events`.
+3. Executar a validação dinâmica pendente da Fase 0 e registrar resultados.
+4. Só então implementar a próxima fase explicitamente autorizada no Roadmap Mestre, em um PR limitado.
 
-Não iniciar todas as fases simultaneamente. Cada fase deve produzir uma melhoria isolada, testada e revisável, em PR próprio, com validação do MASTER antes de avançar.
+O documento complementar de perfis/artefatos é uma proposta de requisitos, não uma autorização para implementar todos os formatos ou coordenação de agentes antes das fases correspondentes. A sequência antiga abaixo foi removida porque competia com o Roadmap Mestre.
 
 ## 14. Decisões que exigem aprovação
 
