@@ -475,6 +475,7 @@ function ProjectMemoryWorkspace({ projectId }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [instructionsMode, setInstructionsMode] = useState("edit");
 
   async function refresh() {
     if (!projectId) { setMemories([]); return; }
@@ -701,7 +702,7 @@ function AgentLibraryWorkspace({ projectId }) {
 
   function resetForm() {
     setSelectedSlug(""); setSlug(""); setName(""); setDescription(""); setInstructions(""); setSkills([]);
-    setError(""); setNotice("");
+    setError(""); setNotice(""); setInstructionsMode("edit");
   }
 
   function editAgent(agent) {
@@ -760,7 +761,11 @@ function AgentLibraryWorkspace({ projectId }) {
           <label>Slug <input value={slug} onChange={event => setSlug(event.target.value.toLowerCase())} disabled={!!selectedSlug} pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={80} placeholder="ex.: revisor-backend" required /></label>
           <label>Nome <input value={name} onChange={event => setName(event.target.value)} maxLength={100} placeholder="Revisor de backend" required /></label>
           <label className="full">Descrição <input value={description} onChange={event => setDescription(event.target.value)} maxLength={500} placeholder="Responsabilidades principais do agente" /></label>
-          <label className="full"><span className="agent-file-label"><Icon name="file" size={15}/> AGENTS.md · Função e responsabilidades</span><textarea value={instructions} onChange={event => setInstructions(event.target.value)} rows={7} maxLength={12000} placeholder="Descreva a função, responsabilidades, limites, procedimentos e critérios de qualidade deste agente. Instruções não concedem permissões." required /></label>
+          <div className="full agent-document-field">
+            <div className="agent-file-toolbar"><div className="agent-file-title"><Icon name="file" size={16}/><strong>AGENTS.md</strong><span>Markdown · Instruções do agente</span></div><div className="agent-file-tabs"><button type="button" className={instructionsMode === "edit" ? "active" : ""} onClick={() => setInstructionsMode("edit")}><Icon name="code" size={14}/> Editar</button><button type="button" className={instructionsMode === "preview" ? "active" : ""} onClick={() => setInstructionsMode("preview")}><Icon name="eye" size={14}/> Pré-visualizar</button></div></div>
+            {instructionsMode === "edit" ? <div className="agent-code-editor"><div className="agent-line-numbers" aria-hidden="true">{Array.from({length:Math.max(1,instructions.split("\n").length)},(_,i)=><span key={i}>{i+1}</span>)}</div><textarea aria-label="Editar conteúdo do AGENTS.md" value={instructions} onChange={event => setInstructions(event.target.value)} rows={18} maxLength={50000} spellCheck={false} placeholder={"# Função do agente\n\n## Responsabilidades\n- ...\n\n## Limites e critérios de qualidade\n- ..."} required /></div> : <article className="agent-markdown-preview">{instructions.trim() ? instructions.split("\n").map((line,index)=>{const trimmed=line.trim(); if(/^###\s/.test(trimmed))return <h4 key={index}>{trimmed.replace(/^###\s/,"")}</h4>;if(/^##\s/.test(trimmed))return <h3 key={index}>{trimmed.replace(/^##\s/,"")}</h3>;if(/^#\s/.test(trimmed))return <h2 key={index}>{trimmed.replace(/^#\s/,"")}</h2>;if(/^[-*]\s/.test(trimmed))return <div className="agent-preview-list" key={index}>• {trimmed.replace(/^[-*]\s/,"")}</div>;return <p key={index}>{trimmed || " "}</p>;}) : <p className="agent-preview-empty">A pré-visualização do arquivo aparecerá aqui conforme você escrever.</p>}</article>}
+            <div className="agent-file-footer"><span>Markdown · até 50.000 caracteres</span><span>{instructions.length.toLocaleString("pt-BR")} caracteres</span></div>
+          </div>
         </div>
       </section>
       <section className="agent-config-card">
