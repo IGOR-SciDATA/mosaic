@@ -2872,3 +2872,26 @@ body { overflow: hidden; }
   .agent-code-editor, .agent-code-editor textarea, .agent-line-numbers,
   .agent-markdown-preview { min-height: 380px; }
 }
+
+
+/* The editor is a DIV, not a LABEL: explicitly span both columns of the form grid. */
+.agent-config-workspace .model-config-grid > .agent-document-field {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+}
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-file-toolbar,
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-code-editor,
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-markdown-preview,
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-file-footer {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-code-editor {
+  grid-template-columns: 54px minmax(0, 1fr);
+}
+.agent-config-workspace .model-config-grid > .agent-document-field .agent-code-editor textarea {
+  min-width: 0;
+}
