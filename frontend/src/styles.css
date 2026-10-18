@@ -2543,3 +2543,22 @@ body { overflow: hidden; }
 :root[data-theme="dark"] .home-welcome-hint { color: #a3aab5; }
 :root[data-theme="dark"] .home-welcome-hint strong { color: #e4e7eb; }
 :root[data-theme="dark"] .home-example { background: #fff; }
+
+
+/* Distinguish a project/workspace icon from the Mosaic product logo. */
+.project-identity .project-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  color: #c92320;
+  background: #fff1f0;
+  border: 1px solid #f5d0ce;
+  border-radius: 11px;
+}
+:root[data-theme="dark"] .project-identity .project-mark {
+  color: #ff7772;
+  background: rgba(239, 68, 68, .12);
+  border-color: rgba(248, 113, 113, .28);
+}
