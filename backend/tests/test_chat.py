@@ -48,7 +48,7 @@ def test_chat_flow_persists_user_and_assistant_messages(client, monkeypatch) -> 
         assert model_name == "qwen3:3b"
         return "Olá! Como posso ajudar?"
 
-    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", fake_generate)
+    monkeypatch.setattr("app.providers.ollama.OllamaProvider.generate", fake_generate)
 
     response = client.post(
         f"/conversations/{conversation_id}/chat",
@@ -75,7 +75,7 @@ def test_chat_flow_uses_previous_history(client, monkeypatch) -> None:
         calls.append(messages)
         return "Resposta"
 
-    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", fake_generate)
+    monkeypatch.setattr("app.providers.ollama.OllamaProvider.generate", fake_generate)
 
     client.post(f"/conversations/{conversation_id}/chat", json={"content": "Primeira"})
     client.post(f"/conversations/{conversation_id}/chat", json={"content": "Segunda"})
@@ -97,7 +97,7 @@ def test_chat_stream_returns_sse_and_persists_response(client, monkeypatch) -> N
         yield "em "
         yield "stream"
 
-    monkeypatch.setattr("app.services.chat.OllamaProvider.stream", fake_stream)
+    monkeypatch.setattr("app.providers.ollama.OllamaProvider.stream", fake_stream)
 
     response = client.post(
         f"/conversations/{conversation_id}/chat/stream",
@@ -154,7 +154,7 @@ def test_chat_passes_project_state_and_memory_to_provider(client, monkeypatch) -
         captured["messages"] = messages
         return "Contexto recebido"
 
-    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", fake_generate)
+    monkeypatch.setattr("app.providers.ollama.OllamaProvider.generate", fake_generate)
 
     response = client.post(
         f"/conversations/{conversation['id']}/chat",
@@ -192,7 +192,7 @@ def test_explicit_memory_request_is_saved_without_calling_model(client, monkeypa
     def unexpected_generate(*args, **kwargs):
         raise AssertionError("explicit memory commands should be handled by Mosaic Core")
 
-    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", unexpected_generate)
+    monkeypatch.setattr("app.providers.ollama.OllamaProvider.generate", unexpected_generate)
 
     response = client.post(
         f"/conversations/{conversation_id}/chat",
@@ -220,7 +220,7 @@ def test_explicit_memory_request_is_saved_without_calling_model(client, monkeypa
         captured["messages"] = messages
         return "Lembro do registro salvo."
 
-    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", capture_context)
+    monkeypatch.setattr("app.providers.ollama.OllamaProvider.generate", capture_context)
     recall_response = client.post(
         f"/conversations/{next_conversation['id']}/chat",
         json={"content": "O que você lembra sobre o Brasil?"},
@@ -321,7 +321,7 @@ def test_save_to_memory_phrase_is_clean_and_retrievable_in_new_conversation(clie
         captured["messages"] = messages
         return "O registro foi encontrado no contexto."
 
-    monkeypatch.setattr("app.services.chat.OllamaProvider.generate", capture_context)
+    monkeypatch.setattr("app.providers.ollama.OllamaProvider.generate", capture_context)
     recall = client.post(
         f"/conversations/{next_conversation_id}/chat",
         json={"content": "O que você lembra sobre o que conversamos a respeito da Alemanha?"},
