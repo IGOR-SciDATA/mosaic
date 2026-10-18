@@ -930,7 +930,8 @@ export default function App(){
       if(conversationId===item.id){
         const next=remaining.find(c=>c.project_id===projectId) || remaining[0] || null;
         setConversationId(next?.id ?? null); setMessages([]);
-        if(!next) setHomeActive(false);
+        if(next?.project_id) setProjectId(next.project_id);
+        if(!next) { setHomeActive(false); localStorage.removeItem("mosaic.activeConversationId"); }
       }
       setModal(null);
     }catch(err){setError("Não foi possível excluir a conversa: "+err.message);}
@@ -947,9 +948,11 @@ export default function App(){
       setProjects(remainingProjects); setConversations(remainingConversations);
       if(projectId===item.id){
         const nextProject=remainingProjects[0] || null;
-        const nextConversation=remainingConversations.find(c=>c.project_id===nextProject?.id) || remainingConversations[0] || null;
+        const nextConversation=remainingConversations.find(c=>c.project_id===nextProject?.id) || null;
         setProjectId(nextProject?.id ?? null); setConversationId(nextConversation?.id ?? null);
         setMessages([]); setMemories([]); setProjectTab("Conversa"); setHomeActive(!nextProject);
+        localStorage.removeItem("mosaic.activeConversationId");
+        if(!nextProject) localStorage.removeItem("mosaic.activeProjectId");
       } else if(removedConversationIds.includes(conversationId)){
         setConversationId(null); setMessages([]);
       }
