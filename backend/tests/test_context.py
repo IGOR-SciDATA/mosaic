@@ -8,7 +8,7 @@ from app.models.message_repository import create_message
 from app.models.repository import create_model
 from app.models.task_repository import create_task, update_task
 from app.models.tool_call_repository import create_tool_call
-from app.models.tool_result_repository import create_tool_result
+from app.services.tools import approve_tool_call, execute_tool_call
 
 
 @pytest.fixture(autouse=True)
@@ -93,13 +93,9 @@ def test_context_includes_current_task_and_tool_results() -> None:
         conversation_id=conversation.id,
         tool_name="calculator",
         arguments={"expression": "2 + 2"},
-        status="completed",
     )
-    create_tool_result(
-        tool_call.id,
-        status="completed",
-        data={"value": 4},
-    )
+    result = execute_tool_call(approve_tool_call(tool_call))
+    assert result.status == "completed"
     create_message(conversation.id, "user", "Qual foi o resultado?")
 
     context = build_context(conversation.id)
@@ -111,7 +107,7 @@ def test_context_includes_current_task_and_tool_results() -> None:
     assert any(
         item["role"] == "tool"
         and "calculator" in item["content"]
-        and '"value": 4' in item["content"]
+        and '"result": 4' in item["content"]
         for item in context
     )
     assert context[-1] == {"role": "user", "content": "Qual foi o resultado?"}
