@@ -6,12 +6,14 @@ from collections.abc import Iterable
 from typing import Any
 from urllib import error, request
 
+from app.providers.base import ModelProvider
+
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 120
 API_URL = "https://api.openai.com/v1/responses"
 
 
-class OpenAIProvider:
+class OpenAIProvider(ModelProvider):
     """OpenAI Responses API provider; credentials are read only from backend env."""
 
     def generate(
