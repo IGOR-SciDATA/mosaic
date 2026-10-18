@@ -94,6 +94,14 @@ O snapshot registra a base de trabalho disponível após a consolidação inicia
 - Componentes de Agent, ciclo de tarefas, registro de ferramentas, ações, chamadas/resultados de ferramentas e eventos.
 - Base de contexto e documentação de arquitetura, segurança, UX e execução agêntica.
 
+### Fluxo já concluído no protótipo
+
+**Capacidade demonstrada manualmente pelo usuário na versão atual:** o agente recebeu um arquivo Markdown (`.md`), leu seu conteúdo, produziu um resumo e criou um segundo arquivo Markdown com o conteúdo resumido. O usuário acompanhou o fluxo até a conclusão e confirmou que o novo arquivo foi criado corretamente.
+
+Esse é um marco concreto: o protótipo já demonstrou uma tarefa de leitura de arquivo → transformação de conteúdo → criação de artefato. O fluxo deve ser preservado como cenário de regressão enquanto o Core e as ferramentas evoluem.
+
+**Escopo da evidência:** trata-se de uma validação manual reportada pelo usuário, não de um teste automatizado publicado nem de uma prova de que todos os fluxos agentic, formatos de arquivo ou tarefas gerais funcionam.
+
 ### O que ainda precisa ser comprovado
 
 - Fluxo integrado confiável entre pedido, Task, modelo selecionado, chamada autorizada, ferramenta, resultado, nova observação e resposta final.
@@ -200,7 +208,7 @@ O roadmap é atualizado conforme o código muda e as evidências são revisadas.
 | Marco | Estado no baseline | Objetivo / saída verificável |
 |---|---|---|
 | Fundação do Core | **Presente no código; validação dinâmica pendente** | Persistência, conversas, projetos, memórias, modelos e tarefas coerentes |
-| Agent e ferramentas | **Componentes presentes; integração completa pendente de comprovação** | Ciclo real de decisão, execução autorizada, observação e resposta final |
+| Agent e ferramentas | **Fluxo Markdown → resumo → novo Markdown concluído manualmente; cobertura geral pendente** | Preservar esse cenário como regressão e ampliar a validação para outras ferramentas e tipos de tarefa |
 | Segurança e estado | **Trabalho necessário; revisar branch/PR e executar testes** | Workspace confinado, terminal controlado, validação estrita, políticas e transições consistentes |
 | Contratos e baseline | **Documentação consolidada; baseline dinâmico pendente** | Contratos canônicos, schema reconciliado, testes/build/smoke/E2E com evidências |
 | Harness retomável | **Objetivo de implementação** | Aprovação, eventos, cancelamento, reconexão e retomada sem duplicar efeitos |
@@ -216,7 +224,7 @@ O roadmap é atualizado conforme o código muda e as evidências são revisadas.
 ## Próximos objetivos de maior prioridade
 
 1. **Consolidar a verdade documental:** canonizar o contrato MVP, eliminar referências quebradas e manter um único roadmap normativo.
-2. **Executar e registrar o baseline:** testes backend, build frontend, smoke tests e uma jornada integrada real.
+2. **Preservar e automatizar o fluxo já demonstrado:** transformar leitura de `.md` → resumo → novo `.md` em cenário de regressão reproduzível; em paralelo, executar e registrar testes backend, build frontend e smoke tests.
 3. **Fechar segurança e transições:** autorização no backend, limites de execução e estados consistentes.
 4. **Provar o Harness com o modelo da conversa:** ferramenta → resultado → observação → continuação/conclusão.
 5. **Construir persistência e retomada:** eventos, aprovação, cancelamento e recuperação da mesma Task.
