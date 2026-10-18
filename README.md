@@ -296,6 +296,7 @@ Abra a URL local informada pelo Vite, normalmente http://localhost:5173.
 
 # 📚 Documentação
 
+- [Contrato de implementação do MVP](docs/MOSAIC_MVP_IMPLEMENTATION_CONTRACT_v1.0.md)
 - [Roadmap Mestre — Harness Universal](docs/MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md)
 - [Contrato oficial do Harness v1.2](docs/MOSAIC_OFFICIAL_HARNESS_CONTRACT_v1.2.md)
 - [Contrato RAGNES — contexto e recuperação](docs/MOSAIC_RAGNES_CONTEXT_SYSTEM_CONTRACT_v1.0.md)
