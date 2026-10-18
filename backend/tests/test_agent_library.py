@@ -200,3 +200,18 @@ def test_chat_injects_agent_profile_for_current_execution(monkeypatch):
     assert "Backend Reviewer" in flattened
     assert "Check status codes and schemas." in flattened
     assert observed["messages"][-1] == {"role": "user", "content": "Inspect this endpoint"}
+
+
+def test_inactive_agent_library_is_not_injected_into_general_project_context():
+    from app.context.manager import build_context
+    from app.models.message_repository import create_message
+
+    project = _project()
+    model = create_model("Test", "ollama", "test:model")
+    conversation = create_conversation("Ordinary chat", model.id, project_id=project.id)
+    create_project_agent(project.id, _payload())
+    create_message(conversation.id, "user", "Olá, como vai?")
+    flattened = "\\n".join(message["content"] for message in build_context(conversation.id))
+    assert "Backend Reviewer" not in flattened
+    assert "Check contracts, edge cases and security." not in flattened
+    assert "Check status codes and schemas." not in flattened
