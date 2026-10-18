@@ -19,7 +19,7 @@ def test_database(monkeypatch, tmp_path):
 def test_project_artifact_api_lists_and_reads_only_workspace_files(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    (workspace / "README.md").write_text("Mosaic project guide\\nAgent context and tasks.", encoding="utf-8")
+    (workspace / "README.md").write_text("Mosaic project guide\nAgent context and tasks.", encoding="utf-8")
     project = create_project("Workspace", str(workspace))
 
     inventory = list_project_artifacts_endpoint(project.id)
