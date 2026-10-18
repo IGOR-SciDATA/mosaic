@@ -306,7 +306,37 @@ Entregas:
 
 Aceite: usuário consegue acompanhar, aprovar, cancelar, retomar e inspecionar o resultado sem consultar logs do servidor.
 
-### Fase 10 — Fluxos completos por tipo de tarefa
+### Fase 10 — Redesign e simplificação do frontend
+
+**Objetivo:** revisar a experiência visual do Mosaic como um todo para que o frontend reflita o Harness real, seja confortável para conversas longas e não carregue elementos redundantes ou funcionalidades sem uso.
+
+Entregas:
+- auditoria de todas as telas, componentes, navegação, estados e chamadas de API; identificar conteúdo duplicado, seções pouco úteis, controles sem ação e fluxos inconsistentes;
+- definir uma hierarquia visual clara: conversa como superfície principal, projetos e histórico acessíveis, configurações do Agent/Skills em locais previsíveis e execução detalhada disponível quando necessária;
+- ampliar a área útil de chat, mensagens e tipografia de leitura, com largura de conversa confortável, espaçamento adequado e composer maior; adotar como referência a experiência de leitura e composição do ChatGPT sem copiar elementos de marca;
+- reduzir ruído visual: remover ou recolher conteúdo pouco utilizado, metadados técnicos permanentes, painéis redundantes e informações repetidas; manter detalhes operacionais acessíveis sob demanda;
+- desenhar comportamento responsivo para desktop e telas menores, com navegação e painéis que não comprimam a conversa;
+- unificar componentes e padrões para estados vazios, carregamento real, erro, cancelamento, aprovação, retomada e conclusão;
+- integrar a timeline, subtarefas, ferramentas, fontes e artefatos sem transformar o chat em um painel técnico poluído;
+- assegurar que progresso e status venham do Core, que os textos sejam claros em português e que nenhum controle seja meramente decorativo;
+- rever acessibilidade, contraste, foco, teclado, legibilidade e consistência visual;
+- criar critérios visuais e funcionais verificáveis e comparar antes/depois com screenshots ou walkthrough reproduzível, quando disponíveis.
+
+Princípios de UX:
+- **Chat primeiro:** mensagens e entrada do usuário ocupam a maior parte da tela.
+- **Detalhes sob demanda:** plano, logs, argumentos de ferramentas e metadados aparecem em painéis recolhíveis ou áreas dedicadas.
+- **Menos, mas funcional:** remover ou simplificar elementos que não contribuem para compreender, controlar ou concluir o trabalho.
+- **Sem esconder o essencial:** aprovação pendente, erro, tarefa em execução e resultado final devem continuar evidentes.
+- **Sem simular capacidade:** não mostrar botões, progresso ou ações que o backend ainda não suporta.
+
+Aceite:
+- conversa visualmente ampla, com mensagens e campo de entrada confortáveis;
+- fluxo coerente entre chat, projetos, Agent, Skills, tarefas, aprovações e artefatos;
+- conteúdo redundante removido ou recolhido, sem perder capacidades necessárias;
+- layout utilizável em desktop e telas menores;
+- testes/build frontend aprovados e walkthrough das principais jornadas: conversa comum, execução agentic, aprovação, falha/cancelamento, retomada e inspeção de artefato.
+
+### Fase 11 — Fluxos completos por tipo de tarefa
 
 **Objetivo:** provar universalidade por cenários completos, não por lista de ferramentas.
 
@@ -323,7 +353,7 @@ Cada cenário deve usar o mesmo Harness e Tasks/subtasks, variando apenas ferram
 
 Aceite: todos os cenários passam de pedido a entregável validado, com estado, fontes/arquivos e histórico persistidos. Não alegar capacidade universal além da matriz efetivamente testada.
 
-### Fase 11 — Resiliência, avaliação e autonomia limitada
+### Fase 12 — Resiliência, avaliação e autonomia limitada
 
 **Objetivo:** medir qualidade e aumentar autonomia com segurança.
 
@@ -339,7 +369,7 @@ Entregas:
 
 Aceite: métricas e falhas reproduzíveis, limites aplicados pelo backend, nenhum bypass de permissão conhecido nos testes de segurança definidos.
 
-### Fase 12 — Paralelismo controlado e extensibilidade (somente após validação)
+### Fase 13 — Paralelismo controlado e extensibilidade (somente após validação)
 
 **Objetivo:** ampliar throughput sem transformar o Mosaic em um swarm difícil de depurar.
 
@@ -398,7 +428,7 @@ Uma capacidade só é considerada implementada quando:
 3. Não declarar testes executados se não foram executados.
 4. Não expandir schema, dependências ou infraestrutura sem justificativa.
 5. Não alterar automaticamente o modelo escolhido pelo usuário.
-6. Não fazer tarefas paralelas antes da Fase 12 e de suas pré-condições.
+6. Não fazer tarefas paralelas antes da Fase 13 e de suas pré-condições.
 7. Manter cada mudança pequena, reversível e acompanhada de testes.
 8. Atualizar documentação e matriz de capacidades após cada fase.
 9. Ao encontrar conflito arquitetural, parar e pedir decisão do MASTER.
