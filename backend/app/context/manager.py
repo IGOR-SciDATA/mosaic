@@ -255,10 +255,15 @@ def build_context(conversation_id: int) -> list[dict[str, str]]:
 
         project = get_project(conversation.project_id)
         if project is not None and project.state:
-            context.append({
-                "role": "system",
-                "content": "Mosaic project state:\n" + str(project.state),
-            })
+            # Agent skills are loaded separately after filtering to enabled entries.
+            # Do not leak disabled skill definitions through the raw project-state dump.
+            visible_project_state = dict(project.state)
+            visible_project_state.pop("agent_skills", None)
+            if visible_project_state:
+                context.append({
+                    "role": "system",
+                    "content": "Mosaic project state:\n" + str(visible_project_state),
+                })
 
         if project is not None:
             instructions = _project_instructions(project.workspace)
