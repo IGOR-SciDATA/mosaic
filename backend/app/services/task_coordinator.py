@@ -221,22 +221,23 @@ def run_coordinated_task(
 
     plan = dict(parent.plan or {})
     coordinator = dict(plan.get("coordinator") or {})
-    coordinator.setdefault("status", "executing")
+    was_started = bool(coordinator.get("started"))
+    coordinator["status"] = "executing"
     coordinator["children"] = {key: child.id for key, child in children.items()}
     coordinator["order"] = [spec["id"] for spec in ordered_specs]
     coordinator.setdefault("results", {})
+    coordinator["started"] = True
     plan["coordinator"] = coordinator
     parent = update_task(parent.id, plan=plan)
     if parent.status in {"planning", "awaiting_approval"}:
         parent = update_task(parent.id, status="executing")
     _record_coordinator_event(
         parent,
-        "coordinator.started" if not coordinator.get("started") else "coordinator.resumed",
+        "coordinator.resumed" if was_started else "coordinator.started",
         "Sequential coordination started or resumed.",
         "executing",
         {"subtask_count": len(ordered_specs), "order": coordinator["order"]},
     )
-    coordinator["started"] = True
 
     outputs: dict[str, str] = {}
     for spec in ordered_specs:
