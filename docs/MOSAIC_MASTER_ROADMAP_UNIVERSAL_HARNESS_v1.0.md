@@ -616,3 +616,73 @@ A UI deve mostrar, em nível resumido, etapa atual, progresso concluído, valida
 - Quarto: exibir progresso e evidências na UI.
 - Quinto: adicionar métricas e avaliação de custo/qualidade.
 - Não construir observabilidade distribuída, tracing complexo ou dashboard independente sem necessidade demonstrada.
+
+---
+
+## 14. Aditivo aprovado pelo MASTER — agentes de projeto e acessos multi-provider (2026-10-18)
+
+Este aditivo prevalece sobre trechos anteriores deste roadmap que descrevam agentes exclusivamente por conversa ou limitem os providers apenas a modelos locais/API. Não autoriza automação de interfaces de consumo de terceiros.
+
+### 14.1 Biblioteca de agentes reutilizáveis por projeto
+
+**Decisão:** o usuário cria agentes reutilizáveis dentro de um projeto e os invoca em qualquer conversa ou tarefa desse mesmo projeto por comando, por exemplo `/arquiteto`, `/backend` ou `/qa`.
+
+Um agente é um perfil persistente, não um processo de modelo permanentemente ativo. Cada perfil contém, no mínimo:
+- nome e slug de comando único dentro do projeto;
+- descrição e função;
+- instruções próprias;
+- Skills selecionadas e versões/hash verificáveis;
+- metadados de versão e data de atualização.
+
+O comando seleciona o perfil para a execução atual, sem criar automaticamente outra conversa. O Core usa o Task Engine e o Context Manager existentes. O agente pode ser reutilizado em qualquer conversa/tarefa do mesmo projeto; histórico de conversa e contexto de tarefa não se tornam globais por isso.
+
+**Persistência inicial:** avaliar primeiro a reutilização de `Project.state` e estruturas existentes. Não criar tabela Agent sem demonstrar uma necessidade de consulta, concorrência, integridade ou ciclo de vida que o estado existente não suporte. A decisão final deve seguir o schema MVP e ser documentada antes de qualquer migração.
+
+**Snapshot e retomada:** ao iniciar uma Task, persistir o perfil e as Skills efetivamente selecionadas em versão imutável ou conteúdo recuperável com hash. A retomada usa o snapshot original; edições posteriores só afetam novas execuções, salvo atualização explícita autorizada pelo usuário.
+
+**Segurança e UX:**
+- Skills e instruções orientam, mas não concedem permissões.
+- Comando desconhecido, ambíguo ou malformado gera erro claro e não é tratado como execução de agente.
+- A interface deve permitir criar, listar, editar e excluir perfis, selecionar Skills e ver qual agente foi aplicado.
+- Registrar agent slug/version, skill IDs/versions/hashes, Task ID e resultados; não registrar chain-of-thought.
+- Agentes começam em execução sequencial e coordenada pelo Core. Sem swarm paralelo nesta etapa.
+
+**Aceite:** criar um agente, chamá-lo em duas conversas distintas do mesmo projeto, confirmar que usa as mesmas instruções/Skills, provar isolamento entre projetos, demonstrar snapshot após editar o perfil e retomar uma Task com o snapshot original.
+
+### 14.2 Abstração de acesso a modelos: local, API oficial e automação web autorizada
+
+Preservar `ModelProvider` como interface de aplicação e manter o provider Ollama funcional. Separar a identidade do modelo do mecanismo de acesso. Não criar tabela de banco `providers` apenas para representar classes de código; a configuração deve seguir o contrato existente de Model/Setting.
+
+Tipos de acesso planejados:
+
+1. **Local provider:** Ollama e modelos locais. Mantém prioridade quando adequado ao hardware, à privacidade e à tarefa.
+2. **API provider:** integração com APIs oficiais/documentadas de fornecedores, com endpoint, modelo, credencial segura, timeouts, limites, custos e erros explicitamente tratados. Chaves nunca são expostas no frontend, logs ou artefatos. Sem fallback silencioso; a seleção permanece explícita.
+3. **WebChat adapter para aplicação própria ou expressamente autorizada:** automação de navegador para enviar uma mensagem e ler a resposta de um chat web controlado pelo usuário ou cujo proprietário autorizou a integração. É um adaptador de transporte separado, não uma permissão geral para automatizar interfaces de terceiros.
+
+O WebChat adapter deve ser opt-in por configuração, mostrar qual acesso está ativo e persistir somente o estado operacional necessário. O usuário fornece a URL da aplicação e seletores estáveis ou atributos de teste. Preferir `data-testid`/atributos dedicados a seletores frágeis por texto/CSS.
+
+**Perfil persistente do navegador:**
+- Criar um diretório de perfil dedicado ao Mosaic, configurável e restrito ao usuário; não copiar nem ler cookies/senhas do perfil pessoal padrão.
+- Permitir que o usuário abra o navegador e faça login manualmente; depois, reutilizar o perfil persistente em execuções futuras.
+- Não persistir credenciais em SQLite, logs, prompts ou arquivos do projeto. Proteger o diretório do perfil com permissões locais e documentar que ele contém sessão autenticada.
+- Detectar sessão expirada e pausar solicitando login manual; não contornar MFA, CAPTCHA, controles de acesso, rate limits ou proteções anti-automação.
+- Evitar abrir simultaneamente o mesmo diretório de perfil em duas instâncias do navegador; tratar lock/profile-in-use sem corromper a sessão.
+- Permitir desconectar/revogar o acesso e limpar o perfil por ação explícita do usuário.
+
+**Limites de escopo:** esta aprovação cobre automação da aplicação própria ou integração com autorização documentada. Não cobre scraping ou automação de ChatGPT, Claude, Gemini, DeepSeek ou outros chats de consumo de terceiros por cookies/sessões pessoais sem autorização expressa do fornecedor. Para estes, usar API oficial, connector autorizado ou handoff manual transparente.
+
+**Contrato operacional mínimo:** enviar mensagem → confirmar envio → aguardar resposta com timeout/cancelamento → verificar que a resposta está completa → persistir texto, horário, origem, método de acesso e identificadores disponíveis → devolver resultado ao Core. Diferenciar erro de seletor, rede, sessão expirada, timeout, resposta vazia e resposta incompleta. Não declarar sucesso só porque o clique ocorreu.
+
+**Aceite:** teste end-to-end em chat próprio de demonstração, incluindo ida/volta, timeout, resposta incompleta, sessão expirada, reinício do Mosaic com perfil persistente, desconexão e ausência de credenciais nos logs. Testar também que Ollama continua funcionando e que falhas no WebChat/API não provocam troca automática de provider.
+
+### 14.3 Ordem de implementação
+
+1. Auditar a abstração `ModelProvider`, o factory/registry atual e os pontos de configuração/seleção do modelo.
+2. Consolidar testes de regressão do Ollama e o contrato comum de erros/timeouts.
+3. Implementar suporte a um provider de API oficial como primeiro provider remoto, com segredo no backend e limites explícitos.
+4. Implementar biblioteca de agentes por projeto e comando `/slug`, incluindo snapshot de Skills por Task.
+5. Definir o contrato e a configuração do WebChat adapter sem ativar automação de terceiros.
+6. Implementar prova de conceito do WebChat exclusivamente contra uma aplicação própria/controlada, com perfil de navegador dedicado e login manual.
+7. Executar testes E2E, teste de reinício e revisão de segurança; documentar resultados reais antes de marcar qualquer capacidade como validada.
+
+Não implementar tudo em um único PR. Cada etapa deve ter diff, testes, critérios de aceite e registro de limitações. Não alterar schema ou introduzir dependências de navegador antes da auditoria de necessidade e do plano mínimo.
