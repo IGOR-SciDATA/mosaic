@@ -87,7 +87,7 @@ def test_startup_recovery_marks_orphaned_execution_failed_without_replaying_it(t
     assert second["recovered_tasks"] == []
     events = list_task_events(active.id)
     assert sum(event.event_name == "task.interrupted_by_restart" for event in events) == 1
-    assert sum(event.event_name == "tool.result_recorded" and event.tool_call_id == call.id for event in events) == 0
+    assert sum(event.event_name == "tool.result_recorded" and event.tool_call_id == call.id for event in events) == 1
 
 
 def test_artifact_tool_honors_cancellation_before_creating_any_file(tmp_path):
