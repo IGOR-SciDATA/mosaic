@@ -61,7 +61,7 @@ def _agent_context(
             continue
         if content.startswith(allowed_system_prefixes):
             filtered.append({"role": "system", "content": content})
-        elif project_state_requested and content.startswith("Mosaic project state:"):
+        elif (project_state_requested or history_requested) and content.startswith("Mosaic project state:"):
             filtered.append({"role": "system", "content": content})
         elif memory_requested and content.startswith("Mosaic memory:"):
             filtered.append({"role": "system", "content": content})
