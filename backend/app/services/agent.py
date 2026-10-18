@@ -327,6 +327,15 @@ def _artifact_format(goal: str) -> str:
     return "markdown"
 
 
+def _goal_requires_web_research(goal: str) -> bool:
+    """Detect explicit requests to research public web sources for a task."""
+    return bool(re.search(
+        r"\\b(?:research|researching|search the web|search online|look up|find sources|web research|online sources|pesquise|pesquisar|pesquisa|busque fontes|buscar fontes|na internet|pela internet|fontes online)\\b",
+        goal,
+        flags=re.IGNORECASE,
+    ))
+
+
 def _goal_requires_file_artifact(goal: str) -> bool:
     """Detect explicit file output intent for supported formats."""
     creation_verbs = (
@@ -756,6 +765,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
     """Decompose common file workflows deterministically without another model call."""
     sources = _required_source_paths(goal)
     creates_artifact = _goal_requires_file_artifact(goal)
+    researches_web = _goal_requires_web_research(goal)
     artifact_format = _artifact_format(goal)
     if artifact_format == "xlsx":
         content_instruction = (
@@ -816,6 +826,36 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
             "depends_on": [f"read_source_{index}" for index in range(1, len(sources) + 1)],
             "instruction": "Answer the user's request using the complete source evidence. Do not call tools unless the Core starts a new explicit step.",
         })
+    elif researches_web and creates_artifact:
+        steps.extend([
+            {
+                "id": "research_sources",
+                "kind": "research_sources",
+                "status": "pending",
+                "depends_on": [],
+                "allowed_tools": ["search", "web_fetch"],
+                "instruction": (
+                    "Find relevant public sources with search, then fetch at least one result URL with web_fetch. "
+                    "Use only observed source content and preserve exact fetched URLs for citations. "
+                    "Do not draft or save the report until the source-fetch result is available."
+                ),
+            },
+            {
+                "id": "draft_content",
+                "kind": "draft_content",
+                "status": "pending",
+                "depends_on": ["research_sources"],
+                "instruction": content_instruction + " Include a References section containing an exact URL from a successfully fetched source.",
+            },
+            {
+                "id": "create_artifact",
+                "kind": "create_artifact",
+                "path": _artifact_output_path(goal),
+                "status": "pending",
+                "depends_on": ["draft_content"],
+                "instruction": "The Core will create the output file from the generated content and validate it after approval.",
+            },
+        ])
     elif creates_artifact:
         steps.extend([
             {
