@@ -106,8 +106,8 @@ def test_context_includes_current_task_and_tool_results() -> None:
         for item in context
     )
     assert any(
-        item["role"] == "tool"
-        and "calculator" in item["content"]
+        item["role"] == "system"
+        and "Mosaic tool observation [calculator]" in item["content"]
         and '"result": 4' in item["content"]
         for item in context
     )
