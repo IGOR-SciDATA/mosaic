@@ -81,10 +81,7 @@ function Sidebar({ projects, conversations, activeProjectId, activeConversationI
             </div>
             {expanded && <div className="project-conversation-list">
               {projectConversations.length
-                ? projectConversations.map(c => <button key={c.id} onClick={()=>onConversation(c.id)} className={c.id===activeConversationId ? "conversation-item selected" : "conversation-item"}>
-                    <span className="tiny-chevron">›</span>
-                    <span className="conversation-title">{c.title || "Nova conversa"}</span>
-                  </button>)
+                ? projectConversations.map(c => <div key={c.id} className="conversation-row"><button onClick={()=>onConversation(c.id)} className={c.id===activeConversationId ? "conversation-item selected" : "conversation-item"}><span className="tiny-chevron">›</span><span className="conversation-title">{c.title || "Nova conversa"}</span></button><button type="button" className="sidebar-delete-button conversation-delete-button" onClick={()=>onDeleteConversation(c)} aria-label={"Excluir conversa " + (c.title || "Nova conversa")} title="Excluir conversa"><Icon name="trash-2" size={13}/></button></div>)
                 : <span className="sidebar-empty">Nenhuma conversa neste projeto.</span>}
             </div>}
           </div>;
