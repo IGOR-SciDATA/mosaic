@@ -218,3 +218,23 @@ def test_inactive_agent_library_is_not_injected_into_general_project_context():
     assert "Backend Reviewer" not in flattened
     assert "Check contracts, edge cases and security." not in flattened
     assert "Check status codes and schemas." not in flattened
+
+
+def test_existing_pending_task_resolves_agent_command_on_run():
+    from fastapi import BackgroundTasks
+    from app.api.tasks import run_task_endpoint
+    from app.models.task_repository import create_task, get_task
+
+    project = _project()
+    model = create_model("Test", "ollama", "test:model")
+    conversation = create_conversation("Existing task", model.id, project_id=project.id)
+    create_project_agent(project.id, _payload())
+    task = create_task(
+        type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id,
+        plan={"goal": "/backend-reviewer Check this service"},
+    )
+    started = run_task_endpoint(task.id, BackgroundTasks())
+    persisted = get_task(task.id)
+    assert started.status == "executing"
+    assert persisted.plan["goal"] == "Check this service"
+    assert persisted.plan["agent_library_snapshot"]["slug"] == "backend-reviewer"
