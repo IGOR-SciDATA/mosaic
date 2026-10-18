@@ -16,6 +16,7 @@ from app.models.tool_result import ToolResult
 from app.models.tool_result_repository import list_tool_results
 from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_policy, resolve_tool_workspace
 from app.services.agent_profiles import validate_agent_profile_snapshot
+from app.services.agent_library import agent_snapshot_messages, validate_agent_snapshot
 
 DEFAULT_ITERATION_LIMIT = 10
 TOOL_OBSERVATION_MAX_CHARS = 12_000
@@ -138,6 +139,15 @@ def _agent_context(
                 filtered.append({
                     "role": "system",
                     "content": "Mosaic profile snapshot invalid; profile-specific guidance was ignored.",
+                })
+        library_snapshot = task_plan.get("agent_library_snapshot")
+        if library_snapshot is not None:
+            if validate_agent_snapshot(library_snapshot):
+                filtered.extend(agent_snapshot_messages(library_snapshot))
+            else:
+                filtered.append({
+                    "role": "system",
+                    "content": "Mosaic agent library snapshot failed integrity validation; agent-specific guidance was ignored.",
                 })
         filtered.append({
             "role": "system",
