@@ -1798,10 +1798,10 @@ body { overflow: hidden; }
   color-scheme: light;
   color: #202124;
   background: #f0f1ee;
-  --bg: #f0f1ee;
-  --surface: #f7f7f3;
-  --surface-2: #f0f1ed;
-  --surface-3: #e7e9e3;
+  --bg: #f7f4eb;
+  --surface: #f7f4eb;
+  --surface-2: #eee9dc;
+  --surface-3: #e5dfd0;
   --border: rgba(25, 30, 38, .14);
   --border-soft: rgba(25, 30, 38, .09);
   --text: #202124;
@@ -3148,4 +3148,59 @@ body { overflow: hidden; }
 :root[data-theme="light"] .task-list-item,
 :root[data-theme="light"] .task-notice {
   background-color: var(--surface-2);
+}
+
+
+/* Unify light-theme surfaces around the requested warm neutral. */
+:root[data-theme="light"] body,
+:root[data-theme="light"] .app-shell,
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .app-main,
+:root[data-theme="light"] .workspace,
+:root[data-theme="light"] .topbar,
+:root[data-theme="light"] .project-header,
+:root[data-theme="light"] .context-panel,
+:root[data-theme="light"] .composer,
+:root[data-theme="light"] .modal-content,
+:root[data-theme="light"] .task-card,
+:root[data-theme="light"] .task-detail,
+:root[data-theme="light"] .task-history,
+:root[data-theme="light"] .task-timeline-panel,
+:root[data-theme="light"] .task-workspace,
+:root[data-theme="light"] .task-start-form,
+:root[data-theme="light"] .task-list-panel,
+:root[data-theme="light"] .task-detail-panel,
+:root[data-theme="light"] .task-result,
+:root[data-theme="light"] .context-card,
+:root[data-theme="light"] .side-card,
+:root[data-theme="light"] .agent-config-card,
+:root[data-theme="light"] .memory-manager-list,
+:root[data-theme="light"] .memory-manager-item,
+:root[data-theme="light"] .file-browser,
+:root[data-theme="light"] .file-preview,
+:root[data-theme="light"] .notes-editor,
+:root[data-theme="light"] .project-notes-editor,
+:root[data-theme="light"] .model-response-panel {
+  background-color: var(--surface);
+}
+:root[data-theme="light"] .sidebar {
+  background: linear-gradient(155deg, #f7f4eb, #f0ecdf 78%);
+}
+:root[data-theme="light"] .project-header {
+  background: linear-gradient(135deg, #f7f4eb 0%, #f3efe4 62%, #eee9dc 100%);
+}
+:root[data-theme="light"] .task-start-form textarea,
+:root[data-theme="light"] .task-start-form input,
+:root[data-theme="light"] .agent-config-card input,
+:root[data-theme="light"] .agent-config-card textarea,
+:root[data-theme="light"] .agent-config-card select,
+:root[data-theme="light"] .memory-form-grid input,
+:root[data-theme="light"] .memory-value-label textarea,
+:root[data-theme="light"] .project-notes-editor,
+:root[data-theme="light"] .modal-form input,
+:root[data-theme="light"] .modal-form textarea,
+:root[data-theme="light"] .modal-form select,
+:root[data-theme="light"] .model-select,
+:root[data-theme="light"] .composer textarea {
+  background-color: #f3efe4;
 }
