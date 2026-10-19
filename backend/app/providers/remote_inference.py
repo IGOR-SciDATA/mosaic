@@ -44,6 +44,7 @@ class RemoteInferenceProvider(ModelProvider):
 
     def generate(self, messages: list[dict[str, Any]], model_name: str, configuration: dict[str, Any]) -> str:
         payload = {
+            "model": model_name,
             "messages": self._messages(messages),
             "max_tokens": self._optional_int(configuration.get("max_output_tokens")),
             "temperature": self._optional_float(configuration.get("temperature")),
@@ -56,7 +57,7 @@ class RemoteInferenceProvider(ModelProvider):
 
     def stream(self, messages: list[dict[str, Any]], model_name: str, configuration: dict[str, Any]) -> Iterable[str]:
         # RR3 stream protocol is explicit; a server without this capability fails closed.
-        payload = {"messages": self._messages(messages)}
+        payload = {"model": model_name, "messages": self._messages(messages)}
         req = request.Request(
             f"{self.base_url}/v1/inference/stream",
             data=json.dumps(payload).encode("utf-8"),
