@@ -19,6 +19,19 @@ MAX_TIMEOUT_SECONDS = 600
 class RemoteInferenceProvider(ModelProvider):
     def __init__(self, base_url: str | None = None, token: str | None = None):
         raw_url = base_url if base_url is not None else os.getenv("MOSAIC_REMOTE_INFERENCE_URL", "")
+        if base_url is None and not raw_url:
+            # The UI may persist a non-secret endpoint URL in Mosaic's existing settings table.
+            # Keep environment configuration as an override and credentials out of SQLite.
+            try:
+                from app.db.database import get_connection
+                with get_connection() as connection:
+                    row = connection.execute(
+                        "SELECT value FROM settings WHERE key = ?",
+                        ("remote_inference_url",),
+                    ).fetchone()
+                raw_url = row["value"] if row else ""
+            except Exception:
+                raw_url = ""
         self.token = token if token is not None else os.getenv("MOSAIC_REMOTE_INFERENCE_TOKEN", "")
         parsed = urlparse(raw_url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
