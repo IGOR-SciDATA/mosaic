@@ -1797,11 +1797,11 @@ body { overflow: hidden; }
 :root[data-theme="light"] {
   color-scheme: light;
   color: #202124;
-  background: #f4f5f7;
-  --bg: #f4f5f7;
-  --surface: #ffffff;
-  --surface-2: #f8f9fb;
-  --surface-3: #eef0f3;
+  background: #f0f1ee;
+  --bg: #f0f1ee;
+  --surface: #f7f7f3;
+  --surface-2: #f0f1ed;
+  --surface-3: #e7e9e3;
   --border: rgba(25, 30, 38, .14);
   --border-soft: rgba(25, 30, 38, .09);
   --text: #202124;
@@ -1814,10 +1814,10 @@ body { overflow: hidden; }
 }
 :root[data-theme="light"] body {
   color: var(--text);
-  background: radial-gradient(circle at 63% 5%, rgba(217,39,34,.045), transparent 23rem), #f4f5f7;
+  background: radial-gradient(circle at 63% 5%, rgba(217,39,34,.045), transparent 23rem), #f0f1ee;
 }
 :root[data-theme="light"] .app-shell {
-  background: linear-gradient(125deg, rgba(255,255,255,.7), transparent 30%), #f4f5f7;
+  background: linear-gradient(125deg, rgba(255,255,255,.7), transparent 30%), #f0f1ee;
 }
 :root[data-theme="light"] .sidebar,
 :root[data-theme="light"] .app-main,
@@ -1840,7 +1840,7 @@ body { overflow: hidden; }
   border-color: var(--border);
 }
 :root[data-theme="light"] .sidebar {
-  background: linear-gradient(155deg, #fff, #f8f9fb 72%);
+  background: linear-gradient(155deg, #f8f8f4, #eff0ec 72%);
   box-shadow: 0 5px 24px rgba(22, 28, 38, .05);
 }
 :root[data-theme="light"] .sidebar::after { opacity: .12; }
@@ -2447,8 +2447,8 @@ body { overflow: hidden; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: min(390px, 78vw);
-  margin: 0 auto 14px;
+  width: min(420px, 78vw);
+  margin: 0 auto 4px;
   padding: 0;
   background: transparent;
   border: 0;
@@ -2461,7 +2461,7 @@ body { overflow: hidden; }
   height: auto;
   object-fit: contain;
 }
-.home-brand-logo.light-logo { display: none; }
+.home-brand-logo.light-logo { display: none; mix-blend-mode: multiply; }
 :root[data-theme="light"] .home-brand-logo.dark-logo { display: none; }
 :root[data-theme="light"] .home-brand-logo.light-logo { display: block; }
 .brand-row .mobile-close { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
