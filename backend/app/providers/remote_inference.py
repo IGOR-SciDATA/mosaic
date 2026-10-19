@@ -36,7 +36,7 @@ class RemoteInferenceProvider(ModelProvider):
             "temperature": self._optional_float(configuration.get("temperature")),
         }
         result = self._post("/v1/inference", payload, self._timeout(configuration))
-        text = result.get("text") if isinstance(result, dict) else None
+        text = (result.get("output_text") or result.get("text")) if isinstance(result, dict) else None
         if not isinstance(text, str) or not text.strip():
             raise RuntimeError("Remote inference server returned an invalid response.")
         return text
