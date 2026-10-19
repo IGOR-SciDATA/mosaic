@@ -10,6 +10,32 @@
 
 ---
 
+## Status vivo da implementação (atualização após as Fases 13–14)
+
+Este resumo registra o estado confirmado por código integrado e testes disponíveis. Ele complementa a sequência operacional vigente; não altera contratos nem autoriza automaticamente a fase seguinte.
+
+| Área | Estado | Evidência / limite |
+|---|---|---|
+| Provider OpenAI Responses API — Fase 13 | **Integrado** | PR [#80](https://github.com/IGOR-SciDATA/mosaic/pull/80). Provider explícito, streaming SSE e adaptação de tool calls; segredo apenas em `OPENAI_API_KEY` no backend, sem fallback silencioso. Smoke test real com credencial autorizada não foi confirmado. |
+| Biblioteca de agentes por projeto — Fase 14 | **Integrada e testada no CI** | PR [#81](https://github.com/IGOR-SciDATA/mosaic/pull/81). Perfis/Skills com versão e hash, invocação `/slug`, isolamento por projeto e snapshot imutável persistido na Task; 260 testes backend aprovados e build frontend aprovado na CI dessa entrega. |
+| Interface e identidade visual | **Melhorias integradas** | PRs [#92](https://github.com/IGOR-SciDATA/mosaic/pull/92), [#93](https://github.com/IGOR-SciDATA/mosaic/pull/93) e [#94](https://github.com/IGOR-SciDATA/mosaic/pull/94): branding, paleta clara creme e remoção dos cards de sugestões da tela inicial. Isso não substitui inspeção visual manual nem CI atual. |
+| Validação integrada recente | **Parcial** | A CI citada para a Fase 14 passou; não há confirmação aqui de um workflow posterior que valide em conjunto todas as alterações visuais mais recentes da `main`. |
+| Smoke tests externos e recuperação real | **Pendentes** | Chamada real a Ollama/OpenAI, reinício de processo com Task ativa, rede pública real e inspeção visual em navegador precisam de evidência própria. |
+| WebChat adapter — Fase 15 | **Planejado, não iniciado** | Requer aprovação explícita e alvo próprio/autorizado. Não automatizar sessões de terceiros nem contornar autenticação/proteções. |
+| Contexto econômico e retomada integrada — Fase 16 | **Planejado** | Medir consumo somente quando métricas estiverem disponíveis e validar pause/restart/resume sem duplicação de efeitos colaterais. |
+
+### Capacidades atuais comprovadas por escopo
+
+- **Modelos:** abstração de provider preservada; Ollama e OpenAI Responses API têm caminhos explícitos. A disponibilidade da chave OpenAI não prova conectividade, quota ou resposta real.
+- **Agentes especializados:** biblioteca CRUD por projeto; instruções e Skills versionadas; comando `/slug`; snapshot usado pela Task não muda silenciosamente quando o perfil é editado depois.
+- **Execução:** Task Engine, Harness, eventos, política de ferramentas e estados mantidos no Core. Cobertura automatizada usa fixtures/mocks em partes do fluxo; não equivale a autonomia universal em produção.
+- **Artefatos e pesquisa:** há testes automatizados para criação/reabertura/validação de formatos e pesquisa determinística com fixtures; jornadas completas com provider real e rede pública permanecem pendentes.
+- **Interface:** navegação de workspace, Biblioteca e temas claro/escuro estão no código; as últimas mudanças de branding/paleta precisam de inspeção visual após build/deploy atualizado.
+
+### Regra de status
+
+Não marcar uma capacidade como “validada ponta a ponta” apenas porque existe código, uma PR foi mesclada ou testes unitários passaram. Registrar separadamente implementação, teste automatizado, validação de runtime real e limitações.
+
 ## 1. Decisões arquiteturais fixas
 
 Estas decisões prevalecem sobre sugestões de implementação que as contradigam.
