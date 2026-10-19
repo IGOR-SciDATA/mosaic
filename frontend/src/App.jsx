@@ -223,7 +223,7 @@ function HomeWelcome() {
   }, [typedText, deleting, exampleIndex]);
 
   return <section className="home-welcome">
-    <div className="home-welcome-mark"><img className="home-brand-logo dark-logo" src="/brand/mosaic-dark.svg" alt="Mosaic — Núcleo de IA Brasileira" /><img className="home-brand-logo light-logo" src="/brand/mosaic-light.svg" alt="Mosaic — Núcleo de IA Brasileira" /></div>
+    <div className="home-welcome-mark"><img className="home-brand-logo dark-logo" src="/brand/mosaic-dark.svg" alt="Mosaic — Núcleo de IA Brasileira" /><img className="home-brand-logo light-logo" src="/assets/branding/bd679af3-7960-4753-a868-56438f93e6c0-removebg-preview.png" alt="Mosaic — Núcleo de IA Brasileira" /></div>
     <h1>Em que posso ajudar?</h1>
     <p className="home-welcome-subtitle">Transforme suas ideias em algo concreto com o Mosaic.</p>
     <div className="home-typewriter" aria-live="polite"><span>{typedText}</span><span className="home-caret" aria-hidden="true">|</span></div>
