@@ -115,6 +115,8 @@ def model_provider_status(provider: str = "ollama") -> dict:
         }
     if normalized == "remote_inference":
         token = os.environ.get("MOSAIC_REMOTE_INFERENCE_TOKEN", "").strip()
+        if not token:
+            return {"provider": normalized, "online": False, "configured": False, "running_models": []}
         from app.providers.remote_inference import RemoteInferenceProvider
         try:
             provider = RemoteInferenceProvider()
