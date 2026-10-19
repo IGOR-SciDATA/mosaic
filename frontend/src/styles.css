@@ -78,14 +78,23 @@ button {
 }
 
 .brand-row {
-  height: 86px;
-  padding: 13px 18px;
+  height: 78px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   border-bottom: 1px solid var(--border-soft);
   position: relative;
   z-index: 1;
+}
+
+.sidebar-brand-symbol {
+  display: block;
+  width: 43px;
+  height: 43px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 10px rgba(0, 180, 115, .12));
 }
 
 .mosaic-mark {
@@ -2435,17 +2444,27 @@ body { overflow: hidden; }
   animation: home-welcome-in .35s ease-out both;
 }
 .home-welcome-mark {
-  display: grid;
-  place-items: center;
-  width: 54px;
-  height: 54px;
-  margin-bottom: 20px;
-  border: 1px solid #dce9e2;
-  border-radius: 17px;
-  background: linear-gradient(145deg, #ffffff, #f0f8f3);
-  box-shadow: 0 5px 18px rgba(22,132,91,.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(390px, 78vw);
+  margin: 0 auto 14px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
-.home-welcome-mark .mosaic-mark { width: 36px; height: 36px; color: #16845b; }
+.home-brand-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+.home-brand-logo.light-logo { display: none; }
+:root[data-theme="light"] .home-brand-logo.dark-logo { display: none; }
+:root[data-theme="light"] .home-brand-logo.light-logo { display: block; }
+.brand-row .mobile-close { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
 .home-welcome h1 {
   margin: 0;
   color: #111318;
