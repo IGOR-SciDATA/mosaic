@@ -52,7 +52,7 @@ function Sidebar({ projects, conversations, activeProjectId, activeConversationI
   }, [conversations]);
 
   return <aside className={mobileOpen ? "sidebar open" : "sidebar"}>
-    <div className="brand-row"><MosaicMark/><span className="wordmark">MOSAIC</span><button className="mobile-close" onClick={onClose}>×</button></div>
+    <div className="brand-row"><img className="sidebar-brand-symbol" src="/brand/mosaic-icon.svg" alt="Mosaic" /><button className="mobile-close" onClick={onClose}>×</button></div>
     <button className="new-chat" onClick={onNewConversation}><Icon name="plus" size={19}/>Nova conversa</button>
     <nav className="side-primary">
       <button onClick={onHome}><Icon name="home"/>Início</button>
@@ -223,7 +223,7 @@ function HomeWelcome() {
   }, [typedText, deleting, exampleIndex]);
 
   return <section className="home-welcome">
-    <div className="home-welcome-mark"><MosaicMark compact /></div>
+    <div className="home-welcome-mark"><img className="home-brand-logo dark-logo" src="/brand/mosaic-dark.svg" alt="Mosaic — Núcleo de IA Brasileira" /><img className="home-brand-logo light-logo" src="/brand/mosaic-light.svg" alt="Mosaic — Núcleo de IA Brasileira" /></div>
     <h1>Em que posso ajudar?</h1>
     <p className="home-welcome-subtitle">Transforme suas ideias em algo concreto com o Mosaic.</p>
     <div className="home-typewriter" aria-live="polite"><span>{typedText}</span><span className="home-caret" aria-hidden="true">|</span></div>
