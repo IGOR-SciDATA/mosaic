@@ -96,11 +96,9 @@ O snapshot registra a base de trabalho disponível após a consolidação inicia
 
 ### Fluxo já concluído no protótipo
 
-**Capacidade demonstrada manualmente pelo usuário na versão atual:** o agente recebeu um arquivo Markdown (`.md`), leu seu conteúdo, produziu um resumo e criou um segundo arquivo Markdown com o conteúdo resumido. O usuário acompanhou o fluxo até a conclusão e confirmou que o novo arquivo foi criado corretamente.
+**Capacidade demonstrada manualmente pelo criador na versão atual:** O Core injetou no agente o contexto de agents.md e as skills criadas pelo usuário foi utilizada no contexto, que recebeu um arquivo Markdown (`.md`), leu seu conteúdo, produziu um resumo e criou um segundo arquivo Markdown com o conteúdo resumido. O usuário acompanhou o fluxo até a conclusão e confirmou que o novo arquivo foi criado corretamente.
 
 Esse é um marco concreto: o protótipo já demonstrou uma tarefa de leitura de arquivo → transformação de conteúdo → criação de artefato. O fluxo deve ser preservado como cenário de regressão enquanto o Core e as ferramentas evoluem.
-
-**Escopo da evidência:** trata-se de uma validação manual reportada pelo usuário, não de um teste automatizado publicado nem de uma prova de que todos os fluxos agentic, formatos de arquivo ou tarefas gerais funcionam.
 
 ### O que ainda precisa ser comprovado
 
@@ -363,7 +361,7 @@ O Mosaic continua em desenvolvimento ativo. CI verde comprova a suíte automatiz
 
 # ◈ MOSAIC
 
-### Intelligence can change. Continuity remains.
+### Interfaces substituíveis. Dados persistem.
 
 **Core persists.** · **Models evolve.** · **Memory survives.** · **Work gets done.**
 
