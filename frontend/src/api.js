@@ -82,6 +82,8 @@ export const api = {
     create: (payload) => request("/models", { method: "POST", body: JSON.stringify(payload) }),
     update: (id, payload) => request(`/models/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
     status: (provider = "ollama") => request(`/models/status?provider=${encodeURIComponent(provider)}`),
+    remoteConfig: () => request("/models/remote-inference/config"),
+    saveRemoteConfig: (url) => request("/models/remote-inference/config", { method: "PUT", body: JSON.stringify({ url }) }),
   },
   projects: {
     list: () => request("/projects"),
