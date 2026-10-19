@@ -1797,11 +1797,11 @@ body { overflow: hidden; }
 :root[data-theme="light"] {
   color-scheme: light;
   color: #202124;
-  background: #f4f5f7;
-  --bg: #f4f5f7;
-  --surface: #ffffff;
-  --surface-2: #f8f9fb;
-  --surface-3: #eef0f3;
+  background: #f0f1ee;
+  --bg: #f0f1ee;
+  --surface: #f7f7f3;
+  --surface-2: #f0f1ed;
+  --surface-3: #e7e9e3;
   --border: rgba(25, 30, 38, .14);
   --border-soft: rgba(25, 30, 38, .09);
   --text: #202124;
@@ -1814,10 +1814,10 @@ body { overflow: hidden; }
 }
 :root[data-theme="light"] body {
   color: var(--text);
-  background: radial-gradient(circle at 63% 5%, rgba(217,39,34,.045), transparent 23rem), #f4f5f7;
+  background: radial-gradient(circle at 63% 5%, rgba(217,39,34,.045), transparent 23rem), #f0f1ee;
 }
 :root[data-theme="light"] .app-shell {
-  background: linear-gradient(125deg, rgba(255,255,255,.7), transparent 30%), #f4f5f7;
+  background: linear-gradient(125deg, rgba(255,255,255,.7), transparent 30%), #f0f1ee;
 }
 :root[data-theme="light"] .sidebar,
 :root[data-theme="light"] .app-main,
@@ -1840,7 +1840,7 @@ body { overflow: hidden; }
   border-color: var(--border);
 }
 :root[data-theme="light"] .sidebar {
-  background: linear-gradient(155deg, #fff, #f8f9fb 72%);
+  background: linear-gradient(155deg, #f8f8f4, #eff0ec 72%);
   box-shadow: 0 5px 24px rgba(22, 28, 38, .05);
 }
 :root[data-theme="light"] .sidebar::after { opacity: .12; }
@@ -2447,8 +2447,8 @@ body { overflow: hidden; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: min(390px, 78vw);
-  margin: 0 auto 14px;
+  width: min(420px, 78vw);
+  margin: 0 auto 4px;
   padding: 0;
   background: transparent;
   border: 0;
@@ -2461,7 +2461,7 @@ body { overflow: hidden; }
   height: auto;
   object-fit: contain;
 }
-.home-brand-logo.light-logo { display: none; }
+.home-brand-logo.light-logo { display: none; mix-blend-mode: multiply; }
 :root[data-theme="light"] .home-brand-logo.dark-logo { display: none; }
 :root[data-theme="light"] .home-brand-logo.light-logo { display: block; }
 .brand-row .mobile-close { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
@@ -3072,3 +3072,80 @@ body { overflow: hidden; }
 .side-primary .project-row .sidebar-delete-button, .side-primary .conversation-row .sidebar-delete-button { width: 28px !important; min-width: 28px !important; max-width: 28px; flex: 0 0 28px; min-height: 28px !important; height: 28px; padding: 0 !important; gap: 0; }
 .side-primary .project-row .sidebar-delete-button svg, .side-primary .conversation-row .sidebar-delete-button svg { flex: 0 0 auto; }
 .side-primary .project-row .project-expand { width: 24px; min-width: 24px; max-width: 24px; flex: 0 0 24px; }
+
+
+/* Final neutral light palette: soften surfaces consistently across every workspace. */
+:root[data-theme="light"] {
+  --bg: #f0f1ee;
+  --surface: #f7f7f3;
+  --surface-2: #f0f1ed;
+  --surface-3: #e7e9e3;
+  --border: #d8dbd5;
+  --border-soft: #e2e4de;
+}
+:root[data-theme="light"] body,
+:root[data-theme="light"] .app-shell { background: var(--bg); }
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .app-main,
+:root[data-theme="light"] .workspace,
+:root[data-theme="light"] .topbar,
+:root[data-theme="light"] .project-header,
+:root[data-theme="light"] .context-panel,
+:root[data-theme="light"] .composer,
+:root[data-theme="light"] .modal-content,
+:root[data-theme="light"] .task-card,
+:root[data-theme="light"] .task-detail,
+:root[data-theme="light"] .task-history,
+:root[data-theme="light"] .task-timeline-panel,
+:root[data-theme="light"] .task-workspace,
+:root[data-theme="light"] .task-start-form,
+:root[data-theme="light"] .task-list-panel,
+:root[data-theme="light"] .task-detail-panel,
+:root[data-theme="light"] .task-result,
+:root[data-theme="light"] .context-card,
+:root[data-theme="light"] .side-card,
+:root[data-theme="light"] .agent-config-card,
+:root[data-theme="light"] .memory-manager-list,
+:root[data-theme="light"] .memory-manager-item,
+:root[data-theme="light"] .file-browser,
+:root[data-theme="light"] .file-preview,
+:root[data-theme="light"] .notes-editor,
+:root[data-theme="light"] .project-notes-editor,
+:root[data-theme="light"] .model-response-panel {
+  background-color: var(--surface);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .sidebar {
+  background: linear-gradient(155deg, #f8f8f4, #eff0ec 72%);
+}
+:root[data-theme="light"] .project-header {
+  background: linear-gradient(135deg, #f7f7f3 0%, #f2f3ef 62%, #eceee8 100%);
+}
+:root[data-theme="light"] .project-tabs button.active,
+:root[data-theme="light"] .task-panel-heading,
+:root[data-theme="light"] .task-timeline-heading,
+:root[data-theme="light"] .modal-actions > button {
+  background: var(--surface-2);
+}
+:root[data-theme="light"] .task-start-form textarea,
+:root[data-theme="light"] .task-start-form input,
+:root[data-theme="light"] .agent-config-card input,
+:root[data-theme="light"] .agent-config-card textarea,
+:root[data-theme="light"] .agent-config-card select,
+:root[data-theme="light"] .memory-form-grid input,
+:root[data-theme="light"] .memory-value-label textarea,
+:root[data-theme="light"] .project-notes-editor,
+:root[data-theme="light"] .modal-form input,
+:root[data-theme="light"] .modal-form textarea,
+:root[data-theme="light"] .modal-form select,
+:root[data-theme="light"] .model-select,
+:root[data-theme="light"] .composer textarea {
+  background-color: #f3f4f0;
+  border-color: var(--border);
+}
+:root[data-theme="light"] .task-progress-track,
+:root[data-theme="light"] .model-event-preview,
+:root[data-theme="light"] .task-list-item,
+:root[data-theme="light"] .task-notice {
+  background-color: var(--surface-2);
+}
