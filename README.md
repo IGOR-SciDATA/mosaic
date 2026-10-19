@@ -32,7 +32,7 @@
 
 <div align="center">
 
-<img src="assets/branding/Screenshot_2.png" alt="Interface web do Mosaic" width="100%" />
+<img src="assets/branding/Screenshot_3.png" alt="Interface web do Mosaic" width="100%" />
 
 <sub>Interface do protótipo — funcionalidades visíveis e, fluxos ponta a ponta validados.</sub>
 
