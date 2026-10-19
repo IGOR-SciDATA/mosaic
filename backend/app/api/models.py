@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.models.model import Model
 from app.models.repository import create_model, get_model, list_models, update_model
+from app.db.database import get_connection
 
 
 class ModelCreate(BaseModel):
@@ -22,6 +23,10 @@ class ModelUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     configuration: dict | None = None
     enabled: bool | None = None
+
+
+class RemoteInferenceConfig(BaseModel):
+    url: str = Field(min_length=8, max_length=2048)
 
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -64,6 +69,38 @@ def list_models_endpoint() -> list[Model]:
     return list_models()
 
 
+@router.get("/remote-inference/config")
+def get_remote_inference_config() -> dict:
+    """Return the locally stored endpoint URL, never credentials."""
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT value FROM settings WHERE key = ?",
+            ("remote_inference_url",),
+        ).fetchone()
+    return {"url": row["value"] if row else os.environ.get("MOSAIC_REMOTE_INFERENCE_URL", "")}
+
+
+@router.put("/remote-inference/config")
+def save_remote_inference_config(payload: RemoteInferenceConfig) -> dict:
+    """Persist endpoint URL locally; the bearer token remains backend-only in the environment."""
+    from urllib.parse import urlparse
+
+    value = payload.url.strip().rstrip("/")
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="Informe uma URL HTTP/HTTPS válida, sem credenciais embutidas.")
+    if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        raise HTTPException(status_code=400, detail="Endpoints remotos devem usar HTTPS.")
+    with get_connection() as connection:
+        connection.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            ("remote_inference_url", value),
+        )
+        connection.commit()
+    return {"url": value, "configured": bool(os.environ.get("MOSAIC_REMOTE_INFERENCE_TOKEN", "").strip())}
+
+
 @router.get("/status")
 def model_provider_status(provider: str = "ollama") -> dict:
     """Report Ollama reachability or whether OpenAI backend credentials are configured."""
@@ -76,6 +113,32 @@ def model_provider_status(provider: str = "ollama") -> dict:
             "configured": configured,
             "running_models": [],
         }
+    if normalized == "remote_inference":
+        token = os.environ.get("MOSAIC_REMOTE_INFERENCE_TOKEN", "").strip()
+        if not token:
+            return {"provider": normalized, "online": False, "configured": False, "running_models": []}
+        from app.providers.remote_inference import RemoteInferenceProvider
+        try:
+            provider = RemoteInferenceProvider()
+            configured = bool(provider.base_url and token)
+            # The server's liveness endpoint is intentionally lightweight; inference remains
+            # the final compatibility check because server versions may expose different capabilities.
+            req = request.Request(
+                f"{provider.base_url}/health/ready",
+                headers={"Authorization": f"Bearer {provider.token}", "Accept": "application/json"},
+                method="GET",
+            )
+            with request.urlopen(req, timeout=3) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            ready = isinstance(payload, dict) and payload.get("status") in {"ready", "ok"}
+            return {
+                "provider": normalized,
+                "online": bool(ready),
+                "configured": True,
+                "running_models": [payload.get("model")] if ready and payload.get("model") else [],
+            }
+        except (error.URLError, TimeoutError, json.JSONDecodeError, RuntimeError, ValueError):
+            return {"provider": normalized, "online": False, "configured": True, "running_models": []}
     if normalized != "ollama":
         return {"provider": normalized, "online": False, "configured": False, "running_models": []}
     try:

@@ -10,6 +10,7 @@ from typing import Any
 from app.providers.base import ModelProvider
 from app.providers.ollama import OllamaProvider
 from app.providers.openai import OpenAIProvider
+from app.providers.remote_inference import RemoteInferenceProvider
 
 ProviderFactory = Callable[[dict[str, Any]], ModelProvider]
 
@@ -22,9 +23,14 @@ def _create_openai(_configuration: dict[str, Any]) -> ModelProvider:
     return OpenAIProvider()
 
 
+def _create_remote_inference(_configuration: dict[str, Any]) -> ModelProvider:
+    return RemoteInferenceProvider()
+
+
 _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
     "ollama": _create_ollama,
     "openai": _create_openai,
+    "remote_inference": _create_remote_inference,
 }
 
 
