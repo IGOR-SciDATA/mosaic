@@ -76,6 +76,33 @@ def model_provider_status(provider: str = "ollama") -> dict:
             "configured": configured,
             "running_models": [],
         }
+    if normalized == "remote_inference":
+        endpoint = os.environ.get("MOSAIC_REMOTE_INFERENCE_URL", "").strip().rstrip("/")
+        token = os.environ.get("MOSAIC_REMOTE_INFERENCE_TOKEN", "").strip()
+        configured = bool(endpoint and token)
+        if not configured:
+            return {"provider": normalized, "online": False, "configured": False, "running_models": []}
+        from app.providers.remote_inference import RemoteInferenceProvider
+        try:
+            provider = RemoteInferenceProvider()
+            # The server's liveness endpoint is intentionally lightweight; inference remains
+            # the final compatibility check because server versions may expose different capabilities.
+            req = request.Request(
+                f"{provider.base_url}/health/ready",
+                headers={"Authorization": f"Bearer {provider.token}", "Accept": "application/json"},
+                method="GET",
+            )
+            with request.urlopen(req, timeout=3) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            ready = isinstance(payload, dict) and payload.get("status") in {"ready", "ok"}
+            return {
+                "provider": normalized,
+                "online": bool(ready),
+                "configured": True,
+                "running_models": [payload.get("model")] if ready and payload.get("model") else [],
+            }
+        except (error.URLError, TimeoutError, json.JSONDecodeError, RuntimeError, ValueError):
+            return {"provider": normalized, "online": False, "configured": True, "running_models": []}
     if normalized != "ollama":
         return {"provider": normalized, "online": False, "configured": False, "running_models": []}
     try:
