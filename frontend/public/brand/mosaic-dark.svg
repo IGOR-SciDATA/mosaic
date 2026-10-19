@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 300" role="img" aria-labelledby="title desc">
+<title id="title">Mosaic — Núcleo de IA Brasileira</title><desc id="desc">Símbolo geométrico verde, vermelho, amarelo e azul acima do nome Mosaic em branco.</desc>
+<defs><linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00c878"/><stop offset="1" stop-color="#008b5a"/></linearGradient><linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff333a"/><stop offset="1" stop-color="#d90019"/></linearGradient><linearGradient id="yellow" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffd900"/><stop offset="1" stop-color="#ffae00"/></linearGradient><linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0865ff"/><stop offset="1" stop-color="#0635d9"/></linearGradient></defs>
+<g stroke-linejoin="round">
+<path d="M224 18 Q220 16 220 23 L220 91 Q220 97 225 101 L278 135 Q285 140 285 132 L285 66 Q285 60 280 56 Z" fill="url(#green)"/>
+<path d="M300 64 Q300 58 306 62 L329 78 Q333 81 333 87 L333 121 Q333 126 328 130 L306 145 Q300 149 300 142 Z" fill="url(#red)"/>
+<path d="M367 56 Q362 53 368 49 L431 13 Q439 9 439 18 L439 133 Q439 143 431 138 Z" fill="url(#yellow)"/>
+<path d="M220 123 Q220 117 226 121 L282 154 Q288 158 282 163 L226 197 Q220 201 220 194 Z" fill="url(#blue)"/>
+<path d="M339 121 Q339 115 345 119 L435 174 Q440 177 440 183 L440 205 Q440 213 433 209 L345 156 Q339 152 339 146 Z" fill="url(#green)"/>
+</g>
+<text x="42" y="246" fill="#f7f7f7" font-family="Arial, Helvetica, sans-serif" font-size="65" font-weight="900" letter-spacing="3">MOSAIC</text>
+<path d="M337 244 L356 214 L375 244 Z" fill="#f3212e"/>
+<text x="43" y="276" fill="#f7f7f7" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="8.1">NÚCLEO DE IA BRASILEIRA</text>
+</svg>
