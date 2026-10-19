@@ -114,14 +114,11 @@ def model_provider_status(provider: str = "ollama") -> dict:
             "running_models": [],
         }
     if normalized == "remote_inference":
-        endpoint = os.environ.get("MOSAIC_REMOTE_INFERENCE_URL", "").strip().rstrip("/")
         token = os.environ.get("MOSAIC_REMOTE_INFERENCE_TOKEN", "").strip()
-        configured = bool(endpoint and token)
-        if not configured:
-            return {"provider": normalized, "online": False, "configured": False, "running_models": []}
         from app.providers.remote_inference import RemoteInferenceProvider
         try:
             provider = RemoteInferenceProvider()
+            configured = bool(provider.base_url and token)
             # The server's liveness endpoint is intentionally lightweight; inference remains
             # the final compatibility check because server versions may expose different capabilities.
             req = request.Request(
