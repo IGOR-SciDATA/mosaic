@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.models.model import Model
 from app.models.repository import create_model, get_model, list_models, update_model
+from app.db.database import get_connection
 
 
 class ModelCreate(BaseModel):
@@ -22,6 +23,10 @@ class ModelUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     configuration: dict | None = None
     enabled: bool | None = None
+
+
+class RemoteInferenceConfig(BaseModel):
+    url: str = Field(min_length=8, max_length=2048)
 
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -62,6 +67,38 @@ def create_model_endpoint(payload: ModelCreate) -> Model:
 @router.get("", response_model=list[Model])
 def list_models_endpoint() -> list[Model]:
     return list_models()
+
+
+@router.get("/remote-inference/config")
+def get_remote_inference_config() -> dict:
+    """Return the locally stored endpoint URL, never credentials."""
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT value FROM settings WHERE key = ?",
+            ("remote_inference_url",),
+        ).fetchone()
+    return {"url": row["value"] if row else os.environ.get("MOSAIC_REMOTE_INFERENCE_URL", "")}
+
+
+@router.put("/remote-inference/config")
+def save_remote_inference_config(payload: RemoteInferenceConfig) -> dict:
+    """Persist endpoint URL locally; the bearer token remains backend-only in the environment."""
+    from urllib.parse import urlparse
+
+    value = payload.url.strip().rstrip("/")
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="Informe uma URL HTTP/HTTPS válida, sem credenciais embutidas.")
+    if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        raise HTTPException(status_code=400, detail="Endpoints remotos devem usar HTTPS.")
+    with get_connection() as connection:
+        connection.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            ("remote_inference_url", value),
+        )
+        connection.commit()
+    return {"url": value, "configured": bool(os.environ.get("MOSAIC_REMOTE_INFERENCE_TOKEN", "").strip())}
 
 
 @router.get("/status")
