@@ -15,40 +15,47 @@ def test_database(monkeypatch, tmp_path):
 def _model():
     return create_model("Test", "ollama", "test-model")
 
+def _finish_task(task_id):
+    update_task(task_id, status="planning")
+    update_task(task_id, status="executing")
+    update_task(task_id, status="completed")
+
 def _counts(table, where="", params=()):
     with get_connection() as connection:
         return connection.execute("SELECT COUNT(*) FROM " + table + (" WHERE " + where if where else ""), params).fetchone()[0]
 
 def test_delete_conversation_removes_messages_and_task_records():
     project = create_project("Project", "/tmp/project")
-    conversation = create_conversation("Conversation", _model().id, project.id)
+    model = _model()
+    conversation = create_conversation("Conversation", model.id, project.id)
     create_message(conversation.id, "user", "persisted message")
     task = create_task("generic", "agent", conversation_id=conversation.id, project_id=project.id)
-    update_task(task.id, status="completed")
+    _finish_task(task.id)
     assert delete_conversation(conversation.id) is True
     assert _counts("conversations", "id = ?", (conversation.id,)) == 0
     assert _counts("messages", "conversation_id = ?", (conversation.id,)) == 0
     assert _counts("tasks", "id = ?", (task.id,)) == 0
     assert _counts("task_events", "task_id = ?", (task.id,)) == 0
 
-def test_delete_project_removes_related_records_but_preserves_other_project():
+def test_delete_project_preserves_conversations_and_memories_as_unassigned_records():
     project = create_project("Delete me", "/tmp/delete-me")
     other = create_project("Keep me", "/tmp/keep-me")
-    conversation = create_conversation("Project chat", _model().id, project.id)
-    other_conversation = create_conversation("Other chat", _model().id, other.id)
+    model = _model()
+    conversation = create_conversation("Project chat", model.id, project.id)
+    other_conversation = create_conversation("Other chat", model.id, other.id)
     create_message(conversation.id, "user", "project message")
     create_message(other_conversation.id, "user", "keep message")
     create_memory("project_state", "key", "value", "test", project_id=project.id)
     task = create_task("generic", "agent", conversation_id=conversation.id, project_id=project.id)
-    update_task(task.id, status="completed")
+    _finish_task(task.id)
     assert delete_project(project.id) is True
     assert get_project(project.id) is None
-    assert _counts("conversations", "id = ?", (conversation.id,)) == 0
-    assert _counts("messages", "conversation_id = ?", (conversation.id,)) == 0
-    assert _counts("tasks", "id = ?", (task.id,)) == 0
-    assert _counts("memories", "project_id = ?", (project.id,)) == 0
+    assert _counts("conversations", "id = ? AND project_id IS NULL", (conversation.id,)) == 1
+    assert _counts("messages", "conversation_id = ?", (conversation.id,)) == 1
+    assert _counts("tasks", "id = ? AND project_id IS NULL", (task.id,)) == 1
+    assert _counts("memories", "project_id IS NULL AND key = ?", ("key",)) == 1
     assert get_project(other.id) is not None
-    assert _counts("conversations", "id = ?", (other_conversation.id,)) == 1
+    assert _counts("conversations", "id = ? AND project_id = ?", (other_conversation.id, other.id)) == 1
     assert _counts("messages", "conversation_id = ?", (other_conversation.id,)) == 1
 
 def test_cannot_delete_conversation_with_active_task():
