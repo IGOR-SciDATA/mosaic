@@ -88,11 +88,15 @@ O snapshot registra a base de trabalho disponível após a consolidação inicia
 
 ### O que existe na base de código
 
-- Aplicação web em React/Vite e API em FastAPI.
-- Persistência SQLite para partes centrais do domínio, incluindo conversas, mensagens, projetos, memórias, modelos e tarefas.
-- Integração com provider local via Ollama.
-- Componentes de Agent, ciclo de tarefas, registro de ferramentas, ações, chamadas/resultados de ferramentas e eventos.
-- Base de contexto e documentação de arquitetura, segurança, UX e execução agêntica.
+- **Interface de workspace:** React + Vite, com projetos, conversas, arquivos, tarefas, memória, artefatos, notas e Biblioteca de agentes; temas claro/escuro e identidade visual Mosaic.
+- **Core/API:** FastAPI, com persistência SQLite e estado de projetos/conversas/tarefas.
+- **Providers explícitos:** Ollama e provider OpenAI Responses API. O usuário seleciona o modelo; não há fallback silencioso. A integração OpenAI exige `OPENAI_API_KEY` somente no ambiente do backend.
+- **Biblioteca de agentes por projeto:** CRUD de perfis com slug, instruções do agente, Skills versionadas e hashes; invocação por `/slug` e snapshot persistido na Task para preservar a versão usada.
+- **Execução e segurança:** Task Engine, Harness, ferramentas registradas, validação de chamadas, políticas/aprovações, eventos e resultados persistidos.
+- **Artefatos e contexto:** fluxo de contexto/memória, workspace de arquivos e ferramentas com testes para formatos Markdown, PDF, DOCX, XLSX e PPTX.
+- **Documentação de contratos e roadmap:** fases, critérios de aceite e limites de validação mantidos em `docs/`.
+
+A presença de uma integração não significa que todo provider externo foi testado em runtime; a matriz E2E e o status abaixo distinguem cobertura automatizada de validação real.
 
 ### Fluxo já concluído no protótipo
 
@@ -116,7 +120,7 @@ Esse é um marco concreto: o protótipo já demonstrou uma tarefa de leitura de 
 - **Validado ponta a ponta:** jornada real foi executada e os critérios de aceite foram verificados.
 - **Demonstrado manualmente:** evidência reportada pelo usuário, ainda sem equivalência automática presumida.
 
-**Atualização de validação (18/10/2026):** a suíte backend completa passou com **226 testes aprovados e 1 aviso**, e o build frontend passou no [GitHub Actions #39113375125](https://github.com/IGOR-SciDATA/mosaic/actions/runs/39113375125), no commit de código integrado `331f3a8b713031fc5b042b4e9a009bc921f8f97b`. O `main` atual (`0725859180112a2c0dbb8618b3e0adc23642bdaf`) inclui depois a PR documental #75; não há execução de CI diretamente associada a esse commit. A regressão automatizada Markdown da [PR #63](https://github.com/IGOR-SciDATA/mosaic/pull/63) já está mesclada e coberta pela suíte. Smoke test com Ollama real, reinício real de processo e validações E2E com provider real continuam pendentes. Ver [auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md) e [matriz E2E](docs/MOSAIC_E2E_VALIDATION_MATRIX_v1.0.md).
+**Atualização de validação:** a Fase 14 foi integrada pela [PR #81](https://github.com/IGOR-SciDATA/mosaic/pull/81); a CI correspondente registrou **260 testes backend aprovados, 1 aviso, e build frontend aprovado**. A Fase 13 (provider OpenAI Responses API) foi integrada pela [PR #80](https://github.com/IGOR-SciDATA/mosaic/pull/80). As melhorias visuais e de branding foram integradas nas [PRs #92](https://github.com/IGOR-SciDATA/mosaic/pull/92), [#93](https://github.com/IGOR-SciDATA/mosaic/pull/93) e [#94](https://github.com/IGOR-SciDATA/mosaic/pull/94); essas PRs não devem ser tratadas como prova de smoke test com provider real. **Não há confirmação aqui de uma execução de CI posterior que valide conjuntamente o estado mais recente da `main`.** Smoke test com Ollama real, chamada OpenAI com credencial autorizada, reinício real de processo e validações E2E completas continuam pendentes. Ver [auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md), [status de execução das fases](docs/MOSAIC_PHASE_EXECUTION_STATUS_v1.0.md) e [matriz E2E](docs/MOSAIC_E2E_VALIDATION_MATRIX_v1.0.md).
 
 ---
 
@@ -224,21 +228,20 @@ A interface deve refletir o estado persistido no Core. Não inventar percentuais
 
 O roadmap é atualizado conforme o código muda e as evidências são revisadas. **“Existe no código”, “implementado”, “testado” e “validado ponta a ponta” são estados diferentes.** As etapas abaixo são marcos de desenvolvimento, não afirmações de que tudo já passou.
 
-| Marco | Estado no baseline | Objetivo / saída verificável |
+| Marco | Estado atual | Evidência / próximo critério |
 |---|---|---|
-| Fundação do Core | **Testado no CI; provider real pendente** | Persistência, conversas, projetos, memórias, modelos e tarefas coerentes |
-| Agent, ferramentas e autoverificação | **Regressão Markdown e validação de artefatos testadas; E2E com provider real pendente** | Registrar eventos operacionais, verificar artefatos com evidências, corrigir falhas com limites e preservar regressões |
-| Segurança e estado | **Testado no CI; crash/restart real pendente** | Workspace confinado, terminal controlado, validação estrita, políticas e transições consistentes |
-| Contratos e baseline | **Schema reconciliado; suíte backend e build frontend aprovados no commit de código validado** | Contratos canônicos, schema compatível, testes/build/smoke/E2E com evidências explícitas |
-| Harness retomável | **Aprovação, rejeição, cancelamento e recuperação determinística testados; reinício real pendente** | Eventos consultáveis e retomada sem duplicar efeitos |
-| Contexto e conhecimento | **Isolamento testado; continuidade e proveniência completa ainda parciais** | Contexto limitado por escopo, recuperação de arquivos e proveniência das fontes |
-| Skills e especialidades | **Testado Ponta-a-Ponta ✅** | Instruções versionadas por conversa/tarefa e perfis especializados coordenados |
-| Ferramentas de artefatos | **Objetivo de implementação** | Markdown, DOCX, PDF, XLSX e PPTX criados e validados no fluxo real |
-| Pesquisa com fontes | **Objetivo de implementação** | Busca e leitura seguras, referências verificáveis, fontes persistidas e citadas |
-| Projetos de software | **Objetivo de implementação** | Planejamento, backend/frontend/QA, integração, build, testes e entrega |
-| Experiência de execução | **Evolução planejada** | Chat legível, timeline factual, aprovações, fontes, artefatos e erros claros |
-| Autonomia limitada | **Futuro, condicionado a validação** | Limites de recursos, avaliação de qualidade, políticas e recuperação testadas |
-| Paralelismo controlado | **Futuro; não habilitar ainda** | Somente após provar isolamento, dependências, concorrência e recuperação |
+| Core, projetos, conversas e persistência | **Testado no CI** | SQLite, API e estado de domínio; smoke test de implantação e recuperação após reinício real ainda pendentes |
+| Harness, tarefas e segurança | **Testado com fixtures/providers simulados** | Ciclo de ferramenta, políticas, aprovações, eventos, cancelamento e recuperação têm cobertura; provider real e crash/restart E2E pendentes |
+| Contexto, memória e continuidade | **Testado parcialmente** | Isolamento de contexto, memória e histórico cobertos; proveniência completa e recuperação após reinício real continuam em avaliação |
+| Providers de modelos — Fase 13 | **Implementado e testado por mocks/CI ✅** | Ollama preservado; OpenAI Responses API adicionada como provider explícito, SSE e adaptação de tool calls; smoke test real depende de credencial autorizada |
+| Biblioteca de agentes — Fase 14 | **Implementado e testado no CI ✅** | Perfis por projeto, slug, instruções, Skills versionadas/hash, invocação `/slug`, snapshot imutável na Task e isolamento de contexto |
+| UX e identidade visual | **Implementado; validação visual manual pendente** | Navegação por projeto, Biblioteca, temas claro/escuro, branding e paleta creme; conferir em navegador após as últimas alterações |
+| Ferramentas e artefatos | **Cobertura automatizada existente** | Markdown, PDF, DOCX, XLSX e PPTX têm testes de geração/reabertura; jornadas completas com provider real ainda pendentes |
+| Pesquisa com fontes | **Testado com fixtures; rede real pendente** | Fluxo determinístico de busca/leitura/relatório com URL citada; confirmar acesso público real e persistência de evidências |
+| Construção de software de ponta a ponta | **Pendente de demonstração E2E** | Completar arquitetura, backend/frontend, testes, build, integração e QA em uma tarefa real |
+| Adapter WebChat autorizado — Fase 15 | **Planejado; não iniciado** | Exige aprovação explícita e escopo restrito a aplicação própria/autorizada; login manual, perfil dedicado e revogação |
+| Contexto econômico e retomada integrada — Fase 16 | **Planejado** | Medir consumo quando disponível e provar pause/restart/resume com snapshot e sem duplicar efeitos |
+| Paralelismo controlado | **Futuro; não habilitar ainda** | Só após evidências de isolamento, dependências, concorrência e recuperação |
 
 ## Próximos objetivos de maior prioridade
 
