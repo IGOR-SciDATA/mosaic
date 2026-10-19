@@ -102,6 +102,7 @@ export const api = {
   },
   conversations: {
     list: () => request("/conversations"),
+    remove: (id) => request("/conversations/" + id, { method: "DELETE" }),
     get: (id) => request(`/conversations/${id}`),
     create: (payload) => request("/conversations", { method: "POST", body: JSON.stringify(payload) }),
     update: (id, payload) => request(`/conversations/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

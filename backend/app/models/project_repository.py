@@ -118,11 +118,28 @@ def update_project(
 
 
 def delete_project(project_id: int) -> bool:
+    """Delete a project while preserving its conversations and memories as unassigned records."""
     with get_connection() as connection:
-        cursor = connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
-        connection.commit()
-        return cursor.rowcount > 0
+        project = connection.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if project is None:
+            return False
 
+        task_rows = connection.execute("SELECT id, status, conversation_id FROM tasks WHERE project_id = ?", (project_id,)).fetchall()
+        if any(row["status"] not in {"completed", "failed", "cancelled"} for row in task_rows):
+            raise ValueError("This project has active Tasks; cancel or finish them before deleting it")
+
+        # A project-only Task cannot survive SET NULL because the schema requires
+        # either a conversation or project owner. Remove only these terminal Tasks.
+        orphan_task_ids = [row["id"] for row in task_rows if row["conversation_id"] is None]
+        if orphan_task_ids:
+            placeholders = ",".join("?" for _ in orphan_task_ids)
+            connection.execute("DELETE FROM tasks WHERE id IN (" + placeholders + ")", orphan_task_ids)
+
+        # Foreign keys set project_id to NULL for conversations, memories, remaining
+        # Tasks, and task events; their persisted content is intentionally preserved.
+        connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        connection.commit()
+        return True
 
 def _row_to_project(row) -> Project:
     return Project(

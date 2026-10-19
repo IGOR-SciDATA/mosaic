@@ -138,3 +138,22 @@ def update_conversation(
         connection.commit()
 
     return get_conversation(conversation_id)
+
+
+
+def delete_conversation(conversation_id: int) -> bool:
+    """Delete a conversation and its persisted Task records atomically."""
+    with get_connection() as connection:
+        exists = connection.execute("SELECT id FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+        if exists is None:
+            return False
+        task_rows = connection.execute("SELECT id, status FROM tasks WHERE conversation_id = ?", (conversation_id,)).fetchall()
+        if any(row["status"] not in {"completed", "failed", "cancelled"} for row in task_rows):
+            raise ValueError("This conversation has active Tasks; cancel or finish them before deleting it")
+        task_ids = [row["id"] for row in task_rows]
+        if task_ids:
+            placeholders = ",".join("?" for _ in task_ids)
+            connection.execute("DELETE FROM tasks WHERE id IN (" + placeholders + ")", task_ids)
+        connection.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+        connection.commit()
+        return True

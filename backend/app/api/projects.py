@@ -100,10 +100,13 @@ def update_project_endpoint(project_id: int, payload: ProjectUpdate) -> Project:
 
 @router.delete("/{project_id}")
 def delete_project_endpoint(project_id: int) -> dict[str, bool]:
-    if not delete_project(project_id):
+    try:
+        deleted = delete_project(project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"deleted": True}
-
 
 @router.get("/{project_id}/agent-config")
 def get_project_agent_config_endpoint(project_id: int) -> dict:
