@@ -227,11 +227,6 @@ function HomeWelcome() {
     <h1>Em que posso ajudar?</h1>
     <p className="home-welcome-subtitle">Transforme suas ideias em algo concreto com o Mosaic.</p>
     <div className="home-typewriter" aria-live="polite"><span>{typedText}</span><span className="home-caret" aria-hidden="true">|</span></div>
-    <div className="home-examples">
-      <div className="home-example"><span className="home-example-icon"><Icon name="file-text" size={18}/></span><div><strong>Relatórios em PDF</strong><span>Organize informações em documentos profissionais.</span></div></div>
-      <div className="home-example"><span className="home-example-icon"><Icon name="code-2" size={18}/></span><div><strong>Desenvolvimento de aplicativos</strong><span>Crie APIs, backends e funcionalidades.</span></div></div>
-      <div className="home-example"><span className="home-example-icon"><Icon name="presentation" size={18}/></span><div><strong>Apresentações em PPTX</strong><span>Transforme ideias em slides bem estruturados.</span></div></div>
-    </div>
     <p className="home-welcome-hint">Escolha <strong>Nova conversa</strong> para começar a trabalhar com o Mosaic.</p>
   </section>;
 }
