@@ -368,7 +368,7 @@ O Mosaic continua em desenvolvimento ativo. CI verde comprova a suíte automatiz
 
 **Core persists.** · **Models evolve.** · **Memory survives.** · **Work gets done.**
 
-🇧🇷 **Construindo tecnologia de IA com foco em autonomia, continuidade e soberania tecnológica.**
+🇧🇷 **Construindo tecnologia de IA com foco em autonomia, e criação de armas de guerra tecnológica brasileiras.**
 
 <sub>MOSAIC · PROTOTYPE v0.1.0 · ACTIVE DEVELOPMENT</sub>
 
