@@ -965,7 +965,7 @@ def _ensure_task_plan(task_id: int) -> dict[str, Any]:
     goal = str((task.plan or {}).get("goal", "")).strip()
     plan = dict(task.plan or {})
     if (
-        plan.get("planner_version") == "task-plan-v1"
+        plan.get("planner_version") == "task-plan-v2"
         and plan.get("planned_goal") == goal
         and isinstance(plan.get("steps"), list)
     ):
@@ -973,7 +973,7 @@ def _ensure_task_plan(task_id: int) -> dict[str, Any]:
 
     plan["goal"] = goal
     plan["planned_goal"] = goal
-    plan["planner_version"] = "task-plan-v1"
+    plan["planner_version"] = "task-plan-v2"
     plan["steps"] = _build_task_steps(goal)
     plan["current_step"] = plan["steps"][0]["id"] if plan["steps"] else None
     update_task(task_id, plan=plan)
