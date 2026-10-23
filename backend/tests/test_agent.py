@@ -822,3 +822,31 @@ def test_agent_blocks_consecutive_duplicate_successful_tool_call():
     calls = [call for call in list_tool_calls(task.conversation_id) if call.task_id == task.id]
     assert result["status"] == "completed"
     assert len(calls) == 1
+
+def test_explicit_save_path_after_content_request_plans_and_targets_artifact():
+    from app.services.agent import (
+        _artifact_output_path,
+        _build_task_steps,
+        _goal_requires_file_artifact,
+        _required_source_paths,
+    )
+
+    goal = (
+        "Leia `project/PROJECT_BRIEF.md`. Confirme o objetivo do AdegaPro, "
+        "separe escopo do MVP e fora de escopo, liste premissas e produza "
+        "backlog inicial com critérios de aceite. Salve em `docs/PRODUCT_BACKLOG.md`."
+    )
+
+    assert _required_source_paths(goal) == ["project/PROJECT_BRIEF.md"]
+    assert _goal_requires_file_artifact(goal) is True
+    assert _artifact_output_path(goal) == "docs/PRODUCT_BACKLOG.md"
+
+    steps = _build_task_steps(goal)
+    assert [step["kind"] for step in steps] == [
+        "read_file",
+        "summarize_source",
+        "create_artifact",
+    ]
+    assert steps[-1]["path"] == "docs/PRODUCT_BACKLOG.md"
+    assert steps[-1]["depends_on"] == ["summarize_source"]
+
