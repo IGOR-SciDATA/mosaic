@@ -356,13 +356,13 @@ def _goal_requires_web_research(goal: str) -> bool:
 def _explicit_output_path(goal: str) -> str | None:
     """Find a path explicitly attached to a save/write/export instruction."""
     extensions = r"(?:md|markdown|pdf|docx|xlsx|pptx)"
-    path = rf"['\\"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\\.{extensions})"
+    path = rf"""['"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.{extensions})"""
     # Allow a short description between the action and destination, but do not
     # cross sentence boundaries or accidentally select an earlier source path.
     patterns = (
-        rf"\\b(?:save|salve|write|escreva|export|exporte|store|grave)\\b"
-        rf"[^.\\n]{{0,100}}?\\b(?:to|in|as|em|para|como)\\s+{path}",
-        rf"\\b(?:save|salve|write|escreva|export|exporte)\\s+{path}",
+        rf"\b(?:save|salve|write|escreva|export|exporte|store|grave)\b"
+        rf"[^.\n]{{0,100}}?\b(?:to|in|as|em|para|como)\s+{path}",
+        rf"\b(?:save|salve|write|escreva|export|exporte)\s+{path}",
     )
     for pattern in patterns:
         match = re.search(pattern, goal, flags=re.IGNORECASE)
