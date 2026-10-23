@@ -78,7 +78,7 @@ def test_agent_auto_paginates_reads_before_model_and_excludes_unrelated_history(
 
     assert result["status"] == "completed"
     assert len(observed_contexts) == 1
-    assert get_task(task.id).plan["planner_version"] == "task-plan-v1"
+    assert get_task(task.id).plan["planner_version"] == "task-plan-v2"
     assert get_task(task.id).plan["steps"][0]["status"] == "completed"
 
 
