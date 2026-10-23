@@ -353,8 +353,30 @@ def _goal_requires_web_research(goal: str) -> bool:
     ))
 
 
+def _explicit_output_path(goal: str) -> str | None:
+    """Find a path explicitly attached to a save/write/export instruction."""
+    extensions = r"(?:md|markdown|pdf|docx|xlsx|pptx)"
+    path = rf"""[`'"]?([A-Za-z0-9_][A-Za-z0-9_./-]*\.{extensions})"""
+    # Allow a short description between the action and destination, but do not
+    # cross sentence boundaries or accidentally select an earlier source path.
+    patterns = (
+        rf"\b(?:save|salve|write|escreva|export|exporte|store|grave)\b"
+        rf"[^.\n]{{0,100}}?\b(?:to|in|as|em|para|como)\s+{path}",
+        rf"\b(?:save|salve|write|escreva|export|exporte)\s+{path}",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, goal, flags=re.IGNORECASE)
+        if match:
+            candidate = Path(match.group(1))
+            if candidate.name:
+                return candidate.as_posix()
+    return None
+
+
 def _goal_requires_file_artifact(goal: str) -> bool:
     """Detect explicit file output intent for supported formats."""
+    if _explicit_output_path(goal) is not None:
+        return True
     creation_verbs = (
         r"create|make|build|write|save|generate|export|compose|update|edit|modify|replace|overwrite|"
         r"crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|elabore|elaborar|prepare|preparar|"
@@ -738,6 +760,10 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
 
 def _artifact_output_path(goal: str) -> str:
     """Resolve a named output file; never mistake a source path for the target."""
+    explicit_path = _explicit_output_path(goal)
+    if explicit_path is not None:
+        return explicit_path
+
     output_verbs = (
         r"create|crie|criar|cria|faça|faca|fazer|produza|produzir|monte|montar|"
         r"elabore|elaborar|prepare|preparar|write|save|generate|export|salve|salvar|"
@@ -939,7 +965,7 @@ def _ensure_task_plan(task_id: int) -> dict[str, Any]:
     goal = str((task.plan or {}).get("goal", "")).strip()
     plan = dict(task.plan or {})
     if (
-        plan.get("planner_version") == "task-plan-v1"
+        plan.get("planner_version") == "task-plan-v2"
         and plan.get("planned_goal") == goal
         and isinstance(plan.get("steps"), list)
     ):
@@ -947,7 +973,7 @@ def _ensure_task_plan(task_id: int) -> dict[str, Any]:
 
     plan["goal"] = goal
     plan["planned_goal"] = goal
-    plan["planner_version"] = "task-plan-v1"
+    plan["planner_version"] = "task-plan-v2"
     plan["steps"] = _build_task_steps(goal)
     plan["current_step"] = plan["steps"][0]["id"] if plan["steps"] else None
     update_task(task_id, plan=plan)
