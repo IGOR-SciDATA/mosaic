@@ -1,5 +1,4 @@
 import json
-from types import SimpleNamespace
 from urllib.error import HTTPError
 
 import pytest
@@ -68,3 +67,67 @@ def test_remote_provider_rejects_unknown_message_roles():
     provider = RemoteInferenceProvider(base_url="http://localhost:8090", token="test-token")
     with pytest.raises(ValueError, match="At least one text message"):
         provider.generate([{"role": "tool", "content": "do something"}], "model", {})
+
+
+def test_remote_provider_stream_decodes_sse_text_deltas(monkeypatch):
+    provider = RemoteInferenceProvider(base_url="http://localhost:8090", token="test-token")
+    seen = {}
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def __iter__(self):
+            yield b'data: {"type":"text_delta","text":"Ol"}\n'
+            yield b'\n'
+            yield b'data: {"type":"text_delta","text":"a!"}\n'
+            yield b'\n'
+            yield b'data: [DONE]\n'
+            yield b'\n'
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["accept"] = req.get_header("Accept")
+        seen["payload"] = json.loads(req.data)
+        return Response()
+
+    monkeypatch.setattr("app.providers.remote_inference.request.urlopen", fake_urlopen)
+    chunks = list(provider.stream(
+        [{"role": "user", "content": "Oi"}],
+        "qwen2.5:3b",
+        {"temperature": 0.1, "max_output_tokens": 20},
+    ))
+    assert chunks == ["Ol", "a!"]
+    assert seen["url"] == "http://localhost:8090/v1/inference/stream"
+    assert seen["accept"] == "text/event-stream"
+    assert seen["payload"]["max_tokens"] == 20
+
+
+def test_remote_provider_stream_rejects_incomplete_stream(monkeypatch):
+    provider = RemoteInferenceProvider(base_url="http://localhost:8090", token="test-token")
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def __iter__(self):
+            yield b'data: {"type":"text_delta","text":"parcial"}\n'
+            yield b'\n'
+
+    monkeypatch.setattr("app.providers.remote_inference.request.urlopen", lambda *a, **k: Response())
+    with pytest.raises(RuntimeError, match="ended before completion"):
+        list(provider.stream([{"role": "user", "content": "Oi"}], "model", {}))
+
+
+def test_remote_provider_stream_fails_on_sse_error_event(monkeypatch):
+    provider = RemoteInferenceProvider(base_url="http://localhost:8090", token="test-token")
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def __iter__(self):
+            yield b'event: error\n'
+            yield b'data: {"type":"error","error":"backend details"}\n'
+            yield b'\n'
+
+    monkeypatch.setattr("app.providers.remote_inference.request.urlopen", lambda *a, **k: Response())
+    with pytest.raises(RuntimeError, match="stream failed"):
+        list(provider.stream([{"role": "user", "content": "Oi"}], "model", {}))
