@@ -16,7 +16,7 @@ from app.services.agent_library import (
     create_project_agent, delete_project_agent, get_project_agent,
     list_project_agents, update_project_agent,
 )
-from app.context.artifacts import list_workspace_artifacts, read_workspace_excerpt
+from app.context.artifacts import list_workspace_artifacts, read_workspace_excerpt, write_workspace_text_file
 from app.context.search import search_workspace_artifacts
 
 
@@ -52,6 +52,10 @@ class AgentProfileUpdate(BaseModel):
     description: str | None = None
     instructions: str | None = None
     skills: list[dict[str, Any]] | None = None
+
+
+class WorkspaceFileUpdate(BaseModel):
+    content: str
 
 
 class ProjectUpdate(BaseModel):
@@ -226,3 +230,14 @@ def search_project_artifacts_endpoint(
         )
     except (OSError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@router.put("/{project_id}/artifacts/content")
+def update_project_artifact_endpoint(project_id: int, payload: WorkspaceFileUpdate, path: str) -> dict:
+    project = get_project(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return write_workspace_text_file(project.workspace, path, payload.content)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
