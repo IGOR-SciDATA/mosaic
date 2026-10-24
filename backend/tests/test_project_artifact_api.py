@@ -5,6 +5,8 @@ from app.api.projects import (
     list_project_artifacts_endpoint,
     read_project_artifact_excerpt_endpoint,
     search_project_artifacts_endpoint,
+    update_project_artifact_endpoint,
+    WorkspaceFileUpdate,
 )
 from app.db.database import init_db
 from app.models.project_repository import create_project
@@ -47,3 +49,38 @@ def test_project_artifact_api_returns_404_for_unknown_project():
     with pytest.raises(HTTPException) as exc:
         list_project_artifacts_endpoint(987654)
     assert exc.value.status_code == 404
+
+
+def test_project_artifact_api_saves_existing_utf8_text_file(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "README.md"
+    target.write_text("# Before\n", encoding="utf-8")
+    project = create_project("Workspace", str(workspace))
+
+    result = update_project_artifact_endpoint(
+        project.id,
+        WorkspaceFileUpdate(content="# Depois\nConteúdo atualizado.\n"),
+        path="README.md",
+    )
+
+    assert result["saved"] is True
+    assert target.read_text(encoding="utf-8") == "# Depois\nConteúdo atualizado.\n"
+
+
+def test_project_artifact_api_rejects_edit_path_traversal(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("não alterar", encoding="utf-8")
+    project = create_project("Workspace", str(workspace))
+
+    with pytest.raises(HTTPException) as exc:
+        update_project_artifact_endpoint(
+            project.id,
+            WorkspaceFileUpdate(content="conteúdo malicioso"),
+            path="../outside.txt",
+        )
+
+    assert exc.value.status_code == 400
+    assert outside.read_text(encoding="utf-8") == "não alterar"
