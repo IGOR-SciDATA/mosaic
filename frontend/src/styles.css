@@ -3204,3 +3204,19 @@ body { overflow: hidden; }
 :root[data-theme="light"] .composer textarea {
   background-color: #f3efe4;
 }
+
+/* Project file editor mirrors the agent-library Markdown editor. */
+.project-file-toolbar { border-radius: 10px 10px 0 0; flex-wrap: wrap; }
+.project-file-toolbar .agent-file-title { min-width: 0; }
+.project-file-toolbar .agent-file-title strong { overflow-wrap: anywhere; }
+.project-file-edit-area { min-height: 420px; border-top: 0; }
+.project-file-edit-area textarea { min-height: 420px; resize: vertical; }
+.project-markdown-preview { min-height: 420px; max-height: 65vh; }
+.project-file-save { padding: 12px 14px; border-top: 1px solid var(--border); }
+.project-file-preview .agent-file-toolbar { margin: 0; }
+.project-file-preview .agent-markdown-preview { border-top: 0; border-radius: 0; }
+@media (max-width: 650px) {
+  .project-file-toolbar { align-items: flex-start; flex-direction: column; }
+  .project-file-edit-area, .project-file-edit-area textarea, .project-markdown-preview { min-height: 300px; }
+}
+
