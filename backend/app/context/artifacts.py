@@ -155,3 +155,42 @@ def read_workspace_excerpt(
         "total_lines": len(lines),
         "size_bytes": path.stat().st_size,
     }
+
+def write_workspace_text_file(
+    workspace: str | Path,
+    relative_path: str,
+    content: str,
+) -> dict[str, Any]:
+    """Update an existing UTF-8 text file without allowing path escape or symlinks."""
+    if not isinstance(content, str):
+        raise ValueError("File content must be text")
+    encoded = content.encode("utf-8")
+    if len(encoded) > MAX_ARTIFACT_BYTES:
+        raise ValueError("File exceeds the 1 MB edit limit")
+
+    root = _workspace_root(workspace)
+    path = _resolve_workspace_file(root, relative_path)
+    try:
+        path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ValueError("Only readable UTF-8 text files can be edited") from exc
+
+    temporary = path.with_name(path.name + ".mosaic-tmp")
+    if temporary.exists() or temporary.is_symlink():
+        raise ValueError("Temporary edit path already exists")
+    try:
+        temporary.write_bytes(encoded)
+        temporary.replace(path)
+    except OSError:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+    return {
+        "path": path.relative_to(root).as_posix(),
+        "size_bytes": path.stat().st_size,
+        "saved": True,
+    }
+

@@ -590,10 +590,14 @@ function ProjectFilesWorkspace({ projectId, mode = "files" }) {
   const [reading, setReading] = useState(false);
   const [error, setError] = useState("");
   const [truncated, setTruncated] = useState(false);
+  const [fileMode, setFileMode] = useState("preview");
+  const [draftContent, setDraftContent] = useState("");
+  const [savingFile, setSavingFile] = useState(false);
+  const [saveNotice, setSaveNotice] = useState("");
 
   useEffect(() => {
     let active = true;
-    setInventory([]); setSelectedPath(""); setExcerpt(null); setSearchResults(null); setError("");
+    setInventory([]); setSelectedPath(""); setExcerpt(null); setSearchResults(null); setError(""); setFileMode("preview"); setDraftContent(""); setSaveNotice("");
     if (!projectId) return undefined;
     setLoading(true);
     api.projects.artifacts(projectId).then(data => {
@@ -607,11 +611,32 @@ function ProjectFilesWorkspace({ projectId, mode = "files" }) {
 
   async function openFile(path) {
     if (!projectId || !path) return;
-    setSelectedPath(path); setReading(true); setError("");
-    try { setExcerpt(await api.projects.artifactExcerpt(projectId, path)); }
-    catch (err) { setExcerpt(null); setError("Não foi possível ler este arquivo: " + err.message); }
+    setSelectedPath(path); setReading(true); setError(""); setSaveNotice(""); setFileMode("preview");
+    try {
+      const data = await api.projects.artifactExcerpt(projectId, path);
+      setExcerpt(data);
+      setDraftContent(data.content || "");
+    } catch (err) { setExcerpt(null); setError("Não foi possível ler este arquivo: " + err.message); }
     finally { setReading(false); }
   }
+
+  async function saveFile() {
+    if (!projectId || !selectedPath || !excerpt || savingFile || excerpt.truncated) return;
+    setSavingFile(true); setError(""); setSaveNotice("");
+    try {
+      const result = await api.projects.saveArtifactContent(projectId, selectedPath, draftContent);
+      const refreshed = await api.projects.artifactExcerpt(projectId, selectedPath);
+      setExcerpt(refreshed);
+      setDraftContent(refreshed.content || "");
+      setInventory(items => items.map(item => item.path === selectedPath ? { ...item, size_bytes: result.size_bytes } : item));
+      setFileMode("preview");
+      setSaveNotice("Arquivo salvo com sucesso.");
+    } catch (err) { setError("Não foi possível salvar o arquivo: " + err.message); }
+    finally { setSavingFile(false); }
+  }
+
+  const editableText = /\.(md|markdown|txt|json|ya?ml|toml|ini|cfg|csv|tsv|html?|css|scss|js|jsx|ts|tsx|py|sql|sh|bat|ps1|xml|svg|gitignore|env)$/i.test(selectedPath);
+  const markdownFile = /\.(md|markdown)$/i.test(selectedPath);
 
   async function search(event) {
     event.preventDefault();
@@ -635,8 +660,25 @@ function ProjectFilesWorkspace({ projectId, mode = "files" }) {
         {loading ? <div className="task-muted">Lendo inventário…</div> : !entries.length ? <div className="task-muted">Nenhum arquivo encontrado.</div> : entries.map(entry => <button type="button" key={entry.path} className={selectedPath === entry.path ? "project-file-item selected" : "project-file-item"} onClick={() => openFile(entry.path)}><Icon name="file" size={16}/><span><strong>{entry.path}</strong><small>{entry.suffix || "arquivo"} · {Number(entry.size_bytes || 0).toLocaleString("pt-BR")} bytes{entry.score ? " · relevância " + entry.score : ""}</small></span></button>)}
         {truncated && searchResults === null && <div className="task-muted">Inventário limitado por segurança. Alguns arquivos podem não aparecer.</div>}
       </section>
-      <section className="project-file-preview"><div className="task-panel-heading"><strong>{selectedPath || "Pré-visualização"}</strong>{excerpt && <span>Linhas {excerpt.start_line}–{excerpt.end_line} de {excerpt.total_lines}</span>}</div>
-        {!selectedPath ? <div className="task-empty compact"><Icon name="file" size={23}/><strong>Selecione um arquivo</strong><span>O conteúdo será lido sob demanda, com limites e validação de caminho.</span></div> : reading ? <div className="task-muted">Lendo trecho…</div> : excerpt ? <><pre className="project-file-code">{excerpt.content}</pre><div className="project-file-provenance"><span>Origem: {excerpt.path} · linhas {excerpt.start_line}–{excerpt.end_line}</span>{excerpt.truncated && <span>Trecho truncado</span>}</div></> : <div className="task-muted">Pré-visualização indisponível.</div>}
+      <section className="project-file-preview">
+        <div className="agent-file-toolbar project-file-toolbar">
+          <div className="agent-file-title"><Icon name="file" size={16}/><strong>{selectedPath ? selectedPath.split("/").pop() : "Arquivo"}</strong><span>{selectedPath ? (selectedPath.split(".").pop() || "texto").toUpperCase() + " · " + selectedPath : "Selecione um arquivo"}</span></div>
+          {selectedPath && excerpt && editableText && !excerpt.truncated && <div className="agent-file-tabs">
+            <button type="button" className={fileMode === "edit" ? "active" : ""} onClick={() => setFileMode("edit")}><Icon name="code" size={14}/> Editar</button>
+            <button type="button" className={fileMode === "preview" ? "active" : ""} onClick={() => setFileMode("preview")}><Icon name="eye" size={14}/> Pré-visualizar</button>
+          </div>}
+        </div>
+        {!selectedPath ? <div className="task-empty compact"><Icon name="file" size={23}/><strong>Selecione um arquivo</strong><span>O conteúdo será aberto aqui para edição e pré-visualização.</span></div> : reading ? <div className="task-muted">Lendo arquivo…</div> : excerpt ? <>
+          {excerpt.truncated && <div className="task-inline-error">Este arquivo excede o limite de leitura do editor. Para evitar sobrescrever conteúdo parcial, a edição está desativada.</div>}
+          {fileMode === "edit" && editableText && !excerpt.truncated
+            ? <div className="agent-code-editor project-file-edit-area"><div className="agent-line-numbers" aria-hidden="true">{Array.from({length:Math.max(1,draftContent.split("\n").length)},(_,i)=><span key={i}>{i+1}</span>)}</div><textarea aria-label={"Editar " + selectedPath} value={draftContent} onChange={event => setDraftContent(event.target.value)} spellCheck={false} /></div>
+            : markdownFile && !excerpt.truncated
+              ? <article className="agent-markdown-preview project-markdown-preview">{draftContent.trim() ? draftContent.split("\n").map((line,index)=>{const trimmed=line.trim();if(/^###\s/.test(trimmed))return <h4 key={index}>{trimmed.replace(/^###\s/,"")}</h4>;if(/^##\s/.test(trimmed))return <h3 key={index}>{trimmed.replace(/^##\s/,"")}</h3>;if(/^#\s/.test(trimmed))return <h2 key={index}>{trimmed.replace(/^#\s/,"")}</h2>;if(/^[-*]\s/.test(trimmed))return <div className="agent-preview-list" key={index}>• {trimmed.replace(/^[-*]\s/,"")}</div>;return <p key={index}>{trimmed || " "}</p>;}) : <p className="agent-preview-empty">Arquivo vazio.</p>}</article>
+              : <pre className="project-file-code">{excerpt.content}</pre>}
+          <div className="project-file-provenance"><span>Origem: {excerpt.path} · linhas {excerpt.start_line}–{excerpt.end_line}</span><span>{draftContent.length.toLocaleString("pt-BR")} caracteres</span></div>
+          {fileMode === "edit" && !excerpt.truncated && <div className="agent-config-save project-file-save"><span>As alterações são gravadas no arquivo existente.</span><button type="button" className="primary-action" onClick={saveFile} disabled={savingFile || draftContent === excerpt.content}>{savingFile ? "Salvando…" : "Salvar arquivo"}</button></div>}
+          {saveNotice && <div className="agent-config-success" role="status">{saveNotice}</div>}
+        </> : <div className="task-muted">Pré-visualização indisponível.</div>}
       </section></div>
     </>}
   </section>;
