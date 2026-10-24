@@ -1,7 +1,7 @@
-"""Remote inference server adapter implementing Mosaic's existing ModelProvider contract.
+"""Remote inference server adapter implementing Mosaic's ModelProvider contract.
 
-Credentials are backend environment variables only. This adapter never falls back
-to another provider and deliberately does not implement remote tool execution.
+Credentials stay in the local backend environment. The remote service is inference-only:
+it does not own Mosaic history, memory, task state, permissions, or tool execution.
 """
 import json
 import os
@@ -20,8 +20,6 @@ class RemoteInferenceProvider(ModelProvider):
     def __init__(self, base_url: str | None = None, token: str | None = None):
         raw_url = base_url if base_url is not None else ""
         if base_url is None:
-            # The UI's local setting takes precedence; environment URL is a bootstrap fallback.
-            # Credentials remain backend-only and are never stored in SQLite.
             try:
                 from app.db.database import get_connection
                 with get_connection() as connection:
@@ -46,7 +44,6 @@ class RemoteInferenceProvider(ModelProvider):
 
     def generate(self, messages: list[dict[str, Any]], model_name: str, configuration: dict[str, Any]) -> str:
         payload = {
-            "model": model_name,
             "messages": self._messages(messages),
             "max_tokens": self._optional_int(configuration.get("max_output_tokens")),
             "temperature": self._optional_float(configuration.get("temperature")),
@@ -58,30 +55,58 @@ class RemoteInferenceProvider(ModelProvider):
         return text
 
     def stream(self, messages: list[dict[str, Any]], model_name: str, configuration: dict[str, Any]) -> Iterable[str]:
-        # RR3 stream protocol is explicit; a server without this capability fails closed.
-        payload = {"model": model_name, "messages": self._messages(messages)}
+        """Yield only text deltas. Treat missing [DONE] or an SSE error event as failure."""
+        payload = {
+            "messages": self._messages(messages),
+            "max_tokens": self._optional_int(configuration.get("max_output_tokens")),
+            "temperature": self._optional_float(configuration.get("temperature")),
+        }
         req = request.Request(
             f"{self.base_url}/v1/inference/stream",
-            data=json.dumps(payload).encode("utf-8"),
-            headers=self._headers(),
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers=self._headers(accept="text/event-stream"),
             method="POST",
         )
+        completed = False
         try:
             with request.urlopen(req, timeout=self._timeout(configuration)) as response:
                 for raw_line in response:
-                    line = raw_line.decode("utf-8", errors="replace").strip()
+                    line = raw_line.decode("utf-8", errors="strict").rstrip("\r\n")
                     if not line:
                         continue
-                    if line.startswith("data:"):
-                        value = line[5:].strip()
-                        if value == "[DONE]":
-                            return
-                        if value:
-                            yield value
+                    if line.startswith("event:"):
+                        if line[6:].strip() == "error":
+                            raise RuntimeError("Remote inference stream failed.")
+                        continue
+                    if not line.startswith("data:"):
+                        continue
+                    value = line[5:].strip()
+                    if value == "[DONE]":
+                        completed = True
+                        break
+                    if not value:
+                        continue
+                    try:
+                        event = json.loads(value)
+                    except json.JSONDecodeError:
+                        raise RuntimeError("Remote inference server returned an invalid streaming event.") from None
+                    if not isinstance(event, dict):
+                        raise RuntimeError("Remote inference server returned an invalid streaming event.")
+                    if event.get("type") == "error":
+                        raise RuntimeError("Remote inference stream failed.")
+                    text = event.get("text")
+                    if event.get("type") != "text_delta" or not isinstance(text, str):
+                        raise RuntimeError("Remote inference server returned an unsupported streaming event.")
+                    if text:
+                        yield text
+            if not completed:
+                raise RuntimeError("Remote inference stream ended before completion.")
         except error.HTTPError as exc:
             raise RuntimeError(self._safe_status_error(exc.code)) from None
-        except (error.URLError, TimeoutError):
+        except error.URLError:
             raise RuntimeError("Remote inference server is unavailable or timed out.") from None
+        except (TimeoutError, UnicodeDecodeError):
+            raise RuntimeError("Remote inference server is unavailable or returned an invalid stream.") from None
 
     def generate_with_tools(self, messages, model_name, configuration, tools):
         raise RuntimeError("Remote inference server does not advertise tool calling.")
@@ -90,7 +115,7 @@ class RemoteInferenceProvider(ModelProvider):
         body = {key: value for key, value in payload.items() if value is not None}
         req = request.Request(
             f"{self.base_url}{path}",
-            data=json.dumps(body).encode("utf-8"),
+            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
             headers=self._headers(),
             method="POST",
         )
@@ -102,16 +127,16 @@ class RemoteInferenceProvider(ModelProvider):
                 return data
         except error.HTTPError as exc:
             raise RuntimeError(self._safe_status_error(exc.code)) from None
-        except (error.URLError, TimeoutError):
+        except error.URLError:
             raise RuntimeError("Remote inference server is unavailable or timed out.") from None
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise RuntimeError("Remote inference server returned an invalid response.") from None
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, accept: str = "application/json") -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json",
-            "Accept": "application/json",
+            "Accept": accept,
         }
 
     @staticmethod
@@ -161,7 +186,7 @@ class RemoteInferenceProvider(ModelProvider):
         except (TypeError, ValueError):
             raise ValueError("temperature must be between 0 and 2.") from None
         if not 0 <= value <= 2:
-            raise ValueError("temperature must be between 0 and 2.")
+            raise ValueError("temperature must be between 0 and 2.") from None
         return value
 
     @staticmethod
@@ -170,6 +195,8 @@ class RemoteInferenceProvider(ModelProvider):
             return "Remote inference authentication failed."
         if status == 404:
             return "Remote inference endpoint or capability is unavailable."
+        if status == 413:
+            return "Remote inference request exceeds configured limits."
         if status == 429:
             return "Remote inference server is busy; retry later."
         if status in {408, 504}:
