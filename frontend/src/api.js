@@ -100,6 +100,7 @@ export const api = {
     deleteAgent: (id, slug) => request(`/projects/${id}/agents/${encodeURIComponent(slug)}`, { method: "DELETE" }),
     artifacts: (id) => request(`/projects/${id}/artifacts`),
     artifactExcerpt: (id, path, startLine = 1, maxLines = 200) => request(`/projects/${id}/artifacts/excerpt?path=${encodeURIComponent(path)}&start_line=${startLine}&max_lines=${maxLines}`),
+    saveArtifactContent: (id, path, content) => request(`/projects/${id}/artifacts/content?path=${encodeURIComponent(path)}`, { method: "PUT", body: JSON.stringify({ content }) }),
     searchArtifacts: (id, query) => request(`/projects/${id}/artifacts/search?q=${encodeURIComponent(query)}&max_results=10`),
   },
   conversations: {
