@@ -165,3 +165,15 @@ def test_rejects_missing_provider_revision_and_non_boolean_verifier(monkeypatch)
             verifier=lambda _: "yes",
             isolated_fixture=True,
         )
+
+
+
+def test_discrete_budgets_reject_fractional_values():
+    with pytest.raises(ValueError, match="must be an integer"):
+        hie.HIEBudgets(provider_calls=1.5).validate()
+    with pytest.raises(ValueError, match="must be an integer"):
+        hie.HIEBudgets(artifact_bytes=12.5).validate()
+
+
+def test_wall_clock_budget_accepts_fractional_seconds():
+    hie.HIEBudgets(wall_seconds=1.5).validate()
