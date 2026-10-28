@@ -1,5 +1,6 @@
 import hashlib
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 from app.services import hie_evidence
@@ -47,7 +48,6 @@ def test_persist_output_evidence_enforces_combined_size_budget(tmp_path, monkeyp
 
 
 def test_evidence_uses_initialized_core_artifact_repository(tmp_path, monkeypatch):
-    from app import db
     from app.db import database
     from app.models.artifact_repository import list_artifacts
 
@@ -85,4 +85,4 @@ def test_evidence_uses_initialized_core_artifact_repository(tmp_path, monkeypatc
     ]
     assert all(artifact.metadata["sha256"] for artifact in artifacts[:2])
     assert artifacts[2].metadata["record_sha256"] == record["record_sha256"]
-    assert all(__import__("pathlib").Path(artifact.path).is_file() for artifact in artifacts)
+    assert all(Path(artifact.path).is_file() for artifact in artifacts)
