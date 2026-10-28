@@ -119,7 +119,7 @@ def test_rejects_invalid_or_inactive_skill():
             snapshot,
             "content",
             target_kind="skill_content",
-            skill_slug="unsafe-path",
+            skill_slug="Unsafe Path",
         )
     with pytest.raises(CandidateValidationError, match="exactly one enabled Skill"):
         build_candidate(
