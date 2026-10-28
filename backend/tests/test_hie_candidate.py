@@ -102,8 +102,12 @@ def test_rejects_mismatched_profile_snapshot():
     snapshot = _snapshot()
     candidate = build_candidate(snapshot, "New instructions.")
     changed = copy.deepcopy(snapshot)
-    changed["version"] += 1
-    changed["sha256"] = "a" * 64
+    changed["slug"] = "different-profile"
+    changed["sha256"] = hashlib.sha256(canonical_json({
+        key: changed[key] for key in (
+            "slug", "name", "description", "instructions", "version", "skills"
+        )
+    }).encode("utf-8")).hexdigest()
     with pytest.raises(CandidateValidationError, match="different profile snapshot"):
         validate_candidate(candidate, baseline_snapshot=changed)
 
