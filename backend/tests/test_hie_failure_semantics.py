@@ -27,6 +27,9 @@ def _setup(monkeypatch, status="executing"):
     events = []
     monkeypatch.setattr(hie, "get_task", lambda task_id: task if task_id == 77 else None)
     monkeypatch.setattr(hie, "create_task_event", lambda **kwargs: events.append(kwargs))
+    # These tests verify failure semantics, not the Core Artifact repository.
+    monkeypatch.setattr(hie, "persist_output_evidence", lambda *args, **kwargs: {"baseline": {}, "candidate": {}})
+    monkeypatch.setattr(hie, "persist_record_evidence", lambda *args, **kwargs: None)
     return events
 
 
