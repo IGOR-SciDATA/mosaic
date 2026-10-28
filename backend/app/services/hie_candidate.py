@@ -5,7 +5,6 @@ apply, execute, or promote a candidate.
 """
 from __future__ import annotations
 
-import copy
 import difflib
 import hashlib
 import json
@@ -147,7 +146,8 @@ def validate_candidate(
     """
     if not isinstance(candidate, dict) or set(candidate) != _TOP_LEVEL_KEYS:
         raise CandidateValidationError("Candidate has missing or unknown top-level keys")
-    if candidate.get("schema_version") != SCHEMA_VERSION:
+    schema_version = candidate.get("schema_version")
+    if isinstance(schema_version, bool) or not isinstance(schema_version, int) or schema_version != SCHEMA_VERSION:
         raise CandidateValidationError("Unsupported candidate schema version")
     if not isinstance(candidate.get("content"), str):
         raise CandidateValidationError("Candidate content must be a string")
@@ -223,9 +223,15 @@ def candidate_diff(
         label = f"skill-{target['skill_slug']}"
     if not isinstance(before, str):
         raise CandidateValidationError("Baseline content must be a string")
+    def diff_lines(value: str) -> list[str]:
+        lines = value.splitlines(keepends=True)
+        if lines and not lines[-1].endswith(("\\n", "\\r")):
+            lines[-1] += "\\n"
+        return lines
+
     diff = "".join(difflib.unified_diff(
-        before.splitlines(keepends=True),
-        candidate["content"].splitlines(keepends=True),
+        diff_lines(before),
+        diff_lines(candidate["content"]),
         fromfile=f"baseline/{label}",
         tofile=f"candidate/{label}",
         n=3,
