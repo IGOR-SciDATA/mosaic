@@ -63,9 +63,13 @@ def create_disposable_workspace(
            (max_files, max_total_bytes, max_single_file_bytes)):
         raise HIEFixtureError("Fixture limits must be positive integers")
 
-    suffixes = {s.lower() for s in allowed_suffixes}
-    if not suffixes or any(not isinstance(s, str) or not s.startswith(".") for s in suffixes):
+    raw_suffixes = tuple(allowed_suffixes)
+    if not raw_suffixes or any(
+        not isinstance(s, str) or not s.startswith(".") or len(s) < 2
+        for s in raw_suffixes
+    ):
         raise HIEFixtureError("Allowed suffixes must be a non-empty set of extensions")
+    suffixes = {s.lower() for s in raw_suffixes}
 
     src = src.resolve(strict=True)
     entries: list[tuple[Path, Path, int]] = []
