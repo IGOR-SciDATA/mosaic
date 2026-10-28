@@ -282,13 +282,11 @@ def run_candidate_experiment(
         record["record_sha256"] = hashlib.sha256(
             canonical_json(record).encode("utf-8")
         ).hexdigest()
-        record_artifact = persist_record_evidence(
+        persist_record_evidence(
             task.id, record, max_bytes=active_budgets.artifact_bytes,
         )
-        record["evidence"]["experiment_record"] = record_artifact
-        # The record file contains the sealed record before its own artifact
-        # reference is attached; its digest binds all comparison data and the
-        # output-evidence references, without a self-referential hash.
+        # The record Artifact is discoverable through Core's Artifact repository.
+        # Its self-reference is intentionally not embedded in the sealed record.
         _emit(task, "hie.experiment.completed", "HIE comparison completed without promotion", status="completed", metadata=record)
         return record
     except HIEExperimentCancelled as exc:
