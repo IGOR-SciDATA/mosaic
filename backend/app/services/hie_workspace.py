@@ -117,9 +117,25 @@ def create_disposable_workspace(
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             # Open destination exclusively; copy bytes only, never metadata/permissions.
+            copied = 0
             with original.open("rb") as reader, destination.open("xb") as writer:
-                shutil.copyfileobj(reader, writer, length=64 * 1024)
+                while True:
+                    chunk = reader.read(64 * 1024)
+                    if not chunk:
+                        break
+                    copied += len(chunk)
+                    if copied > max_single_file_bytes:
+                        raise HIEFixtureError("Fixture file grew beyond per-file size limit during copy")
+                    writer.write(chunk)
+            if copied != original.stat().st_size:
+                raise HIEFixtureError("Fixture file changed while being copied")
             destination.chmod(0o600)
+        actual_total = sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
+        actual_files = sum(1 for p in root.rglob("*") if p.is_file())
+        if actual_total > max_total_bytes or actual_files > max_files:
+            raise HIEFixtureError("Fixture exceeded limits during copy")
+        if actual_total != total or actual_files != len(entries):
+            raise HIEFixtureError("Fixture changed while being copied")
         return DisposableWorkspace(
             source=src,
             _temp=temp,
