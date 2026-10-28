@@ -114,7 +114,7 @@ def test_cancellation_between_stages_prevents_probe(monkeypatch):
     with pytest.raises(hie.HIEExperimentCancelled):
         hie.run_candidate_experiment(
             42, snapshot, candidate,
-            provider_identity={"provider": "ollama", "model": "qwen:3b", "revision": "abc"},
+            provider_identity={"provider": "ollama", "model": "qwen:3b", "revision": "sha256:abc"},
             baseline_runner=lambda: (calls.append("baseline") or _result("ok")),
             probe_runner=lambda _: (calls.append("probe") or _result("ok")),
             verifier=lambda _: True,
@@ -159,7 +159,7 @@ def test_rejects_missing_provider_revision_and_non_boolean_verifier(monkeypatch)
     with pytest.raises(hie.HIEExperimentError, match="Verifier must return a boolean"):
         hie.run_candidate_experiment(
             42, snapshot, candidate,
-            provider_identity={"provider": "ollama", "model": "qwen:3b", "revision": "abc"},
+            provider_identity={"provider": "ollama", "model": "qwen:3b", "revision": "sha256:abc"},
             baseline_runner=lambda: _result("ok"),
             probe_runner=lambda _: _result("ok"),
             verifier=lambda _: "yes",
