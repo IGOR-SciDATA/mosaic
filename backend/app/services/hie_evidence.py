@@ -58,11 +58,11 @@ def persist_output_evidence(task_id: int, baseline_output: str, candidate_output
         raise ValueError("Combined HIE output evidence exceeds the artifact-size budget")
     return {
         "baseline_output": _write_artifact(
-            task_id, "baseline-output.txt", baseline, artifact_type="hie_baseline_output",
+            task_id, f"baseline-output-{hashlib.sha256(baseline).hexdigest()[:16]}.txt", baseline, artifact_type="hie_baseline_output",
             metadata={"role": "baseline_output"}, max_bytes=max_bytes,
         ),
         "candidate_output": _write_artifact(
-            task_id, "candidate-output.txt", candidate, artifact_type="hie_candidate_output",
+            task_id, f"candidate-output-{hashlib.sha256(candidate).hexdigest()[:16]}.txt", candidate, artifact_type="hie_candidate_output",
             metadata={"role": "candidate_output"}, max_bytes=max_bytes,
         ),
     }
@@ -71,7 +71,7 @@ def persist_output_evidence(task_id: int, baseline_output: str, candidate_output
 def persist_record_evidence(task_id: int, record: dict[str, Any], *, max_bytes: int) -> dict[str, Any]:
     content = (json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
     return _write_artifact(
-        task_id, "experiment-record.json", content, artifact_type="hie_experiment_record",
+        task_id, f"experiment-record-{record[\"record_sha256\"][:16]}.json", content, artifact_type="hie_experiment_record",
         metadata={"role": "experiment_record", "record_sha256": record["record_sha256"]},
         max_bytes=max_bytes,
     )
