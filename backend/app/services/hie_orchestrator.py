@@ -120,6 +120,29 @@ def _emit(task: Any, event_name: str, message: str, *, status: str, metadata: di
     )
 
 
+def _emit_terminal_best_effort(
+    task: Any,
+    event_name: str,
+    message: str,
+    *,
+    status: str,
+    metadata: dict[str, Any],
+    level: str = "warning",
+) -> None:
+    """Try to record a terminal state without masking the original failure.
+
+    This is intentionally best-effort only for terminal error/cancellation
+    events. Failure to persist such an event must never make a runner failure
+    look like a different exception. The initial started event remains fail-closed.
+    """
+    try:
+        _emit(task, event_name, message, status=status, metadata=metadata, level=level)
+    except Exception:
+        # Preserve the original exception; event persistence failure is not a
+        # reason to invoke runners again or to claim the experiment succeeded.
+        pass
+
+
 def run_candidate_experiment(
     task_id: int,
     baseline_snapshot: dict[str, Any],
@@ -243,13 +266,13 @@ def run_candidate_experiment(
         _emit(task, "hie.experiment.completed", "HIE comparison completed without promotion", status="completed", metadata=record)
         return record
     except HIEExperimentCancelled as exc:
-        _emit(task, "hie.experiment.cancelled", str(exc), status="cancelled", level="warning", metadata={
+        _emit_terminal_best_effort(task, "hie.experiment.cancelled", str(exc), status="cancelled", metadata={
             "candidate_sha256": candidate_sha256,
             "provider_calls": provider_calls,
         })
         raise
     except Exception as exc:
-        _emit(task, "hie.experiment.aborted", "HIE comparison aborted; baseline remains authoritative", status="failed", level="warning", metadata={
+        _emit_terminal_best_effort(task, "hie.experiment.aborted", "HIE comparison aborted; baseline remains authoritative", status="failed", metadata={
             "candidate_sha256": candidate_sha256,
             "error_type": type(exc).__name__,
             "provider_calls": provider_calls,
