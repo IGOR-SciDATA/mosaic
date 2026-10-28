@@ -62,10 +62,16 @@ class HIEBudgets:
             "wall_seconds": MAX_WALL_SECONDS,
             "artifact_bytes": MAX_ARTIFACT_BYTES,
         }
+        integer_budgets = {
+            "provider_calls", "tool_calls", "retries",
+            "input_chars_per_call", "output_chars_per_call", "artifact_bytes",
+        }
         for name, ceiling in expected_maxima.items():
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise ValueError(f"Invalid HIE budget: {name}")
+            if name in integer_budgets and not isinstance(value, int):
+                raise ValueError(f"HIE budget must be an integer: {name}")
             if value <= 0 or value > ceiling:
                 raise ValueError(f"HIE budget exceeds allowed ceiling: {name}")
 
