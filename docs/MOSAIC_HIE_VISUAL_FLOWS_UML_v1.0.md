@@ -510,3 +510,20 @@ Use este roteiro como mapa do que observar durante seu teste:
 - [Arquitetura HIE v1.0](MOSAIC_HARNESS_IMPROVEMENT_ENGINE_ARCHITECTURE_v1.0.md)
 - [Contrato da fase HIE](MOSAIC_HIE_OBSERVABILITY_AND_SELF_IMPROVEMENT_PHASE_v1.0.md)
 - [Prompt mestre de implementação](MOSAIC_HIE_COMPLETION_IMPLEMENTATION_PROMPT_v1.0.md)
+
+
+---
+
+## Atualização 29/10/2026 — PR #119 e escopo integrado do frontend
+
+Este mapa original cobre os PRs #101–#115 e não deve ser lido como evidência de validação E2E. O PR [#119](https://github.com/IGOR-SciDATA/mosaic/pull/119) adiciona persistência do ciclo de experimentos e UI, mas no momento desta atualização permanece Draft, com validação automatizada pendente declarada na descrição. Portanto, os diagramas anteriores não comprovam que o ciclo de aprovação/promoção/rollback esteja pronto para produção.
+
+A próxima implementação também deve integrar os requisitos de produto:
+- conversas e Tasks avulsas, sem projeto obrigatório;
+- Task solicitada pelo chat comum;
+- troca explícita de modelo junto ao compositor;
+- gestão de agentes, Skills e navegação geral de arquivos em tela própria;
+- painel recolhível de etapas e contexto que diferencie conteúdo encontrado, lido, selecionado e efetivamente enviado;
+- HIE opcional, desligado por padrão, com controles apresentados apenas quando suportados pelo backend.
+
+**Ordem:** auditoria dos PRs e código atual → corrigir budgets/capacidades/lifecycle/concorrência → integrar frontend → testes reais → PR. Ver [prompt integrado de implementação](MOSAIC_HIE_FRONTEND_INTEGRATED_IMPLEMENTATION_PROMPT_v1.0.md).
