@@ -341,8 +341,8 @@ def run_experiment(experiment_id: int) -> None:
             case_result = {"fixture_id": fixture["id"]}
             captured: dict[str, dict[str, Any]] = {}
             with tempfile.TemporaryDirectory(prefix="mosaic-hie-source-") as source_dir:
-                fixture_source = Path(source_dir) / "fixture.md"
-                fixture_source.write_text(fixture["prompt"], encoding="utf-8")
+                fixture_source = Path(source_dir)
+                (fixture_source / "fixture.md").write_text(fixture["prompt"], encoding="utf-8")
 
                 def run_variant(variant: str, instructions: str, workspace_root: Path) -> dict[str, Any]:
                     nonlocal total_input_chars, evidence_chars
@@ -446,7 +446,14 @@ def run_experiment(experiment_id: int) -> None:
             }
             case_result["orchestrator_outcome"] = record["outcome"]
             case_result["experiment_record_sha256"] = record["record_sha256"]
-            case_result["artifact_evidence"] = record.get("evidence", {})
+            case_result["artifact_evidence"] = {
+                role: {
+                    key: value[key]
+                    for key in ("artifact_id", "sha256", "size_bytes", "metadata_bytes", "budget_bytes")
+                    if key in value
+                }
+                for role, value in record.get("evidence", {}).items()
+            }
             outputs.append(case_result)
             _emit(experiment, "hie.fixture_evaluated", f"Fixture {fixture['id']} completed for baseline and candidate.", "completed", {
                 "fixture_id": fixture["id"],
