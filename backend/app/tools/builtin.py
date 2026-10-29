@@ -990,7 +990,17 @@ def _explore_workspace(
     limits: list[str] = []
     root = root.resolve(strict=True)
 
-    for current_dir, dir_names, file_names in os.walk(root, topdown=True, followlinks=False):
+    def record_walk_error(error: OSError) -> None:
+        raw_path = getattr(error, "filename", None)
+        try:
+            relative = Path(raw_path).relative_to(root).as_posix() if raw_path else "."
+        except ValueError:
+            relative = "."
+        failures.append({"path": relative, "reason": "directory_scan_error"})
+
+    for current_dir, dir_names, file_names in os.walk(
+        root, topdown=True, onerror=record_walk_error, followlinks=False
+    ):
         if cancel_check is not None and cancel_check():
             limits.append("cancelled")
             break
@@ -1006,6 +1016,10 @@ def _explore_workspace(
             continue
         kept_dirs = []
         for name in sorted(dir_names):
+            if time.monotonic() - started >= WORKSPACE_SCAN_TIMEOUT_SECONDS:
+                limits.append("time_limit")
+                dir_names[:] = []
+                break
             candidate = current / name
             relative = candidate.relative_to(root).as_posix()
             try:
@@ -1025,7 +1039,13 @@ def _explore_workspace(
             except (OSError, ValueError):
                 ignored.append({"path": relative, "reason": "unsafe_or_unreadable_directory"})
         dir_names[:] = kept_dirs
+        if "time_limit" in limits:
+            break
         for name in sorted(file_names):
+            if time.monotonic() - started >= WORKSPACE_SCAN_TIMEOUT_SECONDS:
+                limits.append("time_limit")
+                dir_names[:] = []
+                break
             candidate = current / name
             relative = candidate.relative_to(root).as_posix()
             if candidate.is_symlink():
@@ -1043,6 +1063,8 @@ def _explore_workspace(
                 found.append(resolved)
             except (OSError, ValueError):
                 failures.append({"path": relative, "reason": "path_or_stat_error"})
+        if "time_limit" in limits:
+            break
 
     found.sort(key=lambda item: item.relative_to(root).as_posix().casefold())
     files_found = len(found)
