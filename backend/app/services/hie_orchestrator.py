@@ -15,6 +15,7 @@ from typing import Any, Callable
 from app.models.task_event_repository import create_task_event
 from app.services.hie_evidence import persist_output_evidence, persist_record_evidence
 from app.models.task_repository import get_task
+from app.services.hie_runtime import HIERuntimeLimitExceeded
 from app.services.hie_candidate import (
     CandidateValidationError,
     candidate_diff,
@@ -307,6 +308,6 @@ def run_candidate_experiment(
             "error_type": type(exc).__name__,
             "provider_calls": provider_calls,
         })
-        if isinstance(exc, (HIEExperimentError, CandidateValidationError, ValueError)):
+        if isinstance(exc, (HIEExperimentError, HIERuntimeLimitExceeded, CandidateValidationError, ValueError)):
             raise
         raise HIEExperimentError("HIE comparison aborted safely") from exc
