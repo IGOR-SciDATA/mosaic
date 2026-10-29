@@ -3220,3 +3220,44 @@ body { overflow: hidden; }
   .project-file-edit-area, .project-file-edit-area textarea, .project-markdown-preview { min-height: 300px; }
 }
 
+
+
+/* Frontend HIE experimental — collapsible workspace shell (no backend behavior). */
+.sidebar-collapse-toggle,
+.context-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.sidebar-collapse-toggle { width: 34px; flex: 0 0 34px; }
+.context-toggle { padding: 0 10px; font-size: 12px; white-space: nowrap; }
+.sidebar-collapse-toggle:focus-visible,
+.context-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app-shell.sidebar-collapsed .sidebar { width: 68px; min-width: 68px; }
+.app-shell.sidebar-collapsed .sidebar .brand-row { justify-content: center; flex-wrap: wrap; }
+.app-shell.sidebar-collapsed .sidebar-brand-symbol { display: none; }
+.app-shell.sidebar-collapsed .sidebar .new-chat { font-size: 0; justify-content: center; padding-inline: 0; }
+.app-shell.sidebar-collapsed .sidebar .new-chat svg { flex: 0 0 auto; }
+.app-shell.sidebar-collapsed .sidebar .side-primary,
+.app-shell.sidebar-collapsed .sidebar .side-bottom,
+.app-shell.sidebar-collapsed .sidebar .mobile-close { display: none; }
+.app-shell.sidebar-collapsed .sidebar .brand-row { margin-bottom: 12px; }
+.app-shell.context-hidden .workspace-grid { grid-template-columns: minmax(0, 1fr); }
+.app-shell.context-hidden .workspace { max-width: none; }
+@media (max-width: 900px) {
+  .sidebar-collapse-toggle { display: none; }
+  .context-toggle span { display: none; }
+  .context-toggle { width: 34px; padding: 0; }
+}
+@media (max-width: 720px) {
+  .app-shell.sidebar-collapsed .sidebar { width: min(86vw, 320px); min-width: min(86vw, 320px); }
+  .app-shell.sidebar-collapsed .sidebar .side-primary,
+  .app-shell.sidebar-collapsed .sidebar .side-bottom { display: flex; }
+}
