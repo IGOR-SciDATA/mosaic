@@ -121,7 +121,10 @@ function renderInline(text) {
 }
 
 function FormattedResponse({ content }) {
-  const lines = String(content || "").replace(/\r\n/g, "\n").split("\n");
+  const lines = String(content || "").replace(/\r
+/g, "
+").split("
+");
   const blocks = [];
   let paragraph = [];
   let list = [];
@@ -150,7 +153,8 @@ function FormattedResponse({ content }) {
       flushParagraph();
       flushList();
       if (inCode) {
-        blocks.push(<pre key={blocks.length}><code>{code.join("\n")}</code></pre>);
+        blocks.push(<pre key={blocks.length}><code>{code.join("
+")}</code></pre>);
         code = [];
       }
       inCode = !inCode;
@@ -191,7 +195,8 @@ function FormattedResponse({ content }) {
   });
   flushParagraph();
   flushList();
-  if (inCode && code.length) blocks.push(<pre key={blocks.length}><code>{code.join("\n")}</code></pre>);
+  if (inCode && code.length) blocks.push(<pre key={blocks.length}><code>{code.join("
+")}</code></pre>);
   return <div className="formatted-response">{blocks}</div>;
 }
 
@@ -691,9 +696,11 @@ function ProjectFilesWorkspace({ projectId, mode = "files" }) {
         {!selectedPath ? <div className="task-empty compact"><Icon name="file" size={23}/><strong>Selecione um arquivo</strong><span>O conteúdo será aberto aqui para edição e pré-visualização.</span></div> : reading ? <div className="task-muted">Lendo arquivo…</div> : excerpt ? <>
           {excerpt.truncated && <div className="task-inline-error">Este arquivo excede o limite de leitura do editor. Para evitar sobrescrever conteúdo parcial, a edição está desativada.</div>}
           {fileMode === "edit" && editableText && !excerpt.truncated
-            ? <div className="agent-code-editor project-file-edit-area"><div className="agent-line-numbers" aria-hidden="true">{Array.from({length:Math.max(1,draftContent.split("\n").length)},(_,i)=><span key={i}>{i+1}</span>)}</div><textarea aria-label={"Editar " + selectedPath} value={draftContent} onChange={event => setDraftContent(event.target.value)} spellCheck={false} /></div>
+            ? <div className="agent-code-editor project-file-edit-area"><div className="agent-line-numbers" aria-hidden="true">{Array.from({length:Math.max(1,draftContent.split("
+").length)},(_,i)=><span key={i}>{i+1}</span>)}</div><textarea aria-label={"Editar " + selectedPath} value={draftContent} onChange={event => setDraftContent(event.target.value)} spellCheck={false} /></div>
             : markdownFile && !excerpt.truncated
-              ? <article className="agent-markdown-preview project-markdown-preview">{draftContent.trim() ? draftContent.split("\n").map((line,index)=>{const trimmed=line.trim();if(/^###\s/.test(trimmed))return <h4 key={index}>{trimmed.replace(/^###\s/,"")}</h4>;if(/^##\s/.test(trimmed))return <h3 key={index}>{trimmed.replace(/^##\s/,"")}</h3>;if(/^#\s/.test(trimmed))return <h2 key={index}>{trimmed.replace(/^#\s/,"")}</h2>;if(/^[-*]\s/.test(trimmed))return <div className="agent-preview-list" key={index}>• {trimmed.replace(/^[-*]\s/,"")}</div>;return <p key={index}>{trimmed || " "}</p>;}) : <p className="agent-preview-empty">Arquivo vazio.</p>}</article>
+              ? <article className="agent-markdown-preview project-markdown-preview">{draftContent.trim() ? draftContent.split("
+").map((line,index)=>{const trimmed=line.trim();if(/^###\s/.test(trimmed))return <h4 key={index}>{trimmed.replace(/^###\s/,"")}</h4>;if(/^##\s/.test(trimmed))return <h3 key={index}>{trimmed.replace(/^##\s/,"")}</h3>;if(/^#\s/.test(trimmed))return <h2 key={index}>{trimmed.replace(/^#\s/,"")}</h2>;if(/^[-*]\s/.test(trimmed))return <div className="agent-preview-list" key={index}>• {trimmed.replace(/^[-*]\s/,"")}</div>;return <p key={index}>{trimmed || " "}</p>;}) : <p className="agent-preview-empty">Arquivo vazio.</p>}</article>
               : <pre className="project-file-code">{excerpt.content}</pre>}
           <div className="project-file-provenance"><span>Origem: {excerpt.path} · linhas {excerpt.start_line}–{excerpt.end_line}</span><span>{draftContent.length.toLocaleString("pt-BR")} caracteres</span></div>
           {fileMode === "edit" && !excerpt.truncated && <div className="agent-config-save project-file-save"><span>As alterações são gravadas no arquivo existente.</span><button type="button" className="primary-action" onClick={saveFile} disabled={savingFile || draftContent === excerpt.content}>{savingFile ? "Salvando…" : "Salvar arquivo"}</button></div>}
@@ -750,7 +757,10 @@ function AgentConfigWorkspace({ projectId }) {
   return <section className="agent-config-workspace">
     <div className="task-workspace-heading"><div><span className="eyebrow">CONTROLE DO AGENTE</span><h2>Instruções e skills</h2><p>Defina o papel, os limites de trabalho e as especialidades do agente neste projeto.</p></div></div>
     {loading ? <div className="task-muted">Carregando configuração…</div> : <form onSubmit={save}>
-      <section className="agent-config-card"><div className="agent-config-card-heading"><div><strong>AGENTS.md</strong><span>Instruções permanentes do projeto</span></div><span className="task-count">Até 12.000 caracteres</span></div><p>Descreva o objetivo do agente, padrões do projeto, estilo de trabalho e regras que ele deve seguir. O arquivo é salvo na raiz do workspace.</p><textarea className="agent-instructions-editor" value={instructions} maxLength={12000} onChange={event => setInstructions(event.target.value)} rows={12} placeholder={"Ex.: Você é o agente responsável por este projeto.\n- Priorize mudanças pequenas e testáveis.\n- Leia os contratos antes de editar.\n- Não declare testes como aprovados sem executá-los."}/><div className="agent-editor-footer"><span>{instructions.length.toLocaleString("pt-BR")} / 12.000 caracteres</span></div></section>
+      <section className="agent-config-card"><div className="agent-config-card-heading"><div><strong>AGENTS.md</strong><span>Instruções permanentes do projeto</span></div><span className="task-count">Até 12.000 caracteres</span></div><p>Descreva o objetivo do agente, padrões do projeto, estilo de trabalho e regras que ele deve seguir. O arquivo é salvo na raiz do workspace.</p><textarea className="agent-instructions-editor" value={instructions} maxLength={12000} onChange={event => setInstructions(event.target.value)} rows={12} placeholder={"Ex.: Você é o agente responsável por este projeto.
+- Priorize mudanças pequenas e testáveis.
+- Leia os contratos antes de editar.
+- Não declare testes como aprovados sem executá-los."}/><div className="agent-editor-footer"><span>{instructions.length.toLocaleString("pt-BR")} / 12.000 caracteres</span></div></section>
       <section className="agent-config-card"><div className="agent-config-card-heading"><div><strong>Skills do projeto</strong><span>Capacidades e procedimentos reutilizáveis</span></div><button type="button" className="secondary-action" onClick={addSkill} disabled={skills.length >= 12}>+ Adicionar skill</button></div><p>Uma skill é uma instrução especializada. Ative somente as relevantes; elas entram no contexto do agente, mas não concedem permissões extras às ferramentas.</p>
         {!skills.length && <div className="task-muted">Nenhuma skill cadastrada. Adicione, por exemplo, “Revisão de código”, “Testes Python” ou “Documentação”.</div>}
         {skills.map((skill, index) => <article className="skill-editor" key={index}><div className="skill-editor-head"><label className="skill-enabled"><input type="checkbox" checked={skill.enabled !== false} onChange={event => updateSkill(index, { enabled: event.target.checked })}/> Ativa</label><button type="button" className="text-danger" onClick={() => setSkills(items => items.filter((_, i) => i !== index))}>Remover</button></div><label>Nome da skill<input value={skill.name} maxLength={80} onChange={event => updateSkill(index, { name: event.target.value })} placeholder="Ex.: Revisão de código" required/></label><label>Instruções da skill<textarea value={skill.content} maxLength={4000} rows={5} onChange={event => updateSkill(index, { content: event.target.value })} placeholder="Quando usar esta skill, passos a seguir, critérios de qualidade…"/></label><div className="agent-editor-footer"><span>{(skill.content || "").length.toLocaleString("pt-BR")} / 4.000 caracteres</span></div></article>)}
@@ -864,7 +874,15 @@ function AgentLibraryWorkspace({ projectId }) {
           <label className="full">Descrição <input value={description} onChange={event => setDescription(event.target.value)} maxLength={500} placeholder="Responsabilidades principais do agente" /></label>
           <div className="full agent-document-field">
             <div className="agent-file-toolbar"><div className="agent-file-title"><Icon name="file" size={16}/><strong>AGENTS.md</strong><span>Markdown · Instruções do agente</span></div><div className="agent-file-tabs"><button type="button" className={instructionsMode === "edit" ? "active" : ""} onClick={() => setInstructionsMode("edit")}><Icon name="code" size={14}/> Editar</button><button type="button" className={instructionsMode === "preview" ? "active" : ""} onClick={() => setInstructionsMode("preview")}><Icon name="eye" size={14}/> Pré-visualizar</button></div></div>
-            {instructionsMode === "edit" ? <div className="agent-code-editor"><div className="agent-line-numbers" aria-hidden="true">{Array.from({length:Math.max(1,instructions.split("\n").length)},(_,i)=><span key={i}>{i+1}</span>)}</div><textarea aria-label="Editar conteúdo do AGENTS.md" value={instructions} onChange={event => setInstructions(event.target.value)} rows={18} maxLength={50000} spellCheck={false} placeholder={"# Função do agente\n\n## Responsabilidades\n- ...\n\n## Limites e critérios de qualidade\n- ..."} required /></div> : <article className="agent-markdown-preview">{instructions.trim() ? instructions.split("\n").map((line,index)=>{const trimmed=line.trim(); if(/^###\s/.test(trimmed))return <h4 key={index}>{trimmed.replace(/^###\s/,"")}</h4>;if(/^##\s/.test(trimmed))return <h3 key={index}>{trimmed.replace(/^##\s/,"")}</h3>;if(/^#\s/.test(trimmed))return <h2 key={index}>{trimmed.replace(/^#\s/,"")}</h2>;if(/^[-*]\s/.test(trimmed))return <div className="agent-preview-list" key={index}>• {trimmed.replace(/^[-*]\s/,"")}</div>;return <p key={index}>{trimmed || " "}</p>;}) : <p className="agent-preview-empty">A pré-visualização do arquivo aparecerá aqui conforme você escrever.</p>}</article>}
+            {instructionsMode === "edit" ? <div className="agent-code-editor"><div className="agent-line-numbers" aria-hidden="true">{Array.from({length:Math.max(1,instructions.split("
+").length)},(_,i)=><span key={i}>{i+1}</span>)}</div><textarea aria-label="Editar conteúdo do AGENTS.md" value={instructions} onChange={event => setInstructions(event.target.value)} rows={18} maxLength={50000} spellCheck={false} placeholder={"# Função do agente
+
+## Responsabilidades
+- ...
+
+## Limites e critérios de qualidade
+- ..."} required /></div> : <article className="agent-markdown-preview">{instructions.trim() ? instructions.split("
+").map((line,index)=>{const trimmed=line.trim(); if(/^###\s/.test(trimmed))return <h4 key={index}>{trimmed.replace(/^###\s/,"")}</h4>;if(/^##\s/.test(trimmed))return <h3 key={index}>{trimmed.replace(/^##\s/,"")}</h3>;if(/^#\s/.test(trimmed))return <h2 key={index}>{trimmed.replace(/^#\s/,"")}</h2>;if(/^[-*]\s/.test(trimmed))return <div className="agent-preview-list" key={index}>• {trimmed.replace(/^[-*]\s/,"")}</div>;return <p key={index}>{trimmed || " "}</p>;}) : <p className="agent-preview-empty">A pré-visualização do arquivo aparecerá aqui conforme você escrever.</p>}</article>}
             <div className="agent-file-footer"><span>Markdown · até 50.000 caracteres</span><span>{instructions.length.toLocaleString("pt-BR")} caracteres</span></div>
           </div>
         </div>
@@ -975,7 +993,13 @@ function HieExperimentModal({scope,onClose}) {
     const candidateHash=experiment.candidate?.sha256;
     const baseline=experiment.baseline_snapshot;
     if(!candidateHash||!baseline?.version||!baseline?.sha256)return;
-    const confirmation=`Aprovar candidato para revisão final?\n\nCandidato SHA-256: ${candidateHash}\nPerfil ativo observado: v${baseline.version}\nHash ativo: ${baseline.sha256}\n\nA aprovação não altera o perfil ativo.`;
+    const confirmation=`Aprovar candidato para revisão final?
+
+Candidato SHA-256: ${candidateHash}
+Perfil ativo observado: v${baseline.version}
+Hash ativo: ${baseline.sha256}
+
+A aprovação não altera o perfil ativo.`;
     if(!window.confirm(confirmation))return;
     setBusy(true);setError("");setNotice("");
     try{
@@ -991,7 +1015,13 @@ function HieExperimentModal({scope,onClose}) {
     if(!experiment||!approved||busy)return;
     const baseline=activeProfile||experiment.baseline_snapshot;
     const candidateHash=experiment.candidate?.sha256;
-    const confirmation=`PROMOVER candidato para o perfil ativo?\n\nCandidato SHA-256: ${candidateHash}\nVersão ativa esperada: v${baseline.version}\nHash ativo esperado: ${baseline.sha256}\n\nIsso altera as instruções usadas em execuções futuras. O perfil anterior será preservado para rollback.`;
+    const confirmation=`PROMOVER candidato para o perfil ativo?
+
+Candidato SHA-256: ${candidateHash}
+Versão ativa esperada: v${baseline.version}
+Hash ativo esperado: ${baseline.sha256}
+
+Isso altera as instruções usadas em execuções futuras. O perfil anterior será preservado para rollback.`;
     if(!window.confirm(confirmation))return;
     setBusy(true);setError("");setNotice("");
     try{
@@ -1006,7 +1036,12 @@ function HieExperimentModal({scope,onClose}) {
 
   async function rollbackPromotedCandidate(){
     if(!promotion||!activeProfile||busy)return;
-    const confirmation=`Restaurar o conteúdo anterior à promoção #${promotion.promotion_id}?\n\nVersão ativa esperada: v${activeProfile.version}\nHash ativo esperado: ${activeProfile.sha256}\n\nO rollback criará uma nova versão; não apagará o histórico.`;
+    const confirmation=`Restaurar o conteúdo anterior à promoção #${promotion.promotion_id}?
+
+Versão ativa esperada: v${activeProfile.version}
+Hash ativo esperado: ${activeProfile.sha256}
+
+O rollback criará uma nova versão; não apagará o histórico.`;
     if(!window.confirm(confirmation))return;
     setBusy(true);setError("");setNotice("");
     try{
@@ -1078,7 +1113,8 @@ export default function App(){
   const [projects,setProjects]=useState([]),[conversations,setConversations]=useState([]),[models,setModels]=useState([]),[memories,setMemories]=useState([]),[projectId,setProjectId]=useState(null),[conversationId,setConversationId]=useState(null),[messages,setMessages]=useState([]),[homeActive,setHomeActive]=useState(false);
   const [mobile,setMobile]=useState(false),[sidebarCollapsed,setSidebarCollapsed]=useState(false),[contextVisible,setContextVisible]=useState(()=>typeof window==="undefined" ? true : window.matchMedia("(min-width: 901px)").matches),[draft,setDraft]=useState(""),[contextTab,setContextTab]=useState("Contexto"),[projectTab,setProjectTab]=useState("Conversa"),[loading,setLoading]=useState(true),[messagesLoading,setMessagesLoading]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(""),[modal,setModal]=useState(null),[saving,setSaving]=useState(false),[modelStatus,setModelStatus]=useState({provider:"ollama",online:false,running_models:[]});
   const [remoteConfig,setRemoteConfig]=useState({url:"",configured:false});
-  const [remoteStatus,setRemoteStatus]=useState(null);\n  const [taskTraces,setTaskTraces]=useState({});
+  const [remoteStatus,setRemoteStatus]=useState(null);
+  const [taskTraces,setTaskTraces]=useState({});
   const [hieStatus,setHieStatus]=useState(null);
   const [hieBusy,setHieBusy]=useState(false);
   const [theme,setTheme]=useState(()=>{try{return localStorage.getItem("mosaic.theme")==="light"?"light":"dark";}catch{return "dark";}});
@@ -1218,7 +1254,9 @@ export default function App(){
     finally{setSending(false);}
   }
   
-  function toggleTrace(id){setTaskTraces(items=>({...items,[id]:{...items[id],expanded:!items[id]?.expanded}}));}\n\n  async function changeConversationModel(modelId){if(!conversation)return;setError("");try{const updated=await api.conversations.update(conversation.id,{model_id:modelId});setConversations(items=>items.map(item=>item.id===updated.id?updated:item));}catch(err){setError("Não foi possível trocar o modelo: "+err.message);}}
+  function toggleTrace(id){setTaskTraces(items=>({...items,[id]:{...items[id],expanded:!items[id]?.expanded}}));}
+
+  async function changeConversationModel(modelId){if(!conversation)return;setError("");try{const updated=await api.conversations.update(conversation.id,{model_id:modelId});setConversations(items=>items.map(item=>item.id===updated.id?updated:item));}catch(err){setError("Não foi possível trocar o modelo: "+err.message);}}
   async function saveModel(e){
     e.preventDefault();setSaving(true);setError("");
     const f=new FormData(e.currentTarget);
