@@ -33,7 +33,7 @@ def test_conversation_hie_is_disabled_by_default_and_persisted(client):
     assert status.status_code == 200
     assert status.json()["enabled"] is False
     assert status.json()["default_enabled"] is False
-    assert status.json()["experiment_execution_available"] is False
+    assert status.json()["experiment_execution_available"] is True
 
     enabled = client.put("/hie/status", json={
         "conversation_id": conversation.id, "enabled": True,
@@ -43,12 +43,8 @@ def test_conversation_hie_is_disabled_by_default_and_persisted(client):
 
     reread = client.get(f"/hie/status?conversation_id={conversation.id}")
     assert reread.json()["enabled"] is True
-    assert reread.json()["unavailable_capabilities"] == [
-        "isolated_baseline_candidate_execution",
-        "reproducible_evaluation",
-        "promotion",
-        "rollback",
-    ]
+    assert reread.json()["unavailable_capabilities"] == ["versioned_promotion", "rollback"]
+    assert "isolated_baseline_candidate_probes" in reread.json()["supported_capabilities"]
 
 
 def test_conversation_opt_in_is_inherited_by_new_task(client):
@@ -87,7 +83,7 @@ def test_task_hie_activation_is_linked_to_task_events(client):
     events = list_task_events(task.id)
     assert events[-1].component == "hie"
     assert events[-1].event_name == "hie.mode_enabled"
-    assert events[-1].metadata["experiment_execution_available"] is False
+    assert events[-1].metadata["experiment_execution_available"] is True
 
 
 @pytest.mark.parametrize("payload", [
