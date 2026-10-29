@@ -260,15 +260,20 @@ def queue_experiment(experiment_id: int) -> dict[str, Any]:
             "UPDATE hie_experiments SET status = 'queued', updated_at = ? WHERE id = ? AND status = 'draft'",
             (_now(), experiment_id),
         )
-        connection.commit()
         if cursor.rowcount != 1:
             raise HieExperimentError("Experiment state changed; refresh and try again")
-    experiment = get_experiment(experiment_id)
-    _emit(experiment, "hie.experiment_queued", "HIE experiment queued for isolated baseline/candidate probes.", "queued", {
-        "candidate_sha256": experiment["candidate"]["sha256"],
-        "fixture_count": len(experiment["fixtures"]),
-    })
-    return experiment
+        queued = dict(connection.execute("SELECT * FROM hie_experiments WHERE id = ?", (experiment_id,)).fetchone())
+        queued_experiment = _row_to_experiment(queued)
+        _insert_experiment_event(
+            connection, queued_experiment, "hie.experiment_queued",
+            "HIE experiment queued for isolated baseline/candidate probes.", "queued", {
+                "candidate_sha256": queued_experiment["candidate"]["sha256"],
+                "fixture_count": len(queued_experiment["fixtures"]),
+                "automatic_promotion": False,
+            },
+        )
+        connection.commit()
+    return get_experiment(experiment_id)
 
 
 def _evaluate(output: str, fixture: dict[str, Any]) -> dict[str, Any]:
