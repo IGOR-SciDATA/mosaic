@@ -201,6 +201,7 @@ def create_experiment(
     )
     now = _now()
     with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         connection.execute(
             """INSERT INTO hie_sessions (task_id, enabled, created_at, updated_at)
                VALUES (?, 1, ?, ?) ON CONFLICT(task_id) DO UPDATE SET enabled = 1, updated_at = excluded.updated_at""",
@@ -231,12 +232,9 @@ def create_experiment(
                 diff, now, now,
             ),
         )
-        connection.commit()
-    experiment = get_experiment(cursor.lastrowid)
-    if experiment is None:
-        raise HieExperimentError("Experiment was not persisted")
-    with get_connection() as connection:
-        connection.execute("BEGIN IMMEDIATE")
+        experiment = _row_to_experiment(
+            connection.execute("SELECT * FROM hie_experiments WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        )
         _insert_experiment_event(
             connection, experiment, "hie.experiment_created",
             "HIE experiment created with a hash-sealed declarative candidate.", "draft", {
