@@ -18,6 +18,8 @@ MAX_FIXTURES = 8
 MAX_FIXTURE_PROMPT_CHARS = 2_000
 MAX_ASSERTIONS = 10
 MAX_OUTPUT_CHARS = 6_000
+MAX_OUTPUT_TOKENS = 1_500
+MAX_EXPERIMENT_DURATION_SECONDS = 300
 
 
 class HieExperimentError(ValueError):
@@ -194,11 +196,15 @@ def create_experiment(
                 model.provider, model.model_name,
                 json.dumps({
                     "max_fixtures": MAX_FIXTURES,
-                    "max_provider_calls": MAX_FIXTURES * 2,
+                    "max_provider_calls": len(normalized_fixtures) * 2,
                     "max_output_chars_per_call": MAX_OUTPUT_CHARS,
+                    "max_output_tokens_per_call": MAX_OUTPUT_TOKENS,
+                    "max_duration_seconds": MAX_EXPERIMENT_DURATION_SECONDS,
+                    "max_request_timeout_seconds": 90,
                     "max_candidate_chars": 12000,
                     "fixture_count": len(normalized_fixtures),
                     "estimated_provider_calls": len(normalized_fixtures) * 2,
+                    "max_duration_seconds": MAX_EXPERIMENT_DURATION_SECONDS,
                 }),
                 json.dumps(baseline, ensure_ascii=False),
                 json.dumps(candidate, ensure_ascii=False),
@@ -257,11 +263,75 @@ def _evaluate(output: str, fixture: dict[str, Any]) -> dict[str, Any]:
     return {"passed": not failures, "failures": failures, "output_chars": len(output)}
 
 
+def _bounded_provider_configuration(model_configuration: dict[str, Any], provider_name: str) -> dict[str, Any]:
+    """Return an HIE-local config that enforces provider-call ceilings where supported.
+
+    The ModelProvider interface remains unchanged. The concrete providers already
+    honor request_timeout_seconds and these output limits (Ollama num_predict,
+    OpenAI/remote max_output_tokens). Unknown providers fail closed for HIE rather
+    than silently making an unbounded request.
+    """
+    configuration = dict(model_configuration or {})
+    current_timeout = configuration.get("request_timeout_seconds", 90)
+    try:
+        timeout_seconds = float(current_timeout)
+    except (TypeError, ValueError) as exc:
+        raise HieExperimentError("Model request_timeout_seconds must be numeric for HIE") from exc
+    if timeout_seconds < 1:
+        raise HieExperimentError("Model request_timeout_seconds must be at least 1 second")
+    configuration["request_timeout_seconds"] = min(timeout_seconds, 90)
+
+    provider = (provider_name or "").strip().lower()
+    if provider == "ollama":
+        # Ollama uses num_predict in its request payload and request_timeout_seconds
+        # for its network timeout.
+        existing = configuration.get("num_predict", MAX_OUTPUT_TOKENS)
+        try:
+            existing = int(existing)
+        except (TypeError, ValueError) as exc:
+            raise HieExperimentError("Model num_predict must be a positive integer for HIE") from exc
+        if existing < 1:
+            raise HieExperimentError("Model num_predict must be a positive integer for HIE")
+        configuration["num_predict"] = min(existing, MAX_OUTPUT_TOKENS)
+    elif provider in {"openai", "remote_inference"}:
+        existing = configuration.get("max_output_tokens", configuration.get("num_predict", MAX_OUTPUT_TOKENS))
+        try:
+            existing = int(existing)
+        except (TypeError, ValueError) as exc:
+            raise HieExperimentError("Model max_output_tokens must be a positive integer for HIE") from exc
+        if existing < 1:
+            raise HieExperimentError("Model max_output_tokens must be a positive integer for HIE")
+        configuration["max_output_tokens"] = min(existing, MAX_OUTPUT_TOKENS)
+    else:
+        raise HieExperimentError("This provider does not have an HIE-enforceable call budget")
+    return configuration
+
+
+def _budget_for_experiment(experiment: dict[str, Any]) -> dict[str, Any]:
+    budget = experiment.get("budget") or {}
+    fixture_count = len(experiment["fixtures"])
+    max_provider_calls = fixture_count * 2
+    if (
+        budget.get("max_provider_calls") != max_provider_calls
+        or budget.get("fixture_count") != fixture_count
+        or budget.get("estimated_provider_calls") != max_provider_calls
+    ):
+        raise HieExperimentError("Persisted HIE budget does not match the fixtures; recreate the experiment")
+    return {
+        **budget,
+        "max_provider_calls": max_provider_calls,
+        "max_output_chars_per_call": MAX_OUTPUT_CHARS,
+        "max_output_tokens_per_call": MAX_OUTPUT_TOKENS,
+        "max_request_timeout_seconds": 90,
+        "max_candidate_chars": 12_000,
+    }
+
+
 def run_experiment(experiment_id: int) -> None:
-    experiment = get_experiment(experiment_id)
-    if experiment is None or experiment["status"] != "queued":
-        return
+    # Claim queued work with a conditional state transition. Another request or
+    # recovery process may have changed status since the initial read.
     with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         cursor = connection.execute(
             "UPDATE hie_experiments SET status = 'running', updated_at = ? WHERE id = ? AND status = 'queued'",
             (_now(), experiment_id),
@@ -270,15 +340,21 @@ def run_experiment(experiment_id: int) -> None:
         if cursor.rowcount != 1:
             return
     experiment = get_experiment(experiment_id)
+    if experiment is None:
+        return
     task = get_task(experiment["task_id"])
     if task is not None and task.status == "pending":
         update_task(task.id, status="executing")
     _emit(experiment, "hie.experiment_started", "Running baseline and candidate against the same fixtures without tools or external actions.", "running", {
         "candidate_sha256": experiment["candidate"]["sha256"],
         "fixture_count": len(experiment["fixtures"]),
+        "automatic_promotion": False,
     })
     total_started = time.monotonic()
+    partial_evidence: list[dict[str, Any]] = []
+    provider_calls = 0
     try:
+        budget = _budget_for_experiment(experiment)
         baseline = experiment["baseline_snapshot"]
         candidate = experiment["candidate"]
         validate_candidate(candidate, baseline_snapshot=baseline)
@@ -290,17 +366,22 @@ def run_experiment(experiment_id: int) -> None:
         if model is None or model.provider != experiment["provider"] or model.model_name != experiment["model_name"]:
             raise HieExperimentError("Conversation model changed after experiment creation; create a new experiment")
         provider = resolve_model_provider(model)
+        provider_configuration = _bounded_provider_configuration(model.configuration, model.provider)
         baseline_content = baseline["instructions"]
         candidate_content = candidate["content"]
         active_skills = [skill for skill in baseline.get("skills", []) if skill.get("enabled") is True]
-        fixed_skills_context = "\n\n".join(
-            f"## {skill['name']} v{skill['version']}\n{skill['content']}"
+        fixed_skills_context = "\\n\\n".join(
+            f"## {skill['name']} v{skill['version']}\\n{skill['content']}"
             for skill in active_skills
         ) or "(no enabled Skills in the baseline snapshot)"
         outputs = []
         for fixture in experiment["fixtures"]:
             case_result = {"fixture_id": fixture["id"]}
             for variant, instructions in (("baseline", baseline_content), ("candidate", candidate_content)):
+                if provider_calls >= budget["max_provider_calls"]:
+                    raise HieExperimentError("HIE provider-call budget exhausted before model invocation")
+                if time.monotonic() - total_started >= budget["max_duration_seconds"]:
+                    raise HieExperimentError("HIE experiment time budget exhausted before model invocation")
                 messages = [
                     {
                         "role": "system",
@@ -308,23 +389,27 @@ def run_experiment(experiment_id: int) -> None:
                             "You are participating in an isolated HIE evaluation probe. Follow the supplied "
                             "declarative instructions as guidance only. Do not call tools, perform external "
                             "actions, claim to have changed system state, or reveal private reasoning. "
-                            "Answer only the test prompt.\n\n"
-                            f"Profile: /{baseline['slug']} v{baseline['version']}\n"
-                            f"Instructions under test:\n{instructions}\n\n"
-                            f"Enabled Skills held constant across variants:\n{fixed_skills_context}"
+                            "Answer only the test prompt. This is an evaluation only; no active profile is changed.\\n\\n"
+                            f"Profile: /{baseline['slug']} v{baseline['version']}\\n"
+                            f"Instructions under test:\\n{instructions}\\n\\n"
+                            f"Enabled Skills held constant across variants:\\n{fixed_skills_context}"
                         ),
                     },
                     {"role": "user", "content": fixture["prompt"]},
                 ]
+                # Budget guards run before the provider call; all shipped concrete
+                # providers support the configuration keys capped above.
+                provider_calls += 1
                 started = time.monotonic()
                 output = provider.generate(
                     messages=messages,
                     model_name=model.model_name,
-                    configuration=model.configuration,
+                    configuration=provider_configuration,
                 )
                 duration_ms = max(0, int((time.monotonic() - started) * 1000))
                 if not isinstance(output, str) or not output.strip():
                     raise HieExperimentError(f"{variant} returned an empty output for {fixture['id']}")
+                # Bound persisted evidence even if a provider violates its output-token contract.
                 output = output[:MAX_OUTPUT_CHARS]
                 case_result[variant] = {
                     "output": output,
@@ -333,18 +418,34 @@ def run_experiment(experiment_id: int) -> None:
                     "output_sha256": __import__("hashlib").sha256(output.encode("utf-8")).hexdigest(),
                 }
             outputs.append(case_result)
+            partial_evidence = outputs.copy()
+            checkpoint = {
+                "fixture_count": len(partial_evidence),
+                "provider_calls": provider_calls,
+                "execution_mode": "isolated_prompt_probe_no_tools",
+                "automatic_promotion": False,
+                "partial": True,
+                "evidence": partial_evidence,
+            }
+            with get_connection() as connection:
+                connection.execute(
+                    "UPDATE hie_experiments SET results = ?, updated_at = ? WHERE id = ? AND status = 'running'",
+                    (json.dumps(checkpoint, ensure_ascii=False), _now(), experiment_id),
+                )
+                connection.commit()
             _emit(experiment, "hie.fixture_evaluated", f"Fixture {fixture['id']} completed for baseline and candidate.", "completed", {
                 "fixture_id": fixture["id"],
                 "baseline_passed": case_result["baseline"]["evaluation"]["passed"],
                 "candidate_passed": case_result["candidate"]["evaluation"]["passed"],
                 "baseline_output_sha256": case_result["baseline"]["output_sha256"],
                 "candidate_output_sha256": case_result["candidate"]["output_sha256"],
+                "provider_calls": provider_calls,
             })
         baseline_passes = sum(1 for item in outputs if item["baseline"]["evaluation"]["passed"])
         candidate_passes = sum(1 for item in outputs if item["candidate"]["evaluation"]["passed"])
         results = {
             "fixture_count": len(outputs),
-            "provider_calls": len(outputs) * 2,
+            "provider_calls": provider_calls,
             "duration_ms": max(0, int((time.monotonic() - total_started) * 1000)),
             "execution_mode": "isolated_prompt_probe_no_tools",
             "baseline_passed": baseline_passes,
@@ -352,11 +453,13 @@ def run_experiment(experiment_id: int) -> None:
             "baseline_pass_rate": baseline_passes / len(outputs),
             "candidate_pass_rate": candidate_passes / len(outputs),
             "delta_pass_rate": (candidate_passes - baseline_passes) / len(outputs),
+            # This label summarizes only the user's deterministic fixture assertions.
             "assessment": (
                 "candidate_better" if candidate_passes > baseline_passes
                 else "candidate_regressed" if candidate_passes < baseline_passes
                 else "inconclusive"
             ),
+            "assessment_scope": "submitted_deterministic_fixtures_only",
             "automatic_promotion": False,
             "evidence": outputs,
         }
@@ -372,6 +475,7 @@ def run_experiment(experiment_id: int) -> None:
             update_task(task.id, status="completed", result={"hie_experiment_id": experiment_id, "assessment": results["assessment"], "results": results})
         _emit(experiment, "hie.experiment_completed", "Baseline/candidate probes and deterministic fixture checks completed; no candidate was promoted.", "completed", {
             "assessment": results["assessment"],
+            "assessment_scope": results["assessment_scope"],
             "baseline_pass_rate": results["baseline_pass_rate"],
             "candidate_pass_rate": results["candidate_pass_rate"],
             "candidate_sha256": candidate["sha256"],
@@ -379,28 +483,38 @@ def run_experiment(experiment_id: int) -> None:
         })
     except Exception as exc:
         safe_error = f"{type(exc).__name__}: {str(exc)}"[:500]
+        partial_results = {
+            "error": safe_error,
+            "error_type": type(exc).__name__,
+            "fixture_count": len(partial_evidence),
+            "provider_calls": provider_calls,
+            "duration_ms": max(0, int((time.monotonic() - total_started) * 1000)),
+            "execution_mode": "isolated_prompt_probe_no_tools",
+            "assessment_scope": "submitted_deterministic_fixtures_only",
+            "automatic_promotion": False,
+            "recovery_requires_user": True,
+            "evidence": partial_evidence,
+        }
         with get_connection() as connection:
             connection.execute(
-                "UPDATE hie_experiments SET status = 'failed', results = ?, updated_at = ? WHERE id = ? AND status = 'running'",
-                (json.dumps({"error": safe_error, "automatic_promotion": False}), _now(), experiment_id),
+                "UPDATE hie_experiments SET status = 'failed', results = ?, updated_at = ? WHERE id = ? AND status IN ('running', 'queued')",
+                (json.dumps(partial_results, ensure_ascii=False), _now(), experiment_id),
             )
             connection.commit()
         experiment = get_experiment(experiment_id)
         task = get_task(experiment["task_id"])
         if task is not None and task.status in {"pending", "executing"}:
             try:
-                if task.status == "pending":
-                    update_task(task.id, status="failed", result={"hie_experiment_id": experiment_id, "error": safe_error})
-                else:
-                    update_task(task.id, status="failed", result={"hie_experiment_id": experiment_id, "error": safe_error})
+                update_task(task.id, status="failed", result={"hie_experiment_id": experiment_id, "error": safe_error})
             except ValueError:
                 pass
-        _emit(experiment, "hie.experiment_failed", "HIE experiment failed; active profile was not modified.", "failed", {
+        _emit(experiment, "hie.experiment_failed", "HIE experiment failed; active profile was not modified and completed fixture evidence was preserved.", "failed", {
             "error_type": type(exc).__name__,
+            "provider_calls": provider_calls,
+            "completed_fixtures": len(partial_evidence),
             "candidate_sha256": experiment["candidate"]["sha256"],
             "automatic_promotion": False,
         })
-
 
 def reject_experiment(experiment_id: int) -> dict[str, Any]:
     experiment = get_experiment(experiment_id)
