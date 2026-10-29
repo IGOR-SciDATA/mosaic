@@ -152,6 +152,35 @@ def init_db() -> None:
         """)
 
         connection.execute("""
+            CREATE TABLE IF NOT EXISTS hie_experiments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                source_task_id INTEGER NULL,
+                conversation_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
+                profile_slug TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (
+                    status IN ('draft', 'queued', 'running', 'completed', 'failed', 'rejected')
+                ),
+                baseline_snapshot TEXT NOT NULL,
+                candidate TEXT NOT NULL,
+                fixtures TEXT NOT NULL,
+                candidate_diff TEXT NOT NULL,
+                results TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (source_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_hie_experiments_task_status
+            ON hie_experiments(task_id, status)
+        """)
+
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 task_id INTEGER NOT NULL,
