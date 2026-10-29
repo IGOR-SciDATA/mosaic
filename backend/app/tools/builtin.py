@@ -88,7 +88,7 @@ class FilesystemTool(Tool):
         "required": ["operation", "path"],
         "additionalProperties": False,
         "properties": {
-            "operation": {"type": "string", "enum": ["read", "write", "create", "mkdir", "list", "explore"], "maxLength": 16},
+            "operation": {"type": "string", "enum": ["read", "write", "create", "mkdir", "list", "explore", "search"], "maxLength": 16},
             "path": {"type": "string", "minLength": 1, "maxLength": 2048},
             "content": {"type": "string", "maxLength": MAX_FILE_BYTES},
             "overwrite": {"type": "boolean"},
@@ -97,6 +97,9 @@ class FilesystemTool(Tool):
             "max_files": {"type": "integer", "minimum": 1, "maximum": MAX_WORKSPACE_FILES},
             "max_file_bytes": {"type": "integer", "minimum": 1, "maximum": MAX_WORKSPACE_FILE_BYTES},
             "max_total_bytes": {"type": "integer", "minimum": 1, "maximum": MAX_WORKSPACE_TOTAL_BYTES},
+            "query": {"type": "string", "minLength": 1, "maxLength": 300},
+            "search_in": {"type": "string", "enum": ["name", "content", "both"]},
+            "max_matches": {"type": "integer", "minimum": 1, "maximum": 100},
         },
     }
     permission_policy = {"approval_required": True, "scope": "active_workspace"}
@@ -114,19 +117,33 @@ class FilesystemTool(Tool):
             raise ValueError("Argument overwrite is only allowed for operation write")
         if operation != "read" and ({"start_line", "max_lines"} & set(arguments)):
             raise ValueError("Arguments start_line and max_lines are only allowed for operation read")
-        if operation != "explore" and ({"max_files", "max_file_bytes", "max_total_bytes"} & set(arguments)):
-            raise ValueError("Workspace exploration limits are only allowed for operation explore")
+        if operation not in {"explore", "search"} and ({"max_files", "max_file_bytes", "max_total_bytes"} & set(arguments)):
+            raise ValueError("Workspace exploration limits are only allowed for operation explore/search")
+        if operation == "search" and "query" not in arguments:
+            raise ValueError("Argument query is required for operation search")
+        if operation != "search" and ({"query", "search_in", "max_matches"} & set(arguments)):
+            raise ValueError("Search arguments are only allowed for operation search")
 
     def policy_for(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Allow harmless workspace reads without approval; keep side effects gated."""
-        if arguments.get("operation") in {"read", "list", "explore"}:
+        if arguments.get("operation") in {"read", "list", "explore", "search"}:
             return {**self.permission_policy, "approval_required": False}
         return self.permission_policy
 
     def execute(self, arguments: dict[str, Any], *, workspace: Path | None = None, cancel_check: Callable[[], bool] | None = None) -> Any:
         root = _require_workspace(workspace)
         operation = arguments["operation"]
-        path = _workspace_path(root, arguments["path"], allow_root=operation in {"list", "mkdir", "explore"})
+        path = _workspace_path(root, arguments["path"], allow_root=operation in {"list", "mkdir", "explore", "search"})
+        if operation == "search":
+            return _search_workspace(
+                root,
+                query=arguments["query"],
+                search_in=arguments.get("search_in", "both"),
+                max_matches=arguments.get("max_matches", 50),
+                max_files=arguments.get("max_files", 100),
+                max_file_bytes=arguments.get("max_file_bytes", 16_000),
+                max_total_bytes=arguments.get("max_total_bytes", 100_000),
+            )
         if operation == "explore":
             return _explore_workspace(
                 root,
@@ -1131,6 +1148,66 @@ def _explore_workspace(
         "ignored": ignored,
         "failures": failures,
     }
+
+
+def _search_workspace(
+    root: Path,
+    *,
+    query: str,
+    search_in: str,
+    max_matches: int,
+    max_files: int,
+    max_file_bytes: int,
+    max_total_bytes: int,
+) -> dict[str, Any]:
+    """Search eligible workspace paths/content using the same bounded, safe explorer."""
+    exploration = _explore_workspace(
+        root,
+        max_files=max_files,
+        max_file_bytes=max_file_bytes,
+        max_total_bytes=max_total_bytes,
+    )
+    needle = query.casefold()
+    matches: list[dict[str, Any]] = []
+    for item in exploration["files"]:
+        relative = item["path"]
+        name_match = needle in relative.casefold() if search_in in {"name", "both"} else False
+        line_matches = []
+        if search_in in {"content", "both"}:
+            for line_number, line in enumerate(item["content"].splitlines(), start=1):
+                if needle in line.casefold():
+                    line_matches.append({"line": line_number, "preview": line[:300]})
+                    if len(line_matches) >= 5:
+                        break
+        if name_match or line_matches:
+            matches.append({
+                "path": relative,
+                "name_match": name_match,
+                "content_matches": line_matches,
+            })
+            if len(matches) >= max_matches:
+                exploration["limits_reached"] = sorted(set(exploration["limits_reached"] + ["max_matches"]))
+                break
+    return {
+        "operation": "search",
+        "status": exploration["status"] if not exploration["limits_reached"] else "partial",
+        "workspace": exploration["workspace"],
+        "query": query,
+        "search_in": search_in,
+        "directories_found": exploration["directories_found"],
+        "files_found": exploration["files_found"],
+        "files_searched": exploration["files_read"],
+        "files_ignored": exploration["files_ignored"],
+        "files_failed": exploration["files_failed"],
+        "bytes_scanned": exploration["bytes_read"],
+        "duration_ms": exploration["duration_ms"],
+        "limits_reached": exploration["limits_reached"],
+        "matches": matches,
+        "ignored": exploration["ignored"],
+        "failures": exploration["failures"],
+    }
+
+
 
 
 def register_builtin_tools() -> None:
