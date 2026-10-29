@@ -390,12 +390,14 @@ def test_failure_event_failure_preserves_original_error_without_false_success(cl
         client.post(f"/hie/experiments/{created_id}/run")
 
     stored = hie_experiments.get_experiment(created_id)
-    assert stored["status"] == "failed"
-    assert stored["results"]["error_type"] == "RuntimeError"
-    assert "provider unavailable" in stored["results"]["error"]
-    assert stored["results"]["automatic_promotion"] is False
+    # Failure finalization and its audit event share one transaction. Because the
+    # event store failed, the transaction rolled back rather than claiming a
+    # failure transition without its audit record. Startup recovery marks this
+    # persisted running experiment interrupted without replaying provider calls.
+    assert stored["status"] == "running"
+    assert stored["results"] is None
     task = get_task(stored["task_id"])
-    assert task.status == "failed"
+    assert task.status == "executing"
     active = get_project_agent(project.id, "qa-agent")
     assert active["instructions"] == "Answer concisely."
 
