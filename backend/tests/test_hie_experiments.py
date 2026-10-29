@@ -46,6 +46,87 @@ class FakeProvider:
         yield self.generate(messages, model_name, configuration)
 
 
+def _create_ready_experiment(client):
+    from app.services import hie_experiments
+
+    project, conversation = _scope()
+    enabled = client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True})
+    assert enabled.status_code == 200
+    experiment = hie_experiments.create_experiment(
+        conversation_id=conversation.id,
+        task_id=None,
+        profile_slug="qa-agent",
+        candidate_content="Answer with clear detail.",
+        fixtures=[{"prompt": "Explain.", "expected_contains": ["detail"]}],
+    )
+    return project, experiment
+
+
+def test_queue_event_failure_rolls_back_queued_state(client, monkeypatch):
+    from app.services import hie_experiments
+
+    _, experiment = _create_ready_experiment(client)
+    original_emit = hie_experiments._emit
+
+    def fail_queue_event(experiment, event_name, message, status, metadata=None, connection=None):
+        if event_name == "hie.experiment_queued":
+            raise OSError("queue event persistence failed")
+        return original_emit(experiment, event_name, message, status, metadata, connection)
+
+    monkeypatch.setattr(hie_experiments, "_emit", fail_queue_event)
+    with pytest.raises(OSError, match="queue event persistence failed"):
+        hie_experiments.queue_experiment(experiment["id"])
+
+    stored = hie_experiments.get_experiment(experiment["id"])
+    assert stored["status"] == "draft"
+
+
+def test_rejection_event_failure_rolls_back_rejection_state(client, monkeypatch):
+    from app.services import hie_experiments
+
+    _, experiment = _create_ready_experiment(client)
+    original_emit = hie_experiments._emit
+
+    def fail_rejection_event(experiment, event_name, message, status, metadata=None, connection=None):
+        if event_name == "hie.experiment_rejected":
+            raise OSError("rejection event persistence failed")
+        return original_emit(experiment, event_name, message, status, metadata, connection)
+
+    monkeypatch.setattr(hie_experiments, "_emit", fail_rejection_event)
+    with pytest.raises(OSError, match="rejection event persistence failed"):
+        hie_experiments.reject_experiment(experiment["id"])
+
+    stored = hie_experiments.get_experiment(experiment["id"])
+    assert stored["status"] == "draft"
+
+
+def test_creation_event_failure_rolls_back_experiment_and_marks_task_failed(client, monkeypatch):
+    from app.services import hie_experiments
+
+    _, conversation = _scope()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    original_emit = hie_experiments._emit
+
+    def fail_created_event(experiment, event_name, message, status, metadata=None, connection=None):
+        if event_name == "hie.experiment_created":
+            raise OSError("creation event persistence failed")
+        return original_emit(experiment, event_name, message, status, metadata, connection)
+
+    monkeypatch.setattr(hie_experiments, "_emit", fail_created_event)
+    with pytest.raises(hie_experiments.HieExperimentError, match="could not be persisted safely"):
+        hie_experiments.create_experiment(
+            conversation_id=conversation.id,
+            task_id=None,
+            profile_slug="qa-agent",
+            candidate_content="Answer with clear detail.",
+            fixtures=[{"prompt": "Explain.", "expected_contains": ["detail"]}],
+        )
+
+    with get_connection() as connection:
+        rows = connection.execute("SELECT id FROM hie_experiments").fetchall()
+    assert rows == []
+
+
 def test_experiment_runs_isolated_baseline_candidate_and_persists_evidence(client, monkeypatch):
     from app.services import hie_experiments
 
