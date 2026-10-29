@@ -1112,6 +1112,18 @@ def _prepare_workspace_exploration(
         return {"status": "failed", "error_type": type(exc).__name__}
 
     if result.status != "completed" or not isinstance(result.data, dict):
+        try:
+            create_task_event(
+                task_id=task_id, conversation_id=conversation_id, project_id=task.project_id,
+                tool_call_id=call.id if call is not None else None,
+                component="filesystem", event_name="workspace.discovery.completed",
+                message="Descoberta do workspace falhou durante a execução.",
+                level="error", status="failed",
+                duration_ms=max(0, round((time.monotonic() - started) * 1000)),
+                metadata={"tool_result_status": result.status, "error_type": "ToolExecutionFailed"},
+            )
+        except Exception:
+            pass
         context.append({"role": "system", "content": "Mosaic workspace discovery failed; do not claim project files were read."})
         return {"status": "failed", "error": result.error}
 
