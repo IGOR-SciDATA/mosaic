@@ -86,3 +86,48 @@ def test_evidence_uses_initialized_core_artifact_repository(tmp_path, monkeypatc
     assert all(artifact.metadata["sha256"] for artifact in artifacts[:2])
     assert artifacts[2].metadata["record_sha256"] == record["record_sha256"]
     assert all(Path(artifact.path).is_file() for artifact in artifacts)
+
+
+def test_evidence_rejects_symlinked_directory_before_resolving_it(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    data_dir.mkdir()
+    (data_dir / "artifacts").symlink_to(outside, target_is_directory=True)
+    monkeypatch.setattr(hie_evidence, "DATA_DIR", data_dir)
+    monkeypatch.setattr(hie_evidence, "create_artifact", lambda **kwargs: None)
+
+    try:
+        hie_evidence.persist_output_evidence(9, "baseline", "candidate", max_bytes=1024)
+    except ValueError as exc:
+        assert "symlink" in str(exc).lower()
+    else:
+        raise AssertionError("Expected symlinked evidence directory to be rejected")
+    assert list(outside.iterdir()) == []
+
+
+def test_evidence_rejects_broken_symlink_in_directory_chain(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "artifacts").symlink_to(tmp_path / "missing-target", target_is_directory=True)
+    monkeypatch.setattr(hie_evidence, "DATA_DIR", data_dir)
+    monkeypatch.setattr(hie_evidence, "create_artifact", lambda **kwargs: None)
+
+    try:
+        hie_evidence.persist_output_evidence(9, "baseline", "candidate", max_bytes=1024)
+    except ValueError as exc:
+        assert "symlink" in str(exc).lower()
+    else:
+        raise AssertionError("Expected broken symlink to be rejected")
+
+
+def test_output_evidence_budget_includes_artifact_metadata(tmp_path, monkeypatch):
+    monkeypatch.setattr(hie_evidence, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(hie_evidence, "create_artifact", lambda **kwargs: None)
+
+    try:
+        hie_evidence.persist_output_evidence(9, "a", "b", max_bytes=10)
+    except ValueError as exc:
+        assert "budget" in str(exc).lower()
+    else:
+        raise AssertionError("Expected file and metadata aggregate budget to be enforced")
