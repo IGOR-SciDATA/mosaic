@@ -543,3 +543,22 @@ def test_filesystem_explore_has_no_default_file_count_or_byte_caps(tmp_path: Pat
     assert result["files_read"] == 205
     assert result["bytes_read"] == 205 * 40_000
     assert result["limits_reached"] == []
+
+
+def test_filesystem_explore_respects_requested_directory_scope(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    (workspace / "docs").mkdir(parents=True)
+    (workspace / "src").mkdir()
+    (workspace / "docs" / "guide.md").write_text("DOCS_SENTINEL\n", encoding="utf-8")
+    (workspace / "src" / "unrelated.py").write_text("SRC_SENTINEL\n", encoding="utf-8")
+
+    result = FilesystemTool().execute(
+        {"operation": "explore", "path": "docs"},
+        workspace=workspace,
+    )
+
+    assert result["status"] == "success"
+    assert result["scope"] == "docs"
+    assert [item["path"] for item in result["files"]] == ["docs/guide.md"]
+    assert "DOCS_SENTINEL" in result["files"][0]["content"]
+    assert all("src/" not in item["path"] for item in result["files"])
