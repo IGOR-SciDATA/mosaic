@@ -83,8 +83,11 @@ def test_experiment_runs_isolated_baseline_candidate_and_persists_evidence(clien
     assert result["results"]["duration_ms"] >= 0
     assert result["results"]["execution_mode"] == "isolated_prompt_probe_no_tools"
     assert result["results"]["automatic_promotion"] is False
-    assert result["results"]["evidence"][0]["baseline"]["output"] == "baseline result"
-    assert result["results"]["evidence"][0]["candidate"]["output"] == "approved result"
+    assert result["results"]["evidence"][0]["baseline"]["output_preview"] == "baseline result"
+    assert result["results"]["evidence"][0]["candidate"]["output_preview"] == "approved result"
+    assert result["results"]["evidence"][0]["artifact_evidence"]["baseline_output"]["artifact_id"]
+    assert result["results"]["evidence"][0]["artifact_evidence"]["candidate_output"]["sha256"]
+    assert "path" not in result["results"]["evidence"][0]["artifact_evidence"]["candidate_output"]
     active_profile = get_project_agent(project.id, "qa-agent")
     assert active_profile["instructions"] == "Answer concisely."
     assert active_profile["version"] == 1
@@ -122,3 +125,116 @@ def test_experiment_rejects_unbounded_or_ambiguous_input(client):
         "fixtures": [{"prompt": "Check.", "expected_contains": ["yes"]}],
     })
     assert response.status_code == 422
+
+
+def test_input_budget_blocks_provider_call_before_generation(client, monkeypatch):
+    from app.services import hie_experiments
+
+    calls = []
+    class RecordingProvider(FakeProvider):
+        def generate(self, messages, model_name, configuration):
+            calls.append((messages, configuration))
+            return super().generate(messages, model_name, configuration)
+
+    provider = RecordingProvider()
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: provider)
+    monkeypatch.setattr(hie_experiments, "MAX_INPUT_CHARS_PER_CALL", 1)
+    project, conversation = _scope()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    created = client.post("/hie/experiments", json={
+        "conversation_id": conversation.id,
+        "profile_slug": "qa-agent",
+        "candidate_content": "Always include the word approved.",
+        "fixtures": [{"prompt": "Return the test response.", "expected_contains": ["approved"]}],
+    })
+    assert created.status_code == 201
+    run = client.post(f"/hie/experiments/{created.json()['id']}/run")
+    assert run.status_code == 202
+    failed = client.get(f"/hie/experiments/{created.json()['id']}").json()
+    assert failed["status"] == "failed"
+    assert "Input budget exceeded before provider call" in failed["results"]["error"]
+    assert calls == []
+
+
+def test_provider_receives_output_token_and_timeout_caps(client, monkeypatch):
+    from app.services import hie_experiments
+
+    configurations = []
+    class RecordingProvider(FakeProvider):
+        def generate(self, messages, model_name, configuration):
+            configurations.append(dict(configuration))
+            return super().generate(messages, model_name, configuration)
+
+    provider = RecordingProvider()
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: provider)
+    project, conversation = _scope()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    created = client.post("/hie/experiments", json={
+        "conversation_id": conversation.id,
+        "profile_slug": "qa-agent",
+        "candidate_content": "Always include the word approved.",
+        "fixtures": [{"prompt": "Return the test response.", "expected_contains": ["approved"]}],
+    })
+    assert created.status_code == 201
+    run = client.post(f"/hie/experiments/{created.json()['id']}/run")
+    assert run.status_code == 202
+    finished = client.get(f"/hie/experiments/{created.json()['id']}").json()
+    assert finished["status"] == "completed"
+    assert len(configurations) == 2
+    assert all(config["num_predict"] <= hie_experiments.MAX_OUTPUT_TOKENS for config in configurations)
+    assert all(config["request_timeout_seconds"] <= hie_experiments.PROVIDER_TIMEOUT_SECONDS for config in configurations)
+
+
+def test_excessive_provider_output_fails_without_truncating_and_persisting_it(client, monkeypatch):
+    from app.services import hie_experiments
+
+    class ExcessiveProvider(FakeProvider):
+        def generate(self, messages, model_name, configuration):
+            return "x" * (hie_experiments.MAX_OUTPUT_CHARS + 1)
+
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: ExcessiveProvider())
+    project, conversation = _scope()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    created = client.post("/hie/experiments", json={
+        "conversation_id": conversation.id,
+        "profile_slug": "qa-agent",
+        "candidate_content": "Always include the word approved.",
+        "fixtures": [{"prompt": "Return the test response.", "expected_contains": ["approved"]}],
+    })
+    assert created.status_code == 201
+    run = client.post(f"/hie/experiments/{created.json()['id']}/run")
+    assert run.status_code == 202
+    failed = client.get(f"/hie/experiments/{created.json()['id']}").json()
+    assert failed["status"] == "failed"
+    assert "output" in failed["results"]["error"].lower()
+    assert "evidence" not in failed["results"]
+
+
+def test_completion_event_failure_does_not_report_success(client, monkeypatch):
+    from app.services import hie_experiments
+
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: FakeProvider())
+    original_emit = hie_experiments._emit
+    def fail_completion_event(experiment, event_name, message, status, metadata=None, connection=None):
+        if event_name == "hie.experiment_completed":
+            raise RuntimeError("completion event store unavailable")
+        return original_emit(experiment, event_name, message, status, metadata, connection)
+
+    monkeypatch.setattr(hie_experiments, "_emit", fail_completion_event)
+    project, conversation = _scope()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    created = client.post("/hie/experiments", json={
+        "conversation_id": conversation.id,
+        "profile_slug": "qa-agent",
+        "candidate_content": "Always include the word approved.",
+        "fixtures": [{"prompt": "Return the test response.", "expected_contains": ["approved"]}],
+    })
+    assert created.status_code == 201
+    assert client.post(f"/hie/experiments/{created.json()['id']}/run").status_code == 202
+    failed = client.get(f"/hie/experiments/{created.json()['id']}").json()
+    assert failed["status"] == "failed"
+    assert failed["results"]["automatic_promotion"] is False
+    task = get_task(failed["task_id"])
+    assert task.status == "failed"
+    active = get_project_agent(project.id, "qa-agent")
+    assert active["instructions"] == "Answer concisely."
