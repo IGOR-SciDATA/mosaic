@@ -468,3 +468,70 @@ def reject_experiment(experiment_id: int) -> dict[str, Any]:
         "automatic_promotion": False,
     })
     return experiment
+
+
+def recover_interrupted_experiments() -> dict[str, list[int]]:
+    """Reconcile persisted queued/running experiments without replaying provider calls.
+
+    A queued experiment is known not to have entered the runner. A running experiment
+    has an unknown provider outcome, so it is failed for review and never replayed
+    automatically. This reuses the existing startup lifecycle; no worker/queue is added.
+    """
+    recovered_queued: list[int] = []
+    recovered_running: list[int] = []
+    with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        rows = connection.execute(
+            "SELECT id, task_id, status FROM hie_experiments WHERE status IN ('queued', 'running') ORDER BY id"
+        ).fetchall()
+        for row in rows:
+            previous = row["status"]
+            recovery = {
+                "error_type": "InterruptedByRestart",
+                "recovery_status": "interrupted_before_execution" if previous == "queued" else "result_unknown_after_restart",
+                "previous_status": previous,
+                "provider_outcome": "not_started" if previous == "queued" else "unknown",
+                "automatic_retry": False,
+                "requires_user_review": True,
+                "automatic_promotion": False,
+            }
+            cursor = connection.execute(
+                "UPDATE hie_experiments SET status = 'failed', results = ?, updated_at = ? WHERE id = ? AND status = ?",
+                (json.dumps(recovery), _now(), row["id"], previous),
+            )
+            if cursor.rowcount == 1:
+                (recovered_queued if previous == "queued" else recovered_running).append(row["id"])
+        connection.commit()
+    for experiment_id in recovered_queued + recovered_running:
+        experiment = get_experiment(experiment_id)
+        if experiment is None:
+            continue
+        task = get_task(experiment["task_id"])
+        if task is not None and task.status in {"pending", "executing"}:
+            try:
+                update_task(task.id, status="failed", result={
+                    "hie_experiment_id": experiment_id,
+                    "recovery_status": "interrupted_by_restart",
+                    "automatic_retry": False,
+                })
+            except ValueError:
+                pass
+        previous = "queued" if experiment_id in recovered_queued else "running"
+        try:
+            _emit(
+                experiment,
+                "hie.experiment_interrupted_by_restart",
+                "HIE experiment was interrupted by a Core restart; provider calls were not replayed.",
+                "failed",
+                {
+                    "previous_status": previous,
+                    "provider_outcome": "not_started" if previous == "queued" else "unknown",
+                    "automatic_retry": False,
+                    "automatic_promotion": False,
+                },
+            )
+        except Exception:
+            # The persisted terminal state remains authoritative; event failure is
+            # not converted into a false success and can be diagnosed from the DB.
+            continue
+    return {"recovered_queued": recovered_queued, "recovered_running": recovered_running}
