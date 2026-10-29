@@ -17,6 +17,11 @@ from app.core.config import DATA_DIR
 from app.models.artifact_repository import create_artifact
 
 
+def _metadata_bytes(metadata: dict[str, Any], content: bytes) -> int:
+    complete = {**metadata, "sha256": hashlib.sha256(content).hexdigest(), "size_bytes": len(content)}
+    return len(json.dumps(complete, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+
+
 def _ensure_real_directory(path: Path) -> Path:
     """Create a directory and reject symlinks, including broken symlinks."""
     try:
@@ -54,8 +59,9 @@ def _write_artifact(
 ) -> dict[str, Any]:
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
         raise ValueError("HIE evidence byte budget must be a positive integer")
-    if len(content) > max_bytes:
-        raise ValueError("HIE evidence exceeds the configured artifact-size budget")
+    metadata_size = _metadata_bytes(metadata, content)
+    if len(content) + metadata_size > max_bytes:
+        raise ValueError("HIE evidence file and Artifact metadata exceed the configured byte budget")
     if Path(name).name != name or name in {"", ".", ".."}:
         raise ValueError("HIE evidence filename must be a simple basename")
 
@@ -76,8 +82,8 @@ def _write_artifact(
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        # Recheck immediately before replacement. The temporary name is unique,
-        # so concurrent experiments do not share a fixed .tmp path.
+        # Unique temporary names avoid collisions. Recheck the destination
+        # immediately before replacing it; this does not claim race-free OS sandboxing.
         try:
             current_mode = path.lstat().st_mode
         except FileNotFoundError:
@@ -115,6 +121,7 @@ def _write_artifact(
         "sha256": digest,
         "size_bytes": len(content),
         "metadata_bytes": len(json.dumps(artifact_metadata, ensure_ascii=False, sort_keys=True).encode("utf-8")),
+        "budget_bytes": len(content) + len(json.dumps(artifact_metadata, ensure_ascii=False, sort_keys=True).encode("utf-8")),
     }
 
 
@@ -127,15 +134,21 @@ def persist_output_evidence(
 ) -> dict[str, dict[str, Any]]:
     baseline = baseline_output.encode("utf-8")
     candidate = candidate_output.encode("utf-8")
-    if len(baseline) + len(candidate) > max_bytes:
-        raise ValueError("Combined HIE output evidence exceeds the artifact-size budget")
+    baseline_meta = {"role": "baseline_output"}
+    candidate_meta = {"role": "candidate_output"}
+    total = (
+        len(baseline) + _metadata_bytes(baseline_meta, baseline)
+        + len(candidate) + _metadata_bytes(candidate_meta, candidate)
+    )
+    if total > max_bytes:
+        raise ValueError("Combined HIE output evidence and metadata exceed the artifact-size budget")
     return {
         "baseline_output": _write_artifact(
             task_id,
             f"baseline-output-{hashlib.sha256(baseline).hexdigest()[:16]}.txt",
             baseline,
             artifact_type="hie_baseline_output",
-            metadata={"role": "baseline_output"},
+            metadata=baseline_meta,
             max_bytes=max_bytes,
         ),
         "candidate_output": _write_artifact(
@@ -143,7 +156,7 @@ def persist_output_evidence(
             f"candidate-output-{hashlib.sha256(candidate).hexdigest()[:16]}.txt",
             candidate,
             artifact_type="hie_candidate_output",
-            metadata={"role": "candidate_output"},
+            metadata=candidate_meta,
             max_bytes=max_bytes,
         ),
     }
