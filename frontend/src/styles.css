@@ -3350,3 +3350,47 @@ body { overflow: hidden; }
   .hie-mode-card .hie-toggle { flex-shrink: 0; }
   .composer-tools .hie-toggle { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
 }
+
+
+/* HIE experiment creation and evidence review */
+.hie-experiment-trigger {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.hie-experiment-trigger:hover:not(:disabled) { border-color: var(--accent); }
+.hie-experiment-modal { display: grid; gap: 14px; }
+.hie-experiment-modal .modal-form { padding: 0; }
+.hie-experiment-actions { display: flex; justify-content: flex-end; }
+.hie-history { display: grid; gap: 6px; border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.hie-history > strong { font-size: 12px; margin-bottom: 3px; }
+.hie-history button { text-align: left; border: 0; border-radius: 6px; padding: 7px 9px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 12px; }
+.hie-history button.active, .hie-history button:hover { background: var(--surface); color: var(--text); }
+.hie-experiment-result { display: grid; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+.hie-experiment-result-head, .hie-hash-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.hie-experiment-result-head strong { font-size: 14px; }
+.hie-experiment-status { border-radius: 999px; padding: 4px 8px; background: var(--surface); font-size: 11px; text-transform: uppercase; }
+.hie-experiment-status.status-completed { color: #62b58b; }
+.hie-experiment-status.status-failed { color: #e17b76; }
+.hie-experiment-status.status-running, .hie-experiment-status.status-queued { color: #d4a75d; }
+.hie-hash-line { font-size: 12px; color: var(--text-secondary); }
+.hie-hash-line code { font-size: 11px; }
+.hie-experiment-result details { border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; }
+.hie-experiment-result summary { cursor: pointer; font-size: 12px; }
+.hie-experiment-result pre, .hie-evidence pre { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; padding: 10px; border-radius: 7px; background: var(--surface); font-size: 11px; line-height: 1.5; }
+.hie-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hie-comparison > div:not(.hie-evidence) { display: grid; gap: 5px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.hie-comparison > div span { color: var(--text-secondary); font-size: 11px; }
+.hie-comparison > div strong { font-size: 20px; }
+.hie-comparison > p { grid-column: 1 / -1; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.hie-evidence { grid-column: 1 / -1; display: grid; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
+.hie-evidence > strong { font-size: 12px; }
+.hie-evidence > div > span { font-size: 11px; color: var(--text-secondary); }
+@media (max-width: 560px) {
+  .hie-experiment-modal .hie-experiment-actions .primary-action { width: 100%; }
+  .hie-hash-line { align-items: flex-start; flex-direction: column; gap: 3px; }
+}
