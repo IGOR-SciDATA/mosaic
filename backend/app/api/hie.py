@@ -1,7 +1,6 @@
 """Persisted HIE opt-in and isolated declarative-instruction experiments.
 
-Promotion and rollback intentionally remain unavailable until their version-bound
-approval and restoration contracts are implemented.
+Promotion and rollback require explicit, version-bound human confirmation.
 """
 from datetime import datetime, timezone
 
@@ -14,6 +13,9 @@ from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task
 from app.models.project_repository import get_project
 from app.services.agent_library import list_project_agents
+from app.services.hie_lifecycle import (
+    HieLifecycleError, approve_candidate, promote_candidate, rollback_promotion,
+)
 from app.services.hie_experiments import (
     HieExperimentError, create_experiment, get_experiment, list_experiments,
     queue_experiment, reject_experiment, run_experiment,
@@ -89,10 +91,10 @@ def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
             "candidate_hash",
             "explicit_rejection",
         ])
-        unavailable = ["versioned_promotion", "rollback"]
+        supported.extend(["version_bound_approval", "explicit_versioned_promotion", "audited_rollback"])
+        unavailable = []
     message = (
-        "Modo experimental habilitado. Experimentos isolados com baseline/candidato estão disponíveis; "
-        "promoção e rollback ainda não estão disponíveis."
+        "Modo experimental habilitado. Experimentos isolados estão disponíveis; aprovação, promoção e rollback exigem confirmação explícita."
         if enabled and experiment_available else
         "HIE está habilitado, mas é necessário um projeto com pelo menos um perfil de agente para criar experimentos."
         if enabled else
@@ -254,3 +256,60 @@ def reject_hie_experiment(experiment_id: int) -> dict:
         message = str(exc)
         status = 404 if message == "Experiment not found" else 409
         raise HTTPException(status_code=status, detail=message) from exc
+
+
+class HieApprovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    candidate_sha256: str = Field(min_length=64, max_length=64)
+    active_version: int = Field(ge=1)
+    active_sha256: str = Field(min_length=64, max_length=64)
+
+
+class HieRollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_active_version: int = Field(ge=1)
+    expected_active_sha256: str = Field(min_length=64, max_length=64)
+
+
+def _lifecycle_error(exc: HieLifecycleError) -> HTTPException:
+    message = str(exc)
+    status = 404 if message.endswith("not found") or message == "Experiment not found" else 409
+    return HTTPException(status_code=status, detail=message)
+
+
+@router.post("/experiments/{experiment_id}/approve")
+def approve_hie_candidate(experiment_id: int, payload: HieApprovalRequest) -> dict:
+    try:
+        return approve_candidate(
+            experiment_id,
+            candidate_sha256=payload.candidate_sha256,
+            active_version=payload.active_version,
+            active_sha256=payload.active_sha256,
+        )
+    except HieLifecycleError as exc:
+        raise _lifecycle_error(exc) from exc
+
+
+@router.post("/experiments/{experiment_id}/promote")
+def promote_hie_candidate(experiment_id: int, payload: HieApprovalRequest) -> dict:
+    try:
+        return promote_candidate(
+            experiment_id,
+            candidate_sha256=payload.candidate_sha256,
+            active_version=payload.active_version,
+            active_sha256=payload.active_sha256,
+        )
+    except HieLifecycleError as exc:
+        raise _lifecycle_error(exc) from exc
+
+
+@router.post("/promotions/{promotion_id}/rollback")
+def rollback_hie_promotion(promotion_id: int, payload: HieRollbackRequest) -> dict:
+    try:
+        return rollback_promotion(
+            promotion_id,
+            expected_active_version=payload.expected_active_version,
+            expected_active_sha256=payload.expected_active_sha256,
+        )
+    except HieLifecycleError as exc:
+        raise _lifecycle_error(exc) from exc
