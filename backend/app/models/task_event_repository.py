@@ -32,6 +32,7 @@ def create_task_event(
     project_id: int | None = None, tool_call_id: int | None = None,
     action_id: int | None = None, duration_ms: int | None = None,
     status: str | None = None, metadata: dict[str, Any] | None = None,
+    connection=None,
 ) -> TaskEvent:
     if level not in _ALLOWED_LEVELS:
         raise ValueError(f"Invalid event level: {level}")
@@ -44,8 +45,8 @@ def create_task_event(
     if len(encoded_metadata) > _MAX_METADATA_CHARS:
         encoded_metadata = json.dumps({"truncated": True, "preview": encoded_metadata[:_MAX_METADATA_CHARS - 40]})
     timestamp = datetime.now(timezone.utc).isoformat()
-    with get_connection() as connection:
-        cursor = connection.execute(
+    def insert_event(active_connection):
+        cursor = active_connection.execute(
             """INSERT INTO task_events (
                 task_id, conversation_id, project_id, tool_call_id, action_id,
                 timestamp, level, component, event_name, message, duration_ms,
@@ -55,9 +56,15 @@ def create_task_event(
              timestamp, level, component[:80], event_name[:120], message[:_MAX_MESSAGE],
              duration_ms, status[:80] if status else None, encoded_metadata),
         )
-        connection.commit()
-        row = connection.execute("SELECT * FROM task_events WHERE id = ?", (cursor.lastrowid,)).fetchone()
-    return _row_to_event(row)
+        row = active_connection.execute("SELECT * FROM task_events WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        return _row_to_event(row)
+
+    if connection is not None:
+        return insert_event(connection)
+    with get_connection() as active_connection:
+        event = insert_event(active_connection)
+        active_connection.commit()
+        return event
 
 
 def list_task_events(task_id: int, *, after_id: int = 0, limit: int = 100) -> list[TaskEvent]:
