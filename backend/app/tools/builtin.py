@@ -28,10 +28,8 @@ MAX_FILE_BYTES = 1_000_000
 MAX_READ_LINES = 80
 MAX_READ_CHARS = 5_000
 MAX_LIST_ENTRIES = 500
-MAX_WORKSPACE_FILES = 200
-MAX_WORKSPACE_FILE_BYTES = 32_000
-MAX_WORKSPACE_TOTAL_BYTES = 250_000
-WORKSPACE_SCAN_TIMEOUT_SECONDS = 5
+# Workspace discovery has no arbitrary file-count, per-file, aggregate-byte, or wall-clock cap.
+# OS permissions, the active workspace boundary, cancellation, and model context capacity still apply.
 WORKSPACE_EXCLUDED_DIRS = {
     ".git", ".hg", ".svn", "node_modules", "vendor", "dist", "build",
     ".next", ".nuxt", ".cache", "__pycache__", ".pytest_cache", ".mypy_cache",
@@ -94,12 +92,12 @@ class FilesystemTool(Tool):
             "overwrite": {"type": "boolean"},
             "start_line": {"type": "integer", "minimum": 1, "maximum": 1_000_000},
             "max_lines": {"type": "integer", "minimum": 1, "maximum": 200},
-            "max_files": {"type": "integer", "minimum": 1, "maximum": MAX_WORKSPACE_FILES},
-            "max_file_bytes": {"type": "integer", "minimum": 1, "maximum": MAX_WORKSPACE_FILE_BYTES},
-            "max_total_bytes": {"type": "integer", "minimum": 1, "maximum": MAX_WORKSPACE_TOTAL_BYTES},
+            "max_files": {"type": ["integer", "null"], "minimum": 1},
+            "max_file_bytes": {"type": ["integer", "null"], "minimum": 1},
+            "max_total_bytes": {"type": ["integer", "null"], "minimum": 1},
             "query": {"type": "string", "minLength": 1, "maxLength": 300},
             "search_in": {"type": "string", "enum": ["name", "content", "both"]},
-            "max_matches": {"type": "integer", "minimum": 1, "maximum": 100},
+            "max_matches": {"type": ["integer", "null"], "minimum": 1},
         },
     }
     permission_policy = {"approval_required": True, "scope": "active_workspace"}
@@ -119,6 +117,9 @@ class FilesystemTool(Tool):
             raise ValueError("Arguments start_line and max_lines are only allowed for operation read")
         if operation not in {"explore", "search"} and ({"max_files", "max_file_bytes", "max_total_bytes"} & set(arguments)):
             raise ValueError("Workspace exploration limits are only allowed for operation explore/search")
+        for key in ("max_files", "max_file_bytes", "max_total_bytes", "max_matches"):
+            if key in arguments and arguments[key] is not None and (not isinstance(arguments[key], int) or isinstance(arguments[key], bool) or arguments[key] < 1):
+                raise ValueError(f"Argument {key} must be a positive integer or null")
         if operation == "search" and "query" not in arguments:
             raise ValueError("Argument query is required for operation search")
         if operation != "search" and ({"query", "search_in", "max_matches"} & set(arguments)):
@@ -139,17 +140,17 @@ class FilesystemTool(Tool):
                 root,
                 query=arguments["query"],
                 search_in=arguments.get("search_in", "both"),
-                max_matches=arguments.get("max_matches", 50),
-                max_files=arguments.get("max_files", 100),
-                max_file_bytes=arguments.get("max_file_bytes", 16_000),
-                max_total_bytes=arguments.get("max_total_bytes", 100_000),
+                max_matches=arguments.get("max_matches"),
+                max_files=arguments.get("max_files"),
+                max_file_bytes=arguments.get("max_file_bytes"),
+                max_total_bytes=arguments.get("max_total_bytes"),
             )
         if operation == "explore":
             return _explore_workspace(
                 root,
-                max_files=arguments.get("max_files", 100),
-                max_file_bytes=arguments.get("max_file_bytes", 16_000),
-                max_total_bytes=arguments.get("max_total_bytes", 100_000),
+                max_files=arguments.get("max_files"),
+                max_file_bytes=arguments.get("max_file_bytes"),
+                max_total_bytes=arguments.get("max_total_bytes"),
                 cancel_check=cancel_check,
             )
         if operation == "read":
@@ -990,9 +991,9 @@ def _is_sensitive_workspace_path(relative_path: str) -> bool:
 def _explore_workspace(
     root: Path,
     *,
-    max_files: int,
-    max_file_bytes: int,
-    max_total_bytes: int,
+    max_files: int | None = None,
+    max_file_bytes: int | None = None,
+    max_total_bytes: int | None = None,
     cancel_check: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """Discover and read eligible UTF-8 text files deterministically under the authorized root."""
@@ -1021,9 +1022,6 @@ def _explore_workspace(
         if cancel_check is not None and cancel_check():
             limits.append("cancelled")
             break
-        if time.monotonic() - started >= WORKSPACE_SCAN_TIMEOUT_SECONDS:
-            limits.append("time_limit")
-            break
         current = Path(current_dir)
         try:
             current.resolve(strict=True).relative_to(root)
@@ -1033,10 +1031,6 @@ def _explore_workspace(
             continue
         kept_dirs = []
         for name in sorted(dir_names):
-            if time.monotonic() - started >= WORKSPACE_SCAN_TIMEOUT_SECONDS:
-                limits.append("time_limit")
-                dir_names[:] = []
-                break
             candidate = current / name
             relative = candidate.relative_to(root).as_posix()
             try:
@@ -1056,13 +1050,7 @@ def _explore_workspace(
             except (OSError, ValueError):
                 ignored.append({"path": relative, "reason": "unsafe_or_unreadable_directory"})
         dir_names[:] = kept_dirs
-        if "time_limit" in limits:
-            break
         for name in sorted(file_names):
-            if time.monotonic() - started >= WORKSPACE_SCAN_TIMEOUT_SECONDS:
-                limits.append("time_limit")
-                dir_names[:] = []
-                break
             candidate = current / name
             relative = candidate.relative_to(root).as_posix()
             if candidate.is_symlink():
@@ -1093,24 +1081,24 @@ def _explore_workspace(
             limits.append("time_limit")
             break
         relative = candidate.relative_to(root).as_posix()
-        if len(contents) >= max_files:
+        if max_files is not None and len(contents) >= max_files:
             if "max_files" not in limits:
                 limits.append("max_files")
             ignored.append({"path": relative, "reason": "max_files_limit"})
             continue
         try:
             size = candidate.stat().st_size
-            if size > max_file_bytes:
+            if max_file_bytes is not None and size > max_file_bytes:
                 limits.append("max_file_bytes")
                 ignored.append({"path": relative, "reason": "file_size_limit"})
                 continue
-            if total_bytes + size > max_total_bytes:
+            if max_total_bytes is not None and total_bytes + size > max_total_bytes:
                 limits.append("max_total_bytes")
                 ignored.append({"path": relative, "reason": "total_bytes_limit"})
                 continue
             with candidate.open("rb") as handle:
-                raw = handle.read(max_file_bytes + 1)
-            if len(raw) > max_file_bytes:
+                raw = handle.read(max_file_bytes + 1 if max_file_bytes is not None else -1)
+            if max_file_bytes is not None and len(raw) > max_file_bytes:
                 limits.append("max_file_bytes")
                 ignored.append({"path": relative, "reason": "file_size_limit"})
                 continue
@@ -1157,10 +1145,10 @@ def _search_workspace(
     *,
     query: str,
     search_in: str,
-    max_matches: int,
-    max_files: int,
-    max_file_bytes: int,
-    max_total_bytes: int,
+    max_matches: int | None = None,
+    max_files: int | None = None,
+    max_file_bytes: int | None = None,
+    max_total_bytes: int | None = None,
 ) -> dict[str, Any]:
     """Search eligible workspace paths/content using the same bounded, safe explorer."""
     exploration = _explore_workspace(
@@ -1187,7 +1175,7 @@ def _search_workspace(
                 "name_match": name_match,
                 "content_matches": line_matches,
             })
-            if len(matches) >= max_matches:
+            if max_matches is not None and len(matches) >= max_matches:
                 exploration["limits_reached"] = sorted(set(exploration["limits_reached"] + ["max_matches"]))
                 break
     return {
