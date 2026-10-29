@@ -8,7 +8,7 @@ from app.db.database import get_connection
 from app.models.conversation_repository import get_conversation
 from app.models.project_repository import get_project
 from app.models.repository import get_model
-from app.models.task_event_repository import create_task_event
+from app.models.task_event_repository import create_task_event, _redact
 from app.models.task_repository import create_task, get_task, update_task
 from app.providers.factory import resolve_model_provider
 from app.services.agent_library import get_project_agent
@@ -40,6 +40,26 @@ def _emit(experiment: dict[str, Any], event_name: str, message: str, status: str
         message=message,
         status=status,
         metadata={"experiment_id": experiment["id"], **(metadata or {})},
+    )
+
+
+def _insert_experiment_event(
+    connection, experiment: dict[str, Any], event_name: str, message: str,
+    status: str, metadata: dict[str, Any] | None = None,
+) -> None:
+    safe_metadata = _redact({"experiment_id": experiment["id"], **(metadata or {})})
+    encoded = json.dumps(safe_metadata, ensure_ascii=False, separators=(",", ":"))
+    if len(encoded) > 4000:
+        encoded = json.dumps({"truncated": True, "preview": encoded[:3960]})
+    connection.execute(
+        """INSERT INTO task_events (
+            task_id, conversation_id, project_id, tool_call_id, action_id,
+            timestamp, level, component, event_name, message, duration_ms, status, metadata
+        ) VALUES (?, ?, ?, NULL, NULL, ?, 'info', 'hie', ?, ?, NULL, ?, ?)""",
+        (
+            experiment["task_id"], experiment["conversation_id"], experiment["project_id"],
+            _now(), event_name[:120], message[:500], status[:80], encoded,
+        ),
     )
 
 
