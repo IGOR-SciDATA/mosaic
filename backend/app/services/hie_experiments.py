@@ -224,6 +224,7 @@ def queue_experiment(experiment_id: int) -> dict[str, Any]:
     if experiment["status"] != "draft":
         raise HieExperimentError(f"Experiment cannot run from status {experiment['status']}")
     with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         running = connection.execute(
             "SELECT id FROM hie_experiments WHERE status IN ('queued', 'running') LIMIT 1"
         ).fetchone()
