@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db.database import init_db
+from app.db.database import get_connection, init_db
 from app.main import app
 from app.api.tasks import _inherit_conversation_hie_mode
 from app.models.conversation_repository import create_conversation
@@ -124,3 +124,30 @@ def test_experiment_capability_is_unavailable_without_project_profile(client):
     assert "project_scoped_agent_profile_required" in unavailable
     assert {"isolated_baseline_candidate_probes", "version_bound_approval", "versioned_promotion", "rollback"} <= unavailable
     assert set(status.json()["supported_capabilities"]).isdisjoint(unavailable)
+
+
+def test_task_without_project_keeps_normal_scope_and_hie_experiment_unavailable(client):
+    model = create_model("Standalone Task Model", "ollama", "qwen3:3b")
+    conversation = create_conversation("Standalone Task conversation", model.id)
+    task = create_task(type="generic", mode="agent", conversation_id=conversation.id, plan={"goal": "standalone"})
+    status = client.get(f"/hie/status?task_id={task.id}")
+    assert status.status_code == 200
+    assert status.json()["enabled"] is False
+    assert status.json()["experiment_execution_available"] is False
+    assert "project_scoped_agent_profile_required" in status.json()["unavailable_capabilities"]
+
+
+def test_explicit_task_opt_out_overrides_conversation_opt_in(client):
+    conversation = _conversation()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    task = create_task(type="generic", mode="agent", conversation_id=conversation.id, plan={"goal": "explicit opt-out"})
+    assert client.put("/hie/status", json={"task_id": task.id, "enabled": False}).status_code == 200
+
+    _inherit_conversation_hie_mode(task)
+
+    status = client.get(f"/hie/status?task_id={task.id}")
+    assert status.status_code == 200
+    assert status.json()["enabled"] is False
+    with get_connection() as connection:
+        row = connection.execute("SELECT enabled FROM hie_sessions WHERE task_id = ?", (task.id,)).fetchone()
+    assert row["enabled"] == 0
