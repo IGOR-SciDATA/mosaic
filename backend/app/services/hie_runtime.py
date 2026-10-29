@@ -34,6 +34,17 @@ class HIEExecutionBudget:
     tool_calls: int = 0
     retries: int = 0
 
+    def __post_init__(self) -> None:
+        for name in (
+            "max_provider_calls", "max_tool_calls", "max_retries",
+            "max_input_chars_per_call", "max_output_chars_per_call",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
+        if isinstance(self.wall_seconds, bool) or not isinstance(self.wall_seconds, (int, float)) or self.wall_seconds <= 0:
+            raise ValueError("wall_seconds must be a positive number")
+
     def _remaining(self) -> float:
         remaining = self.wall_seconds - (time.monotonic() - self.started_at)
         if remaining <= 0:
