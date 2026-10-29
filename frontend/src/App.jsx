@@ -906,6 +906,9 @@ function HieExperimentModal({scope,onClose}) {
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
+  const [approved,setApproved]=useState(false);
+  const [promotion,setPromotion]=useState(null);
+  const [activeProfile,setActiveProfile]=useState(null);
 
   const scopeKey=scope?.taskId ? "task_id="+scope.taskId : "conversation_id="+scope?.conversationId;
   useEffect(()=>{
@@ -962,12 +965,60 @@ function HieExperimentModal({scope,onClose}) {
   }
 
   function openHistory(item){
-    setExperiment(item);setError("");setNotice("");
+    setExperiment(item);setError("");setNotice("");setApproved(false);setPromotion(null);setActiveProfile(null);
+  }
+
+  async function approveCandidate(){
+    if(!experiment||busy)return;
+    const candidateHash=experiment.candidate?.sha256;
+    const baseline=experiment.baseline_snapshot;
+    if(!candidateHash||!baseline?.version||!baseline?.sha256)return;
+    const confirmation=`Aprovar candidato para revisão final?\\n\\nCandidato SHA-256: ${candidateHash}\\nPerfil ativo observado: v${baseline.version}\\nHash ativo: ${baseline.sha256}\\n\\nA aprovação não altera o perfil ativo.`;
+    if(!window.confirm(confirmation))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      await api.hie.approveCandidate(experiment.id,{candidate_sha256:candidateHash,active_version:baseline.version,active_sha256:baseline.sha256});
+      setApproved(true);
+      setActiveProfile({version:baseline.version,sha256:baseline.sha256});
+      setNotice("Aprovação registrada para este hash e esta versão ativa. A promoção ainda exige uma confirmação separada.");
+    }catch(err){setError(err.message);setApproved(false);}
+    finally{setBusy(false);}
+  }
+
+  async function promoteApprovedCandidate(){
+    if(!experiment||!approved||busy)return;
+    const baseline=activeProfile||experiment.baseline_snapshot;
+    const candidateHash=experiment.candidate?.sha256;
+    const confirmation=`PROMOVER candidato para o perfil ativo?\\n\\nCandidato SHA-256: ${candidateHash}\\nVersão ativa esperada: v${baseline.version}\\nHash ativo esperado: ${baseline.sha256}\\n\\nIsso altera as instruções usadas em execuções futuras. O perfil anterior será preservado para rollback.`;
+    if(!window.confirm(confirmation))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const result=await api.hie.promoteCandidate(experiment.id,{candidate_sha256:candidateHash,active_version:baseline.version,active_sha256:baseline.sha256});
+      setPromotion(result);
+      setActiveProfile(result.profile);
+      setApproved(false);
+      setNotice(`Candidato promovido como versão v${result.profile.version}. O conteúdo anterior foi preservado para rollback.`);
+    }catch(err){setError(err.message);setApproved(false);}
+    finally{setBusy(false);}
+  }
+
+  async function rollbackPromotedCandidate(){
+    if(!promotion||!activeProfile||busy)return;
+    const confirmation=`Restaurar o conteúdo anterior à promoção #${promotion.promotion_id}?\\n\\nVersão ativa esperada: v${activeProfile.version}\\nHash ativo esperado: ${activeProfile.sha256}\\n\\nO rollback criará uma nova versão; não apagará o histórico.`;
+    if(!window.confirm(confirmation))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const result=await api.hie.rollbackPromotion(promotion.promotion_id,{expected_active_version:activeProfile.version,expected_active_sha256:activeProfile.sha256});
+      setActiveProfile(result.profile);
+      setPromotion(null);
+      setNotice(`Rollback concluído. Conteúdo anterior restaurado na nova versão v${result.profile.version}.`);
+    }catch(err){setError(err.message);}
+    finally{setBusy(false);}
   }
 
   return <Modal title="HIE Experimental · Experimentos" onClose={onClose}>
     <div className="hie-experiment-modal">
-      <p className="modal-hint">O HIE compara instruções declarativas em probes isolados, sem ferramentas nem ações externas. Use um perfil existente do projeto. Promoção e rollback ainda não estão disponíveis.</p>
+      <p className="modal-hint">O HIE compara instruções declarativas em probes isolados, sem ferramentas nem ações externas. Aprovação, promoção e rollback são ações explícitas, vinculadas a hashes e versões.</p>
       {history.length>0&&<div className="hie-history"><strong>Experimentos anteriores</strong>{history.slice(0,5).map(item=><button type="button" key={item.id} className={experiment?.id===item.id?"active":""} onClick={()=>openHistory(item)}>#{item.id} · {item.profile_slug} · {item.status}</button>)}</div>}
       <form className="modal-form" onSubmit={createAndRun}>
         <label>Slug do perfil <input value={profileSlug} onChange={event=>setProfileSlug(event.target.value.toLowerCase())} required maxLength={80} pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="ex.: qa-agent"/></label>
