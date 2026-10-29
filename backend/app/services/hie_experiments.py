@@ -49,6 +49,9 @@ def _row_to_experiment(row) -> dict[str, Any]:
         "conversation_id": row["conversation_id"],
         "project_id": row["project_id"],
         "profile_slug": row["profile_slug"],
+        "provider": row["provider"],
+        "model_name": row["model_name"],
+        "budget": json.loads(row["budget_json"]),
         "status": row["status"],
         "baseline_snapshot": json.loads(row["baseline_snapshot"]),
         "candidate": json.loads(row["candidate"]),
@@ -132,6 +135,9 @@ def create_experiment(
     project = get_project(project_id)
     if project is None:
         raise HieExperimentError("Project not found")
+    model = get_model(conversation.model_id)
+    if model is None or not model.enabled:
+        raise HieExperimentError("The conversation model is missing or disabled")
     baseline = get_project_agent(project_id, profile_slug)
     if baseline is None:
         raise HieExperimentError("Agent profile not found in this project")
@@ -179,11 +185,20 @@ def create_experiment(
         )
         cursor = connection.execute(
             """INSERT INTO hie_experiments (
-                task_id, source_task_id, conversation_id, project_id, profile_slug, status,
+                task_id, source_task_id, conversation_id, project_id, profile_slug, provider, model_name, budget_json, status,
                 baseline_snapshot, candidate, fixtures, candidate_diff, results, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, NULL, ?, ?)""",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, NULL, ?, ?)""",
             (
                 experiment_task.id, task_id, resolved_conversation_id, project_id, profile_slug,
+                model.provider, model.model_name,
+                json.dumps({
+                    "max_fixtures": MAX_FIXTURES,
+                    "max_provider_calls": MAX_FIXTURES * 2,
+                    "max_output_chars_per_call": MAX_OUTPUT_CHARS,
+                    "max_candidate_chars": 12000,
+                    "fixture_count": len(normalized_fixtures),
+                    "estimated_provider_calls": len(normalized_fixtures) * 2,
+                }),
                 json.dumps(baseline, ensure_ascii=False),
                 json.dumps(candidate, ensure_ascii=False),
                 json.dumps(normalized_fixtures, ensure_ascii=False),
@@ -269,6 +284,8 @@ def run_experiment(experiment_id: int) -> None:
             raise HieExperimentError("Active profile changed since baseline capture; create a new experiment")
         conversation = get_conversation(experiment["conversation_id"])
         model = get_model(conversation.model_id) if conversation else None
+        if model is None or model.provider != experiment["provider"] or model.model_name != experiment["model_name"]:
+            raise HieExperimentError("Conversation model changed after experiment creation; create a new experiment")
         provider = resolve_model_provider(model)
         baseline_content = baseline["instructions"]
         candidate_content = candidate["content"]
