@@ -3309,3 +3309,44 @@ body { overflow: hidden; }
 @media (min-width: 901px) {
   .context-overlay { display: none; }
 }
+
+
+/* HIE opt-in controls: clearly experimental and subordinate to the chat/task flow. */
+.hie-toggle {
+  border: 1px solid var(--border, rgba(255,255,255,.16));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary, inherit);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 7px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hie-toggle:hover:not(:disabled) { border-color: var(--accent, #c65b52); color: var(--text-primary, inherit); }
+.hie-toggle.active {
+  border-color: var(--accent, #c65b52);
+  background: color-mix(in srgb, var(--accent, #c65b52) 13%, transparent);
+  color: var(--text-primary, inherit);
+}
+.hie-toggle:disabled { opacity: .55; cursor: not-allowed; }
+.hie-mode-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 16px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border, rgba(255,255,255,.14));
+  border-radius: 12px;
+  background: var(--surface, rgba(255,255,255,.025));
+}
+.hie-mode-card > div { display: grid; gap: 4px; min-width: 0; }
+.hie-mode-card strong { font-size: 13px; }
+.hie-mode-card small { color: var(--text-secondary, #999); font-size: 11px; line-height: 1.5; }
+@media (max-width: 560px) {
+  .hie-mode-card { align-items: flex-start; }
+  .hie-mode-card .hie-toggle { flex-shrink: 0; }
+  .composer-tools .hie-toggle { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+}
