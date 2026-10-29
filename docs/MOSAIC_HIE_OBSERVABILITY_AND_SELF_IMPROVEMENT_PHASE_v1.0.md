@@ -193,3 +193,86 @@ Se algum critério não puder ser atendido por limitação ambiental ou contrato
 - [Arquitetura HIE v1.0](MOSAIC_HARNESS_IMPROVEMENT_ENGINE_ARCHITECTURE_v1.0.md)
 - [Prompt HIE anterior](MOSAIC_HARNESS_IMPROVEMENT_ENGINE_IMPLEMENTATION_PROMPT_v1.0.md)
 - PRs HIE em avaliação: #102–#111. Verificar estado atual antes de agir.
+
+
+---
+
+# Aditivo v1.1 — Integração do HIE com a fase de experiência do frontend
+
+**Data:** 2026-10-29  
+**Status:** aditivo normativo para auditoria e implementação; não é evidência de conclusão.
+
+## 10. Estado conhecido da cadeia HIE
+
+A cadeia incremental documentada pelos PRs #101–#116 estabelece proposta, validação declarativa, orquestração sequencial, fixtures descartáveis, budgets, evidências e integração limitada com provider. O PR #119 adiciona um fluxo de experimentos persistidos, opt-in, probes baseline/candidato, aprovação humana, promoção/rollback e UI, mas permanece Draft e sua descrição indica validação automatizada pendente.
+
+A descrição de um PR não substitui inspeção do código, status checks e testes executados. Antes de considerar esta fase pronta, auditar os PRs e a implementação atualmente presente em `main` e #119; registrar cada requisito como `comprovado`, `parcial`, `falhou` ou `não verificado`.
+
+## 11. Requisitos integrados do produto/frontend
+
+### 11.1 Conversas e Tasks sem projeto obrigatório
+
+- Uma conversa deve poder começar sem projeto.
+- O chat comum é o ponto principal para o usuário pedir trabalho. O Core decide, pelos contratos existentes, se a solicitação segue como conversa ou inicia uma Task; não exigir uma tela separada para criação de Task.
+- Projeto é uma associação opcional e continua disponível.
+- Conversas e Tasks devem ser persistidas e retomáveis pelo backend, sem histórico falso somente no frontend.
+- Conversas/Tasks avulsas não podem herdar contexto de projeto por acidente.
+- Se o backend exigir projeto para criar conversa ou Task, documentar o bloqueio e propor a menor mudança; não simular suporte.
+
+### 11.2 Seletor de modelo no chat
+
+- Exibir o modelo ativo próximo ao compositor.
+- Carregar opções do backend e persistir a seleção no escopo correto da conversa, reutilizando o contrato existente.
+- A troca aplica-se às próximas chamadas. Não migrar silenciosamente uma geração em andamento, não fazer fallback silencioso e não implementar roteamento automático nesta fase.
+- Provider nunca é chamado diretamente pelo navegador.
+
+### 11.3 Navegação e gestão
+
+- Remover do layout principal o menu fixo dentro do chat que apresenta Contexto/Memória/Arquivos como módulos permanentes.
+- Manter um inspetor opcional e recolhível chamado **Etapas e contexto**, para transparência operacional.
+- Mover gestão/edição de agentes, Skills e navegação/visualização geral de arquivos para uma tela própria, acessível pelo menu lateral (nome provisório: **Espaço de trabalho**).
+- Não remover anexos/upload necessários ao envio de uma mensagem sem distingui-los da navegação e gestão geral de arquivos.
+- Mostrar apenas operações realmente suportadas pelas APIs e permissões existentes.
+
+### 11.4 Etapas e contexto enviado ao LLM
+
+- Mostrar eventos reais: solicitação, Task, fontes, seleção de contexto, chamada ao modelo, ferramentas, verificações e artefatos, quando instrumentados.
+- Distinguir fonte encontrada, conteúdo lido, selecionado, enviado, parcial/truncado e omitido.
+- Identificar proveniência e ordem de blocos quando disponíveis.
+- Indicar explicitamente se o conteúdo é o payload exato ou uma prévia aproximada.
+- Nunca apresentar evento reconstruído como execução comprovada; não expor cadeia de pensamento privada, credenciais ou instruções privilegiadas.
+- Se a instrumentação não existir, indicar a lacuna e propor a menor alteração backend separadamente.
+
+## 12. Lacunas de implementação HIE a validar prioritariamente
+
+1. **Budgets no caminho real de probe:** verificar se o caminho de experimentos usa o enforcement do provider/tool já implementado. Truncar a saída depois da chamada não limita custo nem duração. Testar bloqueio antes da chamada, limites de entrada/saída, deadline e comportamento de chamadas síncronas em voo.
+2. **Contrato de capacidades:** conferir que `supported_capabilities`, `unavailable_capabilities` e os testes representam o comportamento real, sem declarar promoção/rollback como suportados quando não são.
+3. **Recuperação de estados:** definir e testar o comportamento em reinício/falha com experimento `queued` ou `running`; reutilizar recuperação de Tasks existente antes de propor infraestrutura nova.
+4. **Atomicidade e concorrência:** testar aprovação obsoleta, alteração do perfil entre aprovação e promoção, duas promoções concorrentes e rollback após edição posterior.
+5. **Opt-in:** desligado por padrão; configuração explícita da Task prevalece; se ausente, pode herdar da conversa; nenhuma herança pode ativar HIE implicitamente.
+6. **Persistência/evidências:** validar orçamento agregado, hashes, paths/symlinks, temporários, falhas parciais entre Artifact e registro.
+7. **Escopo de projeto:** a implementação atual pode exigir projeto com perfil de agente para executar HIE. Conversa/Task avulsa continua funcional; somente a ação HIE inelegível deve ser desabilitada com explicação.
+8. **Alvo promovível:** nesta fase, promoção permanece limitada a instruções de perfil de projeto. Não ampliar para Skills ou perfil global sem decisão explícita.
+
+## 13. Ordem obrigatória de execução
+
+1. Auditoria sem edição de código; revisar PRs #101–#116 e #119, arquivos, commits, checks e testes.
+2. Entregar matriz requisito → evidência → implementação → teste → lacuna/risco.
+3. Corrigir primeiro integridade do budget, consistência do contrato de capacidades, lifecycle/recuperação e concorrência.
+4. Implementar a experiência de frontend e gestão conforme contratos reais.
+5. Instrumentar contexto apenas com aprovação explícita se exigir alteração de backend/segurança/persistência.
+6. Executar testes focados do HIE, suíte backend, testes/build frontend e CI disponível.
+7. Abrir/atualizar PR em branch dedicada; não fazer merge automático.
+8. Reportar resultados reais, limites restantes e requisitos bloqueados.
+
+## 14. Definição de pronto atualizada
+
+A fase só pode ser declarada concluída quando:
+- conversas e Tasks avulsas funcionam independentemente de projeto, ou a limitação backend estiver explicitamente bloqueada e aprovada;
+- seleção explícita de modelo persiste e vale para próximas chamadas;
+- chat não contém menu fixo de Contexto/Memória/Arquivos; gestão de agentes/Skills/arquivos tem tela própria;
+- observabilidade distingue o que foi encontrado/lido/selecionado/enviado e payload exato versus aproximado;
+- HIE continua opt-in, sequencial, isolado e sem promoção automática;
+- budget está aplicado no caminho real de provider, contrato de capacidades é consistente, falhas/concorrência são testadas;
+- CI/testes/build são citados com evidência verificável;
+- nenhum componente do Core é duplicado e nenhuma capacidade não implementada é simulada.
