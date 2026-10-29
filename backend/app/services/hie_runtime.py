@@ -86,7 +86,8 @@ class HIEExecutionBudget:
                 bounded[key] = token_ceiling
             else:
                 try:
-                    bounded[key] = min(int(configured), token_ceiling)
+                    configured_limit = int(configured)
+                    bounded[key] = token_ceiling if configured_limit <= 0 else min(configured_limit, token_ceiling)
                 except (TypeError, ValueError):
                     raise HIERuntimeLimitExceeded(f"Invalid provider output limit: {key}") from None
         return bounded
