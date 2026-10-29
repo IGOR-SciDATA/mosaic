@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.db.database import init_db
 from app.main import app
+from app.api.tasks import _inherit_conversation_hie_mode
 from app.models.conversation_repository import create_conversation
 from app.models.repository import create_model
 from app.models.task_event_repository import list_task_events
@@ -48,6 +49,28 @@ def test_conversation_hie_is_disabled_by_default_and_persisted(client):
         "promotion",
         "rollback",
     ]
+
+
+def test_conversation_opt_in_is_inherited_by_new_task(client):
+    conversation = _conversation()
+    enabled = client.put("/hie/status", json={
+        "conversation_id": conversation.id, "enabled": True,
+    })
+    assert enabled.status_code == 200
+    task = create_task(
+        type="generic", mode="agent", conversation_id=conversation.id,
+        plan={"goal": "Inherited HIE mode"},
+    )
+
+    _inherit_conversation_hie_mode(task)
+
+    status = client.get(f"/hie/status?task_id={task.id}")
+    assert status.status_code == 200
+    assert status.json()["enabled"] is True
+    events = list_task_events(task.id)
+    assert events[-1].event_name == "hie.mode_inherited"
+    assert events[-1].metadata["source"] == "conversation"
+
 
 
 def test_task_hie_activation_is_linked_to_task_events(client):
