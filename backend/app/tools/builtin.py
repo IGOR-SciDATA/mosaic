@@ -1101,6 +1101,7 @@ def _explore_workspace(
         try:
             size = candidate.stat().st_size
             if size > max_file_bytes:
+                limits.append("max_file_bytes")
                 ignored.append({"path": relative, "reason": "file_size_limit"})
                 continue
             if total_bytes + size > max_total_bytes:
@@ -1110,6 +1111,7 @@ def _explore_workspace(
             with candidate.open("rb") as handle:
                 raw = handle.read(max_file_bytes + 1)
             if len(raw) > max_file_bytes:
+                limits.append("max_file_bytes")
                 ignored.append({"path": relative, "reason": "file_size_limit"})
                 continue
             if b"\x00" in raw:
