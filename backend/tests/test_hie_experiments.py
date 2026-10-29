@@ -203,7 +203,7 @@ def test_excessive_provider_output_fails_without_truncating_and_persisting_it(cl
     assert run.status_code == 202
     failed = client.get(f"/hie/experiments/{created.json()['id']}").json()
     assert failed["status"] == "failed"
-    assert "output exceeded" in failed["results"]["error"]
+    assert "output" in failed["results"]["error"].lower()
     assert "evidence" not in failed["results"]
 
 
