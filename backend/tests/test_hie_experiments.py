@@ -104,6 +104,51 @@ def test_experiment_runs_isolated_baseline_candidate_and_persists_evidence(clien
     assert "hie.experiment_completed" in event_names
 
 
+def test_experiment_failure_preserves_completed_fixture_evidence(client, monkeypatch):
+    from app.services import hie_experiments
+
+    class FailsOnSecondCall:
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, messages, model_name, configuration):
+            self.calls += 1
+            if self.calls == 1:
+                return "first bounded result"
+            raise RuntimeError("simulated provider failure")
+
+        def stream(self, messages, model_name, configuration):
+            yield self.generate(messages, model_name, configuration)
+
+    provider = FailsOnSecondCall()
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: provider)
+    _, conversation = _scope()
+    assert client.put("/hie/status", json={
+        "conversation_id": conversation.id, "enabled": True,
+    }).status_code == 200
+    created = client.post("/hie/experiments", json={
+        "conversation_id": conversation.id,
+        "profile_slug": "qa-agent",
+        "candidate_content": "Include bounded result.",
+        "fixtures": [
+            {"prompt": "First.", "expected_contains": ["bounded"]},
+            {"prompt": "Second.", "expected_contains": ["bounded"]},
+        ],
+    })
+    assert created.status_code == 201, created.text
+    response = client.post(f"/hie/experiments/{created.json()['id']}/run")
+    assert response.status_code == 202
+
+    result = client.get(f"/hie/experiments/{created.json()['id']}").json()
+    assert result["status"] == "failed"
+    assert result["results"]["automatic_promotion"] is False
+    assert result["results"]["recovery_requires_user"] is True
+    assert result["results"]["provider_calls"] == 2
+    assert result["results"]["evidence"] == []
+    # The first fixture is not complete (baseline succeeded; candidate failed),
+    # therefore no fixture-level evidence record should be treated as complete.
+
+
 def test_experiment_requires_explicit_hie_opt_in(client):
     project, conversation = _scope()
     response = client.post("/hie/experiments", json={
