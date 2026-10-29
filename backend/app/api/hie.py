@@ -12,6 +12,7 @@ from app.models.conversation_repository import get_conversation
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task
 from app.models.project_repository import get_project
+from app.models.repository import get_model
 from app.services.agent_library import list_project_agents
 from app.services.hie_lifecycle import (
     HieLifecycleError, approve_candidate, promote_candidate, rollback_promotion,
@@ -50,29 +51,46 @@ def _read_session(scope: str, scope_id: int) -> bool:
     return bool(row["enabled"]) if row else False
 
 
-def _experiment_scope_available(scope: str, scope_id: int) -> bool:
+def _experiment_scope_issue(scope: str, scope_id: int) -> str | None:
     if scope == "task":
         task = get_task(scope_id)
         if task is None:
-            return False
+            return "scope_not_found"
         conversation = get_conversation(task.conversation_id) if task.conversation_id is not None else None
         project_id = (conversation.project_id if conversation else None) or task.project_id
     else:
         conversation = get_conversation(scope_id)
-        project_id = conversation.project_id if conversation else None
+        if conversation is None:
+            return "scope_not_found"
+        project_id = conversation.project_id
     if project_id is None or get_project(project_id) is None:
-        return False
+        return "project_scoped_agent_profile_required"
     try:
-        return bool(list_project_agents(project_id))
+        profiles = list_project_agents(project_id)
     except ValueError:
-        return False
+        return "project_scoped_agent_profile_required"
+    if not profiles:
+        return "project_scoped_agent_profile_required"
+    if conversation is None:
+        return "supported_provider_required"
+    model = get_model(conversation.model_id)
+    if model is None or not model.enabled:
+        return "enabled_model_required"
+    if model.provider.casefold() not in {"ollama", "remote_inference"}:
+        return "provider_budget_controls_required"
+    return None
+
+
+def _experiment_scope_available(scope: str, scope_id: int) -> bool:
+    return _experiment_scope_issue(scope, scope_id) is None
 
 
 def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
     experiment_available = _experiment_scope_available(scope, scope_id)
     supported = ["persisted_opt_in"]
+    issue = _experiment_scope_issue(scope, scope_id)
     unavailable = [
-        "project_scoped_agent_profile_required",
+        issue or "project_scoped_agent_profile_required",
         "isolated_baseline_candidate_probes",
         "deterministic_fixture_evaluation",
         "candidate_diff",
@@ -97,6 +115,8 @@ def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
     message = (
         "Modo experimental habilitado. Experimentos isolados estão disponíveis; aprovação, promoção e rollback exigem confirmação explícita."
         if enabled and experiment_available else
+        "O HIE está habilitado, mas o provider/modelo selecionado não oferece os controles de orçamento exigidos para experimentos."
+        if enabled and issue in {"provider_budget_controls_required", "supported_provider_required", "enabled_model_required"} else
         "HIE está habilitado, mas é necessário um projeto com pelo menos um perfil de agente para criar experimentos."
         if enabled else
         "HIE está desativado neste escopo. A ativação não executa nem promove candidatos."
