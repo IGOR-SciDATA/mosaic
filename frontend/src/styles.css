@@ -3431,3 +3431,20 @@ body { overflow: hidden; }
 .standalone-conversations {
   margin-bottom: 14px;
 }
+
+
+.observed-timeline ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+}
+.observed-timeline li {
+  padding-left: 4px;
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.observed-timeline li strong { font-size: .82rem; }
+.observed-timeline li span,
+.observed-timeline li small { color: var(--muted, #9aa0a6); font-size: .78rem; }
