@@ -78,6 +78,7 @@ def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
         "candidate_diff",
         "candidate_hash",
         "explicit_rejection",
+        "version_bound_approval",
         "versioned_promotion",
         "rollback",
     ]
