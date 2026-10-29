@@ -23,6 +23,7 @@ from app.models.tool_call_repository import get_tool_call, list_tool_calls, upda
 from app.services.agent_decision import create_provider_decider
 from app.services.task_coordinator import run_coordinated_task, validate_coordinator_plan
 from app.services.agent_library import parse_agent_invocation
+from app.db.database import get_connection
 from app.models.task_repository import (
     create_task,
     delete_task,
@@ -64,6 +65,38 @@ class TaskUpdate(BaseModel):
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _inherit_conversation_hie_mode(task: Task) -> None:
+    """Inherit conversation opt-in into a Task only when it has no explicit Task setting."""
+    if task.id is None or task.conversation_id is None:
+        return
+    with get_connection() as connection:
+        task_setting = connection.execute(
+            "SELECT enabled FROM hie_sessions WHERE task_id = ?", (task.id,)
+        ).fetchone()
+        conversation_setting = connection.execute(
+            "SELECT enabled FROM hie_sessions WHERE conversation_id = ?", (task.conversation_id,)
+        ).fetchone()
+        if task_setting is not None or conversation_setting is None or not conversation_setting["enabled"]:
+            return
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        connection.execute(
+            """INSERT INTO hie_sessions (task_id, enabled, created_at, updated_at)
+               VALUES (?, 1, ?, ?)""",
+            (task.id, now, now),
+        )
+        connection.commit()
+    create_task_event(
+        task_id=task.id,
+        conversation_id=task.conversation_id,
+        project_id=task.project_id,
+        component="hie",
+        event_name="hie.mode_inherited",
+        message="Task inherited the conversation's explicit HIE experimental opt-in.",
+        status="enabled",
+        metadata={"scope": "task", "source": "conversation", "experiment_execution_available": False},
+    )
 
 
 @router.post("", response_model=Task)
@@ -422,6 +455,7 @@ def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTa
             project_id=conversation.project_id,
             plan=task_plan,
         )
+        _inherit_conversation_hie_mode(task)
         claimed = update_task(task.id, status="executing")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -459,6 +493,7 @@ def run_task_endpoint(task_id: int, background_tasks: BackgroundTasks) -> Task:
         last_user = next((message for message in reversed(messages) if message.role == "user"), None)
         if last_user is None or last_user.content != goal:
             create_message(conversation.id, "user", goal)
+    _inherit_conversation_hie_mode(task)
     try:
         claimed = update_task(task_id, status="executing")
     except ValueError as exc:
