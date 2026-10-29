@@ -1078,7 +1078,8 @@ export default function App(){
   const [projects,setProjects]=useState([]),[conversations,setConversations]=useState([]),[models,setModels]=useState([]),[memories,setMemories]=useState([]),[projectId,setProjectId]=useState(null),[conversationId,setConversationId]=useState(null),[messages,setMessages]=useState([]),[homeActive,setHomeActive]=useState(false);
   const [mobile,setMobile]=useState(false),[sidebarCollapsed,setSidebarCollapsed]=useState(false),[contextVisible,setContextVisible]=useState(()=>typeof window==="undefined" ? true : window.matchMedia("(min-width: 901px)").matches),[draft,setDraft]=useState(""),[contextTab,setContextTab]=useState("Contexto"),[projectTab,setProjectTab]=useState("Conversa"),[loading,setLoading]=useState(true),[messagesLoading,setMessagesLoading]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(""),[modal,setModal]=useState(null),[saving,setSaving]=useState(false),[modelStatus,setModelStatus]=useState({provider:"ollama",online:false,running_models:[]});
   const [remoteConfig,setRemoteConfig]=useState({url:"",configured:false});
-  const [remoteStatus,setRemoteStatus]=useState(null);\n  const [taskTraces,setTaskTraces]=useState({});
+  const [remoteStatus,setRemoteStatus]=useState(null);
+  const [taskTraces,setTaskTraces]=useState({});
   const [hieStatus,setHieStatus]=useState(null);
   const [hieBusy,setHieBusy]=useState(false);
   const [theme,setTheme]=useState(()=>{try{return localStorage.getItem("mosaic.theme")==="light"?"light":"dark";}catch{return "dark";}});
