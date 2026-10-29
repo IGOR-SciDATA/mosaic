@@ -572,27 +572,75 @@ def run_experiment(experiment_id: int) -> None:
             connection.commit()
     except Exception as exc:
         safe_error = f"{type(exc).__name__}: {str(exc)}"[:500]
-        with get_connection() as connection:
-            connection.execute(
-                "UPDATE hie_experiments SET status = 'failed', results = ?, updated_at = ? WHERE id = ? AND status = 'running'",
-                (json.dumps({"error": safe_error, "automatic_promotion": False}), _now(), experiment_id),
-            )
-            connection.commit()
         experiment = get_experiment(experiment_id)
-        task = get_task(experiment["task_id"])
-        if task is not None and task.status in {"pending", "executing"}:
-            try:
-                if task.status == "pending":
-                    update_task(task.id, status="failed", result={"hie_experiment_id": experiment_id, "error": safe_error})
-                else:
-                    update_task(task.id, status="failed", result={"hie_experiment_id": experiment_id, "error": safe_error})
-            except ValueError:
-                pass
-        _emit(experiment, "hie.experiment_failed", "HIE experiment failed; active profile was not modified.", "failed", {
-            "error_type": type(exc).__name__,
-            "candidate_sha256": experiment["candidate"]["sha256"],
-            "automatic_promotion": False,
-        })
+        if experiment is not None:
+            with get_connection() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    "UPDATE hie_experiments SET status = 'failed', results = ?, updated_at = ? WHERE id = ? AND status = 'running'",
+                    (json.dumps({
+                        **(experiment.get("results") or {}),
+                        "error": safe_error,
+                        "error_type": type(exc).__name__,
+                        "assessment_scope": "submitted_deterministic_fixtures_only",
+                        "automatic_promotion": False,
+                        "automatic_retry": False,
+                        "recovery_requires_user": True,
+                    }, ensure_ascii=False), _now(), experiment_id),
+                )
+                if cursor.rowcount == 1:
+                    task_row = connection.execute(
+                        "SELECT id, conversation_id, project_id, status, result FROM tasks WHERE id = ?",
+                        (experiment["task_id"],),
+                    ).fetchone()
+                    if task_row is not None and task_row["status"] in {"pending", "executing"}:
+                        try:
+                            task_result = json.loads(task_row["result"]) if task_row["result"] else {}
+                        except (TypeError, json.JSONDecodeError):
+                            task_result = {}
+                        if not isinstance(task_result, dict):
+                            task_result = {}
+                        task_result.update({
+                            "hie_experiment_id": experiment_id,
+                            "error": safe_error,
+                            "error_type": type(exc).__name__,
+                            "automatic_retry": False,
+                            "recovery_requires_user": True,
+                        })
+                        task_cursor = connection.execute(
+                            "UPDATE tasks SET status = 'failed', result = ?, updated_at = ? WHERE id = ? AND status = ?",
+                            (json.dumps(task_result, ensure_ascii=False), _now(), experiment["task_id"], task_row["status"]),
+                        )
+                        if task_cursor.rowcount != 1:
+                            raise HieExperimentError("Experiment Task changed during failure finalization")
+                        create_task_event(
+                            task_id=experiment["task_id"],
+                            conversation_id=task_row["conversation_id"],
+                            project_id=task_row["project_id"],
+                            component="task",
+                            event_name="task.status_changed",
+                            message=f"Task status changed from {task_row['status']} to failed after HIE experiment failure",
+                            status="failed",
+                            level="warning",
+                            metadata={"previous_status": task_row["status"], "status": "failed", "hie_experiment_id": experiment_id},
+                            connection=connection,
+                        )
+                    _emit(
+                        experiment,
+                        "hie.experiment_failed",
+                        "HIE experiment failed; active profile was not modified and no automatic retry or promotion occurred.",
+                        "failed",
+                        {
+                            "error_type": type(exc).__name__,
+                            "candidate_sha256": experiment["candidate"]["sha256"],
+                            "automatic_promotion": False,
+                            "automatic_retry": False,
+                            "recovery_requires_user": True,
+                            "preserved_partial_evidence": bool((experiment.get("results") or {}).get("evidence")),
+                        },
+                        connection=connection,
+                    )
+                    connection.commit()
 
 
 def reject_experiment(experiment_id: int) -> dict[str, Any]:
