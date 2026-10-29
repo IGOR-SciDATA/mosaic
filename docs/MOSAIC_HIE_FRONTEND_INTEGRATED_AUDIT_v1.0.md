@@ -75,6 +75,6 @@ A rota `backend/app/api/hie.py` não foi encontrada na `main` consultada; existe
 ## Referências de CI
 
 - CI histórico com falha na #119: https://github.com/IGOR-SciDATA/mosaic/actions/runs/40918780150
-- CI integrado no commit `4929c34c4c5ebc8d96a38298f4459eca2aaccf5d`: https://github.com/IGOR-SciDATA/mosaic/actions/runs/40932800057
+- CI integrado no head `43bf048e73d24ca9a9bc384208f11256c94c162d`: https://github.com/IGOR-SciDATA/mosaic/actions/runs/40933111465
 - Resultado observado: `frontend-build` passou; `backend-tests` passou com 331 testes aprovados e 1 aviso. O job frontend instalou Vite 7.3.7 e reportou 0 vulnerabilidades npm.
-- Este run valida o commit citado; mudanças de código posteriores exigem nova execução.
+- O head atual foi validado; não houve alteração de runtime depois da execução.
