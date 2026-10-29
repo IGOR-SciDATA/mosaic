@@ -11,15 +11,18 @@ from app.api.projects import router as projects_router
 from app.api.memories import router as memories_router
 from app.api.models import router as models_router
 from app.api.tasks import router as tasks_router
+from app.api.hie import router as hie_router
 from app.api.tool_calls import router as tool_calls_router
 from app.db.database import init_db
 from app.services.recovery import recover_interrupted_tasks
+from app.services.hie_experiments import recover_interrupted_experiments
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
     recover_interrupted_tasks()
+    recover_interrupted_experiments()
     yield
 
 
@@ -39,6 +42,7 @@ app.include_router(projects_router)
 app.include_router(memories_router)
 app.include_router(models_router)
 app.include_router(tasks_router)
+app.include_router(hie_router)
 app.include_router(tool_calls_router)
 app.include_router(actions_router)
 app.include_router(chat_router)

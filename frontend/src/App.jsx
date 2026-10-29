@@ -40,7 +40,7 @@ const iconType = n => /guitar/i.test(n || "") ? "guitar" : /car/i.test(n || "") 
 const slugify = v => v.toLowerCase().trim().replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"") || "project";
 const groupFor = d => { const n=d ? Math.floor((Date.now()-new Date(d).getTime())/86400000) : 0; return n<1?"Hoje":n<2?"Ontem":"Últimos 7 dias"; };
 
-function Sidebar({ projects, conversations, activeProjectId, activeConversationId, onProject, onConversation, onNewProject, onNewConversation, onDeleteProject, onDeleteConversation, onModelSettings, onHelp, onHome, mobileOpen, onClose }) {
+function Sidebar({ projects, conversations, activeProjectId, activeConversationId, onProject, onConversation, onNewProject, onNewConversation, onDeleteProject, onDeleteConversation, onModelSettings, onHelp, onHome, mobileOpen, onClose, collapsed, onToggleCollapsed }) {
   const [expandedProjectIds, setExpandedProjectIds] = useState([]);
   const conversationsByProject = useMemo(() => {
     const map = new Map();
@@ -52,7 +52,7 @@ function Sidebar({ projects, conversations, activeProjectId, activeConversationI
   }, [conversations]);
 
   return <aside className={mobileOpen ? "sidebar open" : "sidebar"}>
-    <div className="brand-row"><img className="sidebar-brand-symbol" src="/brand/mosaic-icon.svg" alt="Mosaic" /><button className="mobile-close" onClick={onClose}>×</button></div>
+    <div className="brand-row"><img className="sidebar-brand-symbol" src="/brand/mosaic-icon.svg" alt="Mosaic" /><button type="button" className="sidebar-collapse-toggle" onClick={onToggleCollapsed} aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"} aria-expanded={!collapsed} title={collapsed ? "Expandir menu" : "Recolher menu"}><Icon name="menu" size={17}/></button><button className="mobile-close" onClick={onClose} aria-label="Fechar menu">×</button></div>
     <button className="new-chat" onClick={onNewConversation}><Icon name="plus" size={19}/>Nova conversa</button>
     <nav className="side-primary">
       <button onClick={onHome}><Icon name="home"/>Início</button>
@@ -93,13 +93,13 @@ function Sidebar({ projects, conversations, activeProjectId, activeConversationI
   </aside>;
 }
 
-function TopBar({ onMenu, project, conversation, models, onModelChange, modelStatus, onModelSettings, theme, onToggleTheme }) {
+function TopBar({ onMenu, onContextToggle, contextVisible, project, conversation, models, onModelChange, modelStatus, onModelSettings, theme, onToggleTheme }) {
   const selectedModel=models.find(m=>m.id===conversation?.model_id);
   const running=selectedModel?.provider === "ollama" && modelStatus.running_models.includes(selectedModel.model_name);
   const providerMatches=!!selectedModel && modelStatus.provider===selectedModel.provider;
   const statusLabel=!selectedModel ? "Nenhum modelo" : !providerMatches ? "Verificando" : selectedModel.provider==="openai" ? (modelStatus.configured ? "API configurada" : "Chave ausente") : !modelStatus.online ? "Offline" : running ? "Rodando" : "Disponível";
   const statusClass=!selectedModel || !providerMatches || !modelStatus.online ? "offline" : running ? "running" : "online";
-  return <header className="topbar"><button className="mobile-menu" onClick={onMenu}><Icon name="menu"/></button>
+  return <header className="topbar"><button className="mobile-menu" onClick={onMenu} aria-label="Abrir menu lateral"><Icon name="menu"/></button><button type="button" className="context-toggle" onClick={onContextToggle} aria-expanded={contextVisible} aria-label={contextVisible ? "Ocultar painel Etapas e contexto" : "Mostrar painel Etapas e contexto"} title={contextVisible ? "Ocultar etapas e contexto" : "Mostrar etapas e contexto"}><Icon name="layers" size={17}/><span>Etapas e contexto</span></button>
     <div className="top-project"><span className="top-project-icon"><span className="project-icon"><Icon name={iconType(project?.name)} size={18}/></span></span><div><strong>{project?.name || "Mosaic"}</strong><small>Development Project</small></div><Icon name="chevron" size={15}/></div>
     <div className="top-actions"><div className="model-picker"><select className="model-select" value={conversation?.model_id ?? ""} disabled={!conversation || !models.length} onChange={e=>onModelChange(Number(e.target.value))}><option value="">{conversation ? (models.length ? "Selecionar modelo" : "Nenhum modelo") : "Nenhuma conversa"}</option>{models.filter(m=>m.enabled || m.id===conversation?.model_id).map(m=><option key={m.id} value={m.id} disabled={!m.enabled}>{m.name}</option>)}</select><span className="model-provider">{selectedModel?.provider || ""}</span><span className={"model-status "+statusClass}><i/>{statusLabel}</span><button className="model-config-button" onClick={onModelSettings} disabled={!selectedModel}>Configurar</button></div><span className="top-divider"/><button type="button" className="theme-toggle" onClick={onToggleTheme} aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} title={theme === "dark" ? "Tema claro" : "Tema escuro"}><Icon name={theme === "dark" ? "sun" : "moon"} size={17}/><span>{theme === "dark" ? "Claro" : "Escuro"}</span></button></div>
   </header>;
@@ -253,10 +253,9 @@ function MessageList({ messages, streaming }) {
   </div>;
 }
 
-function Composer({ disabled, onSubmit, model, onFiles, onAgent }) {
-  const [text,setText]=useState("");
+function Composer({ disabled, onSubmit, model, onFiles, onAgent, text, setText, hieEnabled, onToggleHie, onOpenHieExperiment, hieExperimentAvailable, hieBusy }) {
   const submit=e=>{e.preventDefault();if(!text.trim()||disabled)return;onSubmit(text.trim());setText("");};
-  return <form className="composer" onSubmit={submit}><textarea disabled={disabled} value={text} onChange={e=>setText(e.target.value)} placeholder={disabled?"Selecione uma conversa para começar...":"Digite sua mensagem..."} rows="2" onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit(e);}}}/><div className="composer-toolbar"><div className="composer-tools"><button type="button" disabled={disabled} onClick={onFiles} aria-label="Explorar arquivos do projeto" title="Arquivos do projeto"><Icon name="plus"/></button><button type="button" disabled={disabled} onClick={onAgent} aria-label="Configurar instruções do agente" title="Instruções e skills do agente"><Icon name="book"/></button></div><div className="composer-submit"><span className="composer-model">{model?.name || "Modelo"}</span><button className="send-button" type="submit" disabled={disabled}><Icon name="send" size={19}/></button></div></div></form>;
+  return <form className="composer" onSubmit={submit}><textarea disabled={disabled} value={text} onChange={e=>setText(e.target.value)} placeholder={disabled?"Selecione uma conversa para começar...":"Digite sua mensagem..."} rows="2" onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit(e);}}}/><div className="composer-toolbar"><div className="composer-tools"><button type="button" className={hieEnabled ? "hie-toggle active" : "hie-toggle"} disabled={disabled || hieBusy} onClick={onToggleHie} aria-pressed={!!hieEnabled} title={hieEnabled ? "Desativar HIE nesta conversa" : "Ativar HIE experimental nesta conversa"}>HIE {hieBusy ? "…" : hieEnabled ? "ON" : "Experimental"}</button>{hieEnabled && hieExperimentAvailable && <button type="button" className="hie-experiment-trigger" disabled={disabled} onClick={onOpenHieExperiment}>Experimento</button>}<button type="button" disabled={disabled} onClick={onFiles} aria-label="Explorar arquivos do projeto" title="Arquivos do projeto"><Icon name="plus"/></button><button type="button" disabled={disabled} onClick={onAgent} aria-label="Configurar instruções do agente" title="Instruções e skills do agente"><Icon name="book"/></button></div><div className="composer-submit"><span className="composer-model">{model?.name || "Modelo"}</span><button className="send-button" type="submit" disabled={disabled}><Icon name="send" size={19}/></button></div></div></form>;
 }
 
 
@@ -271,7 +270,7 @@ const TASK_STATUS_LABELS = {
   cancelled: "Cancelada",
 };
 
-function TaskWorkspace({ conversationId, projectId }) {
+function TaskWorkspace({ conversationId, projectId, onOpenHieExperiment }) {
   const [tasks, setTasks] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [events, setEvents] = useState([]);
@@ -282,6 +281,8 @@ function TaskWorkspace({ conversationId, projectId }) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [hieStatus, setHieStatus] = useState(null);
+  const [hieBusy, setHieBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -395,6 +396,22 @@ function TaskWorkspace({ conversationId, projectId }) {
     return () => { active = false; source.close(); };
   }, [selectedId]);
 
+  useEffect(() => {
+    let active = true;
+    if (!selectedId) { setHieStatus(null); return undefined; }
+    api.hie.status({ taskId: selectedId }).then(status => { if (active) setHieStatus(status); })
+      .catch(err => { if (active) setHieStatus({ available: false, enabled: false, message: err.message }); });
+    return () => { active = false; };
+  }, [selectedId]);
+
+  async function toggleTaskHie() {
+    if (!selectedId || hieBusy || !hieStatus?.available) return;
+    setHieBusy(true); setError("");
+    try { setHieStatus(await api.hie.setEnabled({ task_id: selectedId, enabled: !hieStatus.enabled })); }
+    catch (err) { setError("Não foi possível alterar o HIE desta tarefa: " + err.message); }
+    finally { setHieBusy(false); }
+  }
+
   async function decideCall(callId, decision) {
     if (!selectedId || busy) return;
     setBusy(true);
@@ -485,6 +502,7 @@ function TaskWorkspace({ conversationId, projectId }) {
         {!selected ? <div className="task-empty compact"><Icon name="layers" size={23}/><strong>Selecione uma tarefa</strong><span>O estado, a linha do tempo e o resultado aparecerão aqui.</span></div> : <>
           <div className="task-detail-heading"><div><span className="task-id">TAREFA #{selected.id}</span><h3>{selected.plan?.goal || "Execução do Mosaic"}</h3></div><span className={"task-status status-" + selected.status}>{TASK_STATUS_LABELS[selected.status] || selected.status}</span></div>
           {selected.plan?.agent_library_snapshot && <div className="task-agent-snapshot"><div><Icon name="bot" size={16}/><span><small>Agente congelado nesta Task</small><strong>/{selected.plan.agent_library_snapshot.slug} · v{selected.plan.agent_library_snapshot.version}</strong></span></div><div><Icon name="puzzle" size={16}/><span><small>Skills no snapshot</small><strong>{selected.plan.agent_library_snapshot.skills?.length ? selected.plan.agent_library_snapshot.skills.map(skill => skill.name + " v" + skill.version).join(", ") : "Nenhuma Skill"}</strong></span></div><small>As instruções e Skills deste snapshot permanecem vinculadas à tarefa mesmo que a Biblioteca seja editada depois.</small></div>}
+          <div className="hie-mode-card"><div><strong>HIE Experimental</strong><small>{hieStatus?.message || "Consultando disponibilidade no Core…"}</small></div><button type="button" className={hieStatus?.enabled ? "hie-toggle active" : "hie-toggle"} disabled={hieBusy || !hieStatus?.available} aria-pressed={!!hieStatus?.enabled} onClick={toggleTaskHie}>{hieBusy ? "Salvando…" : hieStatus?.enabled ? "Desativar" : "Ativar modo"}</button>{hieStatus?.enabled && hieStatus?.experiment_execution_available && <button type="button" className="secondary-action" onClick={() => onOpenHieExperiment?.(selectedId)}>Experimento</button>}</div>
           <div className="task-progress-meta"><span>Estado atual</span><strong>{TASK_STATUS_LABELS[selected.status] || selected.status}</strong></div>
           {active && selected.status !== "awaiting_approval" && <div className="task-progress-track"><span/></div>}
           {selected.status === "awaiting_approval" && <div className="approval-stack"><div className="task-notice"><Icon name="check" size={17}/>O Mosaic precisa da sua autorização antes de executar esta operação.</div>{toolCalls.filter(call => call.status === "pending").map(call => <article className="approval-card" key={call.id}><span className="eyebrow">AÇÃO #{call.id} · AGUARDANDO</span><h4>Permitir {call.tool_name}?</h4><p>O agente solicitou esta ferramenta. Revise os argumentos antes de autorizar a execução.</p><details><summary>Ver operação e argumentos</summary><pre>{JSON.stringify(call.arguments, null, 2)}</pre></details><div className="approval-actions"><button type="button" className="danger-action" disabled={busy} onClick={() => decideCall(call.id, "reject")}>Recusar</button><button type="button" className="primary-action" disabled={busy} onClick={() => decideCall(call.id, "approve")}>{busy ? "Registrando…" : "Aprovar e continuar"}</button></div></article>)}</div>}
@@ -868,15 +886,177 @@ function AgentLibraryWorkspace({ projectId }) {
 function ContextRow({icon,label,children}){return <div className="context-row"><span className="context-row-icon"><Icon name={icon} size={18}/></span><span className="context-row-label">{label}</span><div className="context-row-value">{children}</div></div>;}
 function ContextPanel({tab,setTab,project,conversation,model,memoryCount,messageCount,memories}) {
   return <aside className="context-panel"><nav className="context-tabs">{["Contexto","Memória"].map(x=><button key={x} className={tab===x?"active":""} onClick={()=>setTab(x)}>{x}</button>)}</nav>
-    {tab==="Contexto"&&<><section className="context-card"><div className="card-heading"><strong>Contexto atual</strong><span>O que o Mosaic está usando para responder</span></div>
+    {tab==="Contexto"&&<><section className="context-card"><div className="card-heading"><strong>Contexto da conversa</strong><span>Metadados disponíveis na interface atual</span></div>
       <ContextRow icon="cube" label="Projeto">{project?<><strong>{project.name}</strong><small>{project.description || "Development Project"}</small></>:<span className="muted-copy">Nenhum projeto</span>}</ContextRow>
       <ContextRow icon="box" label="Modelo">{model?<><strong>{model.name}</strong><small>{model.provider} · {model.model_name}</small><span className="online"><i/>{model.enabled ? "Disponível" : "Desabilitado"}</span></>:<span className="muted-copy">Nenhum modelo selecionado</span>}</ContextRow>
       <ContextRow icon="layers" label="Memória"><strong>{memoryCount} {memoryCount === 1 ? "item" : "itens"} relevantes</strong><small>Memórias do projeto</small></ContextRow>
       <ContextRow icon="history" label="Histórico"><strong>{messageCount} {messageCount === 1 ? "mensagem" : "mensagens"}</strong><small>Histórico da conversa</small></ContextRow>
-    </section><section className="side-card"><div className="side-card-heading"><strong>Estado real</strong></div><div className="state-line">Projeto <b>{project?.id ?? "—"}</b></div><div className="state-line">Conversa <b>{conversation?.id ?? "—"}</b></div></section></>}
+    </section><section className="side-card"><div className="side-card-heading"><strong>Estado real</strong></div><div className="state-line">Projeto <b>{project?.id ?? "—"}</b></div><div className="state-line">Conversa <b>{conversation?.id ?? "—"}</b></div></section><section className="context-card observability-note"><div className="card-heading"><strong>Envio ao modelo</strong><span>Limite atual de observabilidade</span></div><div className="observability-status"><span className="status-dot status-warning"/><strong>Payload exato não registrado</strong></div><p>A interface não recebe o pacote completo de mensagens enviado ao provider nesta conversa. Os dados acima são metadados, não uma reprodução do payload.</p><div className="observability-footnote">Prévia aproximada e proveniência por bloco: não disponíveis para esta chamada. Não é possível confirmar, por este painel, quais fontes foram lidas, selecionadas, truncadas ou enviadas.</div></section></>}
     {tab==="Memória"&&<section className="context-card standalone-card"><div className="card-heading"><strong>Memória</strong><span>{memoryCount} {memoryCount === 1 ? "item" : "itens"} do projeto</span></div>{memoryCount?<div className="memory-list">{memories.map(memory=><div className="memory-item" key={memory.id}><div className="memory-item-head"><strong>{memory.key}</strong><span className="memory-type">{memory.type}</span></div><span>{memory.value}</span><small>Origem: {memory.source}{memory.confidence !== null && memory.confidence !== undefined ? ` · Confiança: ${Math.round(memory.confidence * 100)}%` : ""}</small></div>)}</div>:<div className="empty-state"><Icon name="memory" size={24}/><strong>Nenhuma memória</strong><span>O projeto ainda não possui memórias persistidas.</span></div>}</section>}
   </aside>;
 }
+
+function HieExperimentModal({scope,onClose}) {
+  const [profileSlug,setProfileSlug]=useState("");
+  const [candidateContent,setCandidateContent]=useState("");
+  const [prompt,setPrompt]=useState("");
+  const [expectedContains,setExpectedContains]=useState("");
+  const [experiment,setExperiment]=useState(null);
+  const [history,setHistory]=useState([]);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const [notice,setNotice]=useState("");
+  const [approved,setApproved]=useState(false);
+  const [promotion,setPromotion]=useState(null);
+  const [activeProfile,setActiveProfile]=useState(null);
+
+  const scopeKey=scope?.taskId ? "task_id="+scope.taskId : "conversation_id="+scope?.conversationId;
+  useEffect(()=>{
+    let active=true;
+    const params=scope?.taskId ? {taskId:scope.taskId} : {conversationId:scope?.conversationId};
+    api.hie.listExperiments(params).then(items=>{if(active)setHistory(items);})
+      .catch(err=>{if(active)setError("Não foi possível carregar os experimentos: "+err.message);});
+    return ()=>{active=false;};
+  },[scopeKey]);
+
+  useEffect(()=>{
+    if(!experiment || !["queued","running"].includes(experiment.status))return undefined;
+    let active=true;
+    const timer=setInterval(()=>{
+      api.hie.getExperiment(experiment.id).then(next=>{
+        if(active){setExperiment(next);setHistory(items=>items.map(item=>item.id===next.id?next:item));}
+      }).catch(err=>{if(active)setError("Falha ao consultar experimento: "+err.message);});
+    },1200);
+    return ()=>{active=false;clearInterval(timer);};
+  },[experiment?.id,experiment?.status]);
+
+  async function createAndRun(event){
+    event.preventDefault();
+    if(busy)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const payload={
+        ...(scope?.taskId ? {task_id:scope.taskId} : {conversation_id:scope?.conversationId}),
+        profile_slug:profileSlug.trim(),
+        candidate_content:candidateContent,
+        fixtures:[{
+          prompt:prompt.trim(),
+          expected_contains:expectedContains.split(",").map(item=>item.trim()).filter(Boolean)
+        }]
+      };
+      const created=await api.hie.createExperiment(payload);
+      setExperiment(created);setHistory(items=>[created,...items]);
+      const queued=await api.hie.runExperiment(created.id);
+      setExperiment(queued);setHistory(items=>items.map(item=>item.id===queued.id?queued:item));
+      setNotice("Experimento criado. O Core está executando baseline e candidato com a mesma fixture.");
+    }catch(err){setError(err.message);}
+    finally{setBusy(false);}
+  }
+
+  async function rejectCandidate(){
+    if(!experiment||busy)return;
+    setBusy(true);setError("");
+    try{
+      const rejected=await api.hie.rejectExperiment(experiment.id);
+      setExperiment(rejected);setHistory(items=>items.map(item=>item.id===rejected.id?rejected:item));
+      setNotice("Candidato rejeitado. A versão ativa não foi alterada.");
+    }catch(err){setError(err.message);}
+    finally{setBusy(false);}
+  }
+
+  function openHistory(item){
+    setExperiment(item);setError("");setNotice("");setApproved(false);setPromotion(null);setActiveProfile(null);
+  }
+
+  async function approveCandidate(){
+    if(!experiment||busy)return;
+    const candidateHash=experiment.candidate?.sha256;
+    const baseline=experiment.baseline_snapshot;
+    if(!candidateHash||!baseline?.version||!baseline?.sha256)return;
+    const confirmation=`Aprovar candidato para revisão final?\\n\\nCandidato SHA-256: ${candidateHash}\\nPerfil ativo observado: v${baseline.version}\\nHash ativo: ${baseline.sha256}\\n\\nA aprovação não altera o perfil ativo.`;
+    if(!window.confirm(confirmation))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      await api.hie.approveCandidate(experiment.id,{candidate_sha256:candidateHash,active_version:baseline.version,active_sha256:baseline.sha256});
+      setApproved(true);
+      setActiveProfile({version:baseline.version,sha256:baseline.sha256});
+      setNotice("Aprovação registrada para este hash e esta versão ativa. A promoção ainda exige uma confirmação separada.");
+    }catch(err){setError(err.message);setApproved(false);}
+    finally{setBusy(false);}
+  }
+
+  async function promoteApprovedCandidate(){
+    if(!experiment||!approved||busy)return;
+    const baseline=activeProfile||experiment.baseline_snapshot;
+    const candidateHash=experiment.candidate?.sha256;
+    const confirmation=`PROMOVER candidato para o perfil ativo?\\n\\nCandidato SHA-256: ${candidateHash}\\nVersão ativa esperada: v${baseline.version}\\nHash ativo esperado: ${baseline.sha256}\\n\\nIsso altera as instruções usadas em execuções futuras. O perfil anterior será preservado para rollback.`;
+    if(!window.confirm(confirmation))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const result=await api.hie.promoteCandidate(experiment.id,{candidate_sha256:candidateHash,active_version:baseline.version,active_sha256:baseline.sha256});
+      setPromotion(result);
+      setActiveProfile(result.profile);
+      setApproved(false);
+      setNotice(`Candidato promovido como versão v${result.profile.version}. O conteúdo anterior foi preservado para rollback.`);
+    }catch(err){setError(err.message);setApproved(false);}
+    finally{setBusy(false);}
+  }
+
+  async function rollbackPromotedCandidate(){
+    if(!promotion||!activeProfile||busy)return;
+    const confirmation=`Restaurar o conteúdo anterior à promoção #${promotion.promotion_id}?\\n\\nVersão ativa esperada: v${activeProfile.version}\\nHash ativo esperado: ${activeProfile.sha256}\\n\\nO rollback criará uma nova versão; não apagará o histórico.`;
+    if(!window.confirm(confirmation))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const result=await api.hie.rollbackPromotion(promotion.promotion_id,{expected_active_version:activeProfile.version,expected_active_sha256:activeProfile.sha256});
+      setActiveProfile(result.profile);
+      setPromotion(null);
+      setNotice(`Rollback concluído. Conteúdo anterior restaurado na nova versão v${result.profile.version}.`);
+    }catch(err){setError(err.message);}
+    finally{setBusy(false);}
+  }
+
+  return <Modal title="HIE Experimental · Experimentos" onClose={onClose}>
+    <div className="hie-experiment-modal">
+      <p className="modal-hint">O HIE compara instruções declarativas em probes isolados, sem ferramentas nem ações externas. Aprovação, promoção e rollback são ações explícitas, vinculadas a hashes e versões.</p>
+      {history.length>0&&<div className="hie-history"><strong>Experimentos anteriores</strong>{history.slice(0,5).map(item=><button type="button" key={item.id} className={experiment?.id===item.id?"active":""} onClick={()=>openHistory(item)}>#{item.id} · {item.profile_slug} · {item.status}</button>)}</div>}
+      <form className="modal-form" onSubmit={createAndRun}>
+        <label>Slug do perfil <input value={profileSlug} onChange={event=>setProfileSlug(event.target.value.toLowerCase())} required maxLength={80} pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="ex.: qa-agent"/></label>
+        <label>Instruções candidatas <textarea value={candidateContent} onChange={event=>setCandidateContent(event.target.value)} required minLength={1} maxLength={12000} rows={4} placeholder="Escreva a versão declarativa que deseja testar."/></label>
+        <label>Prompt de teste <textarea value={prompt} onChange={event=>setPrompt(event.target.value)} required maxLength={2000} rows={2} placeholder="Uma solicitação representativa para comparar baseline e candidato."/></label>
+        <label>Texto esperado (separado por vírgula) <input value={expectedContains} onChange={event=>setExpectedContains(event.target.value)} required placeholder="ex.: resumo, fonte"/></label>
+        <div className="hie-experiment-actions"><button className="primary-action" type="submit" disabled={busy||["queued","running"].includes(experiment?.status)}>{busy?"Preparando…":"Criar e executar experimento"}</button></div>
+      </form>
+      {error&&<div className="task-inline-error" role="alert">{error}</div>}
+      {notice&&<div className="agent-config-success" role="status">{notice}</div>}
+      {experiment&&<section className="hie-experiment-result">
+        <div className="hie-experiment-result-head"><strong>Experimento #{experiment.id}</strong><span className={"hie-experiment-status status-"+experiment.status}>{experiment.status}</span></div>
+        <div className="hie-experiment-summary"><span>Modelo</span><strong>{experiment.provider} · {experiment.model_name}</strong><span>Orçamento aplicado</span><strong>{experiment.budget?.estimated_provider_calls ?? "—"} chamadas estimadas (máx. {experiment.budget?.max_provider_calls ?? "—"}) · entrada {experiment.budget?.max_input_chars_per_call ?? "—"} caracteres por chamada · saída {experiment.budget?.max_output_tokens_per_call ?? "—"} tokens e até {experiment.budget?.max_output_chars_per_call ?? "—"} caracteres aceitos · timeout de requisição {experiment.budget?.provider_request_timeout_seconds ?? "—"} s</strong><span>Fixture isolada</span><strong>{experiment.budget?.fixture_count ?? experiment.fixtures?.length ?? 0} prompts · sem ferramentas nem ações externas</strong></div>
+        <div className="hie-hash-line"><span>Origem do candidato</span><strong>{experiment.candidate_origin==="user_supplied"?"Fornecido pelo usuário":experiment.candidate_origin}</strong></div>
+        <div className="hie-hash-line"><span>Baseline v{experiment.baseline_snapshot?.version}</span><code>{experiment.baseline_snapshot?.sha256?.slice(0,16)}…</code></div>
+        <div className="hie-hash-line"><span>Hash do candidato</span><code>{experiment.candidate?.sha256?.slice(0,16)}…</code></div>
+        <details><summary>Diff do candidato</summary><pre>{experiment.candidate_diff}</pre></details>
+        {experiment.results?.assessment&&<div className="hie-comparison">
+          <div><span>Chamadas ao provider</span><strong>{experiment.results.provider_calls ?? "—"}</strong></div>
+          <div><span>Duração total</span><strong>{experiment.results.duration_ms != null ? (experiment.results.duration_ms/1000).toFixed(1)+" s" : "—"}</strong></div>
+          <div><span>Baseline</span><strong>{experiment.results.baseline_passed}/{experiment.results.fixture_count}</strong></div>
+          <div><span>Candidato</span><strong>{experiment.results.candidate_passed}/{experiment.results.fixture_count}</strong></div>
+          <p>{experiment.results.assessment==="candidate_better"?"O candidato passou em mais critérios determinísticos nesta amostra.":experiment.results.assessment==="candidate_regressed"?"O candidato regrediu nos critérios determinísticos desta amostra.":"Resultado inconclusivo: a taxa de aprovação foi igual."} Isso não comprova melhoria geral nem autoriza promoção.</p>
+          {(experiment.results.evidence||[]).map(item=><div className="hie-evidence" key={item.fixture_id}><strong>{item.fixture_id} · {item.orchestrator_outcome ?? "resultado persistido"}</strong><div><span>Baseline · {item.baseline?.evaluation?.passed?"passou":"falhou"} · {item.baseline?.output_chars ?? "—"} caracteres</span><pre>{item.baseline?.output_preview ?? item.baseline?.output ?? "Prévia não disponível."}</pre><small>Prévia limitada · SHA-256 {item.baseline?.output_sha256?.slice(0,16) ?? "—"}…</small>{item.artifact_evidence?.baseline_output&&<small>Core Artifact #{item.artifact_evidence.baseline_output.artifact_id} · {item.artifact_evidence.baseline_output.size_bytes} bytes</small>}</div><div><span>Candidato · {item.candidate?.evaluation?.passed?"passou":"falhou"} · {item.candidate?.output_chars ?? "—"} caracteres</span><pre>{item.candidate?.output_preview ?? item.candidate?.output ?? "Prévia não disponível."}</pre><small>Prévia limitada · SHA-256 {item.candidate?.output_sha256?.slice(0,16) ?? "—"}…</small>{item.artifact_evidence?.candidate_output&&<small>Core Artifact #{item.artifact_evidence.candidate_output.artifact_id} · {item.artifact_evidence.candidate_output.size_bytes} bytes</small>}</div></div>)}
+        </div>}
+        {experiment.results?.error&&<div className="task-inline-error">{experiment.results.error}</div>}
+        {["completed","failed","draft"].includes(experiment.status)&&<button type="button" className="secondary-action" onClick={rejectCandidate} disabled={busy}>Rejeitar candidato</button>}
+        {experiment.status==="completed"&&experiment.results?.assessment==="candidate_better"&&!promotion&&<div className="hie-experiment-actions">
+           <button type="button" className="secondary-action" onClick={approveCandidate} disabled={busy||approved}>Aprovar hash e versão</button>
+           <button type="button" className="primary-action" onClick={promoteApprovedCandidate} disabled={busy||!approved}>{busy?"Processando…":"Promover versão aprovada"}</button>
+         </div>}
+         {promotion&&<div className="hie-experiment-actions"><span className="hie-hash-line">Promovido como v{promotion.profile?.version} · promoção #{promotion.promotion_id}</span><button type="button" className="secondary-action" onClick={rollbackPromotedCandidate} disabled={busy}>Rollback com confirmação</button></div>}
+         <p className="modal-hint">{promotion?"A promoção foi explícita e a versão anterior está preservada. O rollback só funciona se o perfil ativo ainda corresponder exatamente à versão promovida.":"Nenhuma versão ativa é alterada até a confirmação explícita de promoção. Uma aprovação fica inválida se o hash do candidato ou a versão/hash do perfil ativo mudar."}</p>
+      </section>}
+    </div>
+  </Modal>;
+}
+
 
 function Modal({title,onClose,children}){
   if(typeof document === "undefined") return null;
@@ -894,9 +1074,11 @@ function Modal({title,onClose,children}){
 
 export default function App(){
   const [projects,setProjects]=useState([]),[conversations,setConversations]=useState([]),[models,setModels]=useState([]),[memories,setMemories]=useState([]),[projectId,setProjectId]=useState(null),[conversationId,setConversationId]=useState(null),[messages,setMessages]=useState([]),[homeActive,setHomeActive]=useState(false);
-  const [mobile,setMobile]=useState(false),[contextTab,setContextTab]=useState("Contexto"),[projectTab,setProjectTab]=useState("Conversa"),[loading,setLoading]=useState(true),[messagesLoading,setMessagesLoading]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(""),[modal,setModal]=useState(null),[saving,setSaving]=useState(false),[modelStatus,setModelStatus]=useState({provider:"ollama",online:false,running_models:[]});
+  const [mobile,setMobile]=useState(false),[sidebarCollapsed,setSidebarCollapsed]=useState(false),[contextVisible,setContextVisible]=useState(()=>typeof window==="undefined" ? true : window.matchMedia("(min-width: 901px)").matches),[draft,setDraft]=useState(""),[contextTab,setContextTab]=useState("Contexto"),[projectTab,setProjectTab]=useState("Conversa"),[loading,setLoading]=useState(true),[messagesLoading,setMessagesLoading]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(""),[modal,setModal]=useState(null),[saving,setSaving]=useState(false),[modelStatus,setModelStatus]=useState({provider:"ollama",online:false,running_models:[]});
   const [remoteConfig,setRemoteConfig]=useState({url:"",configured:false});
   const [remoteStatus,setRemoteStatus]=useState(null);
+  const [hieStatus,setHieStatus]=useState(null);
+  const [hieBusy,setHieBusy]=useState(false);
   const [theme,setTheme]=useState(()=>{try{return localStorage.getItem("mosaic.theme")==="light"?"light":"dark";}catch{return "dark";}});
   useEffect(()=>{document.documentElement.dataset.theme=theme;try{localStorage.setItem("mosaic.theme",theme);}catch{}},[theme]);
   const project=projects.find(p=>p.id===projectId)||null,conversation=conversations.find(c=>c.id===conversationId)||null,model=models.find(m=>m.id===conversation?.model_id)||null,projectConversations=conversations.filter(c=>c.project_id===projectId);
@@ -935,6 +1117,20 @@ export default function App(){
     return ()=>{cancelled=true;};
   },[projectId]);
 
+  useEffect(()=>{
+    let cancelled=false;
+    if(!conversationId){setHieStatus(null);return undefined;}
+    api.hie.status({conversationId}).then(status=>{if(!cancelled)setHieStatus(status);})
+      .catch(err=>{if(!cancelled)setHieStatus({available:false,enabled:false,message:err.message});});
+    return ()=>{cancelled=true;};
+  },[conversationId]);
+  async function toggleConversationHie(){
+    if(!conversationId||hieBusy||!hieStatus?.available)return;
+    setHieBusy(true);setError("");
+    try{setHieStatus(await api.hie.setEnabled({conversation_id:conversationId,enabled:!hieStatus.enabled}));}
+    catch(err){setError("Não foi possível alterar o HIE desta conversa: "+err.message);}
+    finally{setHieBusy(false);}
+  }
   useEffect(()=>{
     let cancelled=false;
     async function loadMessages(){
@@ -1079,12 +1275,13 @@ export default function App(){
     }catch(err){setError("Não foi possível cadastrar o modelo: "+err.message);}finally{setSaving(false);}
   }
 
-  return <div className="app-shell"><Sidebar projects={projects} conversations={conversations} activeProjectId={projectId} activeConversationId={homeActive ? null : conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>{setHomeActive(false);setModal("conversation");}} onDeleteProject={item=>setModal({type:"delete-project",item})} onDeleteConversation={item=>setModal({type:"delete-conversation",item})} onModelSettings={()=>setModal({type:"models"})} onHelp={()=>setModal({type:"help"})} onHome={()=>{setHomeActive(true);setConversationId(null);setMessages([]);setProjectTab("Conversa");setMobile(false);localStorage.removeItem("mosaic.activeConversationId");}} mobileOpen={mobile} onClose={()=>setMobile(false)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
-    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab} theme={theme} onToggleTheme={()=>setTheme(current=>current==="dark"?"light":"dark")}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null}/> : projectTab === "Biblioteca" ? <AgentLibraryWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : homeActive ? <HomeWelcome/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage} onFiles={()=>setProjectTab("Arquivos")} onAgent={()=>setProjectTab("Agente")}/></>}</main><ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/></div></div>
+  return <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${contextVisible ? "" : " context-hidden"}`}><Sidebar projects={projects} conversations={conversations} activeProjectId={projectId} activeConversationId={homeActive ? null : conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>{setHomeActive(false);setModal("conversation");}} onDeleteProject={item=>setModal({type:"delete-project",item})} onDeleteConversation={item=>setModal({type:"delete-conversation",item})} onModelSettings={()=>setModal({type:"models"})} onHelp={()=>setModal({type:"help"})} onHome={()=>{setHomeActive(true);setConversationId(null);setMessages([]);setProjectTab("Conversa");setMobile(false);localStorage.removeItem("mosaic.activeConversationId");}} mobileOpen={mobile} onClose={()=>setMobile(false)} collapsed={sidebarCollapsed} onToggleCollapsed={()=>setSidebarCollapsed(value=>!value)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
+    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} onContextToggle={()=>setContextVisible(value=>!value)} contextVisible={contextVisible} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab} theme={theme} onToggleTheme={()=>setTheme(current=>current==="dark"?"light":"dark")}/><div className="workspace-grid"><main className="workspace"><ProjectHeader project={project} tab={projectTab} setTab={setProjectTab}/>{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null} onOpenHieExperiment={taskId => setModal({type:"hie-experiment",scope:{taskId}})}/> : projectTab === "Biblioteca" ? <AgentLibraryWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : homeActive ? <HomeWelcome/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending}/>} </div><Composer disabled={!conversation||sending} model={model} onSubmit={sendMessage} onFiles={()=>setProjectTab("Arquivos")} onAgent={()=>setProjectTab("Agente")} text={draft} setText={setDraft} hieEnabled={!!hieStatus?.enabled} hieBusy={hieBusy || !hieStatus?.available} hieExperimentAvailable={!!hieStatus?.experiment_execution_available} onToggleHie={toggleConversationHie} onOpenHieExperiment={()=>setModal({type:"hie-experiment",scope:{conversationId}})}/></>}</main>{contextVisible&&<button type="button" className="context-overlay" onClick={()=>setContextVisible(false)} aria-label="Fechar painel Etapas e contexto"/>}{contextVisible&&<ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/>}</div></div>
     {modal?.type==="delete-conversation"&&<Modal title="Excluir conversa" onClose={()=>!saving&&setModal(null)}><div className="modal-form delete-confirm-content"><span className="delete-confirm-icon"><Icon name="trash-2" size={22}/></span><h3>Excluir “{modal.item?.title || "Nova conversa"}”?</h3><p>Esta ação remove permanentemente a conversa, suas mensagens e as Tasks vinculadas no banco de dados. Não é possível desfazer.</p><div className="delete-confirm-actions"><button type="button" className="secondary-button" onClick={()=>setModal(null)} disabled={saving}>Cancelar</button><button type="button" className="danger-button" onClick={()=>deleteConversationConfirmed(modal.item)} disabled={saving}>{saving?"Excluindo…":"Excluir conversa"}</button></div></div></Modal>}
     {modal?.type==="delete-project"&&<Modal title="Excluir projeto" onClose={()=>!saving&&setModal(null)}><div className="modal-form delete-confirm-content"><span className="delete-confirm-icon"><Icon name="trash-2" size={22}/></span><h3>Excluir o projeto “{modal.item?.name}”?</h3><p>Esta ação remove o projeto do banco. As conversas e memórias serão preservadas e desvinculadas dele. Tasks ativas precisam ser canceladas ou concluídas antes. Não é possível desfazer.</p><div className="delete-confirm-actions"><button type="button" className="secondary-button" onClick={()=>setModal(null)} disabled={saving}>Cancelar</button><button type="button" className="danger-button" onClick={()=>deleteProjectConfirmed(modal.item)} disabled={saving}>{saving?"Excluindo…":"Excluir projeto"}</button></div></div></Modal>}
     {modal?.type==="help"&&<Modal title="Ajuda" onClose={()=>setModal(null)}><div className="modal-form"><p className="modal-hint">O Mosaic é uma interface conectada ao Mosaic Core. O estado persistente vem do backend; esta interface apresenta e controla esse estado.</p><div className="help-block"><strong>Começando</strong><span>Crie um projeto, depois crie uma conversa e selecione um modelo registrado no Core.</span></div><div className="help-block"><strong>Modelos</strong><span>Use Configurações para cadastrar e ajustar modelos. O status consulta o Ollama local ou verifica se OPENAI_API_KEY está configurada no backend para a OpenAI.</span></div><div className="help-block"><strong>Contexto</strong><span>O painel lateral mostra projeto, modelo, memória e histórico reais da conversa ativa.</span></div></div></Modal>}
     {modal?.type==="models"&&<Modal title="Modelos e configurações" onClose={()=>!saving&&setModal(null)}><div className="modal-form"><p className="modal-hint">Os valores abaixo são persistidos no Core e enviados ao provider quando a conversa usa este modelo.</p>{models.map(m=><button key={m.id} type="button" className="related-item" onClick={()=>setModal({type:"model",modelId:m.id})}><span className="status-dot"/><span>{m.name}</span><span className="model-provider">{m.provider} · {m.model_name}</span></button>)}<button type="button" className="primary-action" onClick={()=>setModal({type:"new-model"})}>+ Cadastrar modelo</button><button type="button" onClick={openRemoteConfig}>Configurar conexão remota</button></div></Modal>}
+    {modal?.type==="hie-experiment"&&<HieExperimentModal scope={modal.scope} onClose={()=>setModal(null)}/>}
     {modal?.type==="remote-config"&&<Modal title="Mosaic Remote Inference" onClose={()=>!saving&&setModal(null)}><form className="modal-form" onSubmit={saveRemoteConfig}><p className="modal-hint">Informe a URL base do servidor remoto. O token fica somente no backend local e não é enviado nem exibido pela interface.</p><label>URL do servidor<input name="remote_url" type="url" required autoFocus placeholder="https://seu-servidor:8000" defaultValue={remoteConfig.url}/></label><p className="modal-hint">Configure MOSAIC_REMOTE_INFERENCE_TOKEN no ambiente do backend local. O servidor remoto precisa aceitar Bearer token e expor /health/ready e /v1/inference.</p>{remoteStatus&&<p className="modal-hint">Status: {remoteStatus.online?"Conectado e pronto":remoteStatus.configured?"Configurado, mas indisponível":"Token não configurado"}{remoteStatus.running_models?.length?` · Modelo: ${remoteStatus.running_models.join(", ")}`:""}</p>}<div className="modal-actions"><button type="button" onClick={testRemoteConfig} disabled={saving}>Testar conexão</button><button type="button" onClick={()=>setModal({type:"models"})}>Cancelar</button><button className="primary-action" disabled={saving}>{saving?"Salvando…":"Salvar endereço"}</button></div></form></Modal>}
     {modal?.type==="model"&&(()=>{const m=models.find(x=>x.id===modal.modelId);if(!m)return null;const c=m.configuration||{};return <Modal title={"Configurar "+m.name} onClose={()=>!saving&&setModal(null)}><form className="modal-form modal-wide" onSubmit={saveModel}><input type="hidden" name="id" value={m.id}/><label>Nome<input name="name" defaultValue={m.name} required/></label><div className="model-config-grid"><label>Temperature<input type="number" name="temperature" step="0.1" min="0" max="2" defaultValue={c.temperature ?? 0.7}/></label><label>Top P<input type="number" name="top_p" step="0.05" min="0" max="1" defaultValue={c.top_p ?? 0.9}/></label><label>Top K<input type="number" name="top_k" min="0" max="100" defaultValue={c.top_k ?? 40}/></label><label>Contexto<input type="number" name="num_ctx" min="256" max="131072" defaultValue={c.num_ctx ?? 4096}/></label><label>Máx. tokens<input type="number" name="num_predict" min="-1" max="131072" defaultValue={c.num_predict ?? -1}/></label><label className="model-config-toggle">Ativo<input type="checkbox" name="enabled" defaultChecked={m.enabled}/></label></div><p className="model-config-status">Provider: {m.provider} · Identificador: {m.model_name}</p><div className="modal-actions"><button type="button" onClick={()=>setModal({type:"models"})}>Voltar</button><button className="primary-action" disabled={saving}>{saving?"Salvando…":"Salvar configurações"}</button></div></form></Modal>})()}
     {modal?.type==="new-model"&&<Modal title="Cadastrar modelo" onClose={()=>!saving&&setModal(null)}><form className="modal-form modal-wide" onSubmit={createModel}><div className="model-config-grid"><label>Nome<input name="name" required autoFocus placeholder="Ex.: Llama 3.2 3B"/></label><label>Provider<select name="provider" defaultValue="ollama" required><option value="ollama">Ollama (local)</option><option value="openai">OpenAI API (Responses)</option><option value="remote_inference">Mosaic Remote Inference</option></select></label><label className="full">Identificador do modelo<input name="model_name" required placeholder="Ex.: llama3.2:3b"/></label><label>Temperature<input type="number" name="temperature" step="0.1" min="0" max="2" defaultValue="0.7"/></label><label>Top P<input type="number" name="top_p" step="0.05" min="0" max="1" defaultValue="0.9"/></label><label>Top K<input type="number" name="top_k" min="0" max="100" defaultValue="40"/></label><label>Contexto<input type="number" name="num_ctx" min="256" max="131072" defaultValue="4096"/></label><label>Máx. tokens<input type="number" name="num_predict" min="-1" max="131072" defaultValue="-1"/></label></div><div className="modal-actions"><button type="button" onClick={()=>setModal({type:"models"})}>Cancelar</button><button className="primary-action" disabled={saving}>{saving?"Cadastrando…":"Cadastrar modelo"}</button></div></form></Modal>}

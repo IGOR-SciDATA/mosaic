@@ -130,6 +130,24 @@ export const api = {
     },
     cancel: (id) => request(`/tasks/${id}/cancel`, { method: "POST" }),
   },
+  hie: {
+    status: ({ conversationId, taskId }) => {
+      const scope = taskId ? `task_id=${taskId}` : `conversation_id=${conversationId}`;
+      return request(`/hie/status?${scope}`);
+    },
+    setEnabled: (payload) => request("/hie/status", { method: "PUT", body: JSON.stringify(payload) }),
+    createExperiment: (payload) => request("/hie/experiments", { method: "POST", body: JSON.stringify(payload) }),
+    listExperiments: ({ conversationId, taskId }) => {
+      const scope = taskId ? `task_id=${taskId}` : `conversation_id=${conversationId}`;
+      return request(`/hie/experiments?${scope}`);
+    },
+    getExperiment: (id) => request(`/hie/experiments/${id}`),
+    runExperiment: (id) => request(`/hie/experiments/${id}/run`, { method: "POST" }),
+    rejectExperiment: (id) => request(`/hie/experiments/${id}/reject`, { method: "POST" }),
+    approveCandidate: (id, payload) => request(`/hie/experiments/${id}/approve`, { method: "POST", body: JSON.stringify(payload) }),
+    promoteCandidate: (id, payload) => request(`/hie/experiments/${id}/promote`, { method: "POST", body: JSON.stringify(payload) }),
+    rollbackPromotion: (id, payload) => request(`/hie/promotions/${id}/rollback`, { method: "POST", body: JSON.stringify(payload) }),
+  },
   toolCalls: {
     list: (conversationId, taskId) => request(`/tool-calls?conversation_id=${conversationId}${taskId ? `&task_id=${taskId}` : ""}`),
     get: (id) => request(`/tool-calls/${id}`),

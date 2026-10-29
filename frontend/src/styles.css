@@ -3220,3 +3220,188 @@ body { overflow: hidden; }
   .project-file-edit-area, .project-file-edit-area textarea, .project-markdown-preview { min-height: 300px; }
 }
 
+
+
+/* Frontend HIE experimental — collapsible workspace shell (no backend behavior). */
+.sidebar-collapse-toggle,
+.context-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.sidebar-collapse-toggle { width: 34px; flex: 0 0 34px; }
+.context-toggle { padding: 0 10px; font-size: 12px; white-space: nowrap; }
+.sidebar-collapse-toggle:focus-visible,
+.context-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app-shell.sidebar-collapsed .sidebar { width: 68px; min-width: 68px; }
+.app-shell.sidebar-collapsed .sidebar .brand-row { justify-content: center; flex-wrap: wrap; }
+.app-shell.sidebar-collapsed .sidebar-brand-symbol { display: none; }
+.app-shell.sidebar-collapsed .sidebar .new-chat { font-size: 0; justify-content: center; padding-inline: 0; }
+.app-shell.sidebar-collapsed .sidebar .new-chat svg { flex: 0 0 auto; }
+.app-shell.sidebar-collapsed .sidebar .side-primary,
+.app-shell.sidebar-collapsed .sidebar .side-bottom,
+.app-shell.sidebar-collapsed .sidebar .mobile-close { display: none; }
+.app-shell.sidebar-collapsed .sidebar .brand-row { margin-bottom: 12px; }
+.app-shell.context-hidden .workspace-grid { grid-template-columns: minmax(0, 1fr); }
+.app-shell.context-hidden .workspace { max-width: none; }
+@media (max-width: 900px) {
+  .sidebar-collapse-toggle { display: none; }
+  .context-toggle span { display: none; }
+  .context-toggle { width: 34px; padding: 0; }
+}
+@media (max-width: 720px) {
+  .app-shell.sidebar-collapsed .sidebar { width: min(86vw, 320px); min-width: min(86vw, 320px); }
+  .app-shell.sidebar-collapsed .sidebar .side-primary,
+  .app-shell.sidebar-collapsed .sidebar .side-bottom { display: flex; }
+}
+
+
+/* Context observability: make the known instrumentation gap explicit. */
+.app-shell.sidebar-collapsed .sidebar {
+  flex: 0 0 68px;
+}
+.observability-note { margin-top: 12px; }
+.observability-note p,
+.observability-footnote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.observability-note p { margin: 12px 0 8px; }
+.observability-status { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.status-dot { display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; }
+.status-warning { background: #e5a34b; }
+.observability-footnote {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+
+@media (max-width: 900px) {
+  .app-shell:not(.context-hidden) .context-panel {
+    display: block;
+    position: fixed;
+    z-index: 22;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(88vw, 380px);
+    max-width: 100%;
+    border-left: 1px solid var(--border);
+    box-shadow: -18px 0 48px rgba(0,0,0,.4);
+  }
+  .context-overlay {
+    display: block;
+    position: fixed;
+    z-index: 21;
+    inset: 0;
+    background: rgba(0,0,0,.58);
+    border: 0;
+  }
+}
+@media (min-width: 901px) {
+  .context-overlay { display: none; }
+}
+
+
+/* HIE opt-in controls: clearly experimental and subordinate to the chat/task flow. */
+.hie-toggle {
+  border: 1px solid var(--border, rgba(255,255,255,.16));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary, inherit);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 7px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hie-toggle:hover:not(:disabled) { border-color: var(--accent, #c65b52); color: var(--text-primary, inherit); }
+.hie-toggle.active {
+  border-color: var(--accent, #c65b52);
+  background: color-mix(in srgb, var(--accent, #c65b52) 13%, transparent);
+  color: var(--text-primary, inherit);
+}
+.hie-toggle:disabled { opacity: .55; cursor: not-allowed; }
+.hie-mode-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 16px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border, rgba(255,255,255,.14));
+  border-radius: 12px;
+  background: var(--surface, rgba(255,255,255,.025));
+}
+.hie-mode-card > div { display: grid; gap: 4px; min-width: 0; }
+.hie-mode-card strong { font-size: 13px; }
+.hie-mode-card small { color: var(--text-secondary, #999); font-size: 11px; line-height: 1.5; }
+@media (max-width: 560px) {
+  .hie-mode-card { align-items: flex-start; }
+  .hie-mode-card .hie-toggle { flex-shrink: 0; }
+  .composer-tools .hie-toggle { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+}
+
+
+/* HIE experiment creation and evidence review */
+.hie-experiment-trigger {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.hie-experiment-trigger:hover:not(:disabled) { border-color: var(--accent); }
+.hie-experiment-modal { display: grid; gap: 14px; }
+.hie-experiment-modal .modal-form { padding: 0; }
+.hie-experiment-actions { display: flex; justify-content: flex-end; }
+.hie-history { display: grid; gap: 6px; border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.hie-history > strong { font-size: 12px; margin-bottom: 3px; }
+.hie-history button { text-align: left; border: 0; border-radius: 6px; padding: 7px 9px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 12px; }
+.hie-history button.active, .hie-history button:hover { background: var(--surface); color: var(--text); }
+.hie-experiment-result { display: grid; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+.hie-experiment-result-head, .hie-hash-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.hie-experiment-result-head strong { font-size: 14px; }
+.hie-experiment-status { border-radius: 999px; padding: 4px 8px; background: var(--surface); font-size: 11px; text-transform: uppercase; }
+.hie-experiment-status.status-completed { color: #62b58b; }
+.hie-experiment-status.status-failed { color: #e17b76; }
+.hie-experiment-status.status-running, .hie-experiment-status.status-queued { color: #d4a75d; }
+.hie-hash-line { font-size: 12px; color: var(--text-secondary); }
+.hie-hash-line code { font-size: 11px; }
+.hie-experiment-result details { border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; }
+.hie-experiment-result summary { cursor: pointer; font-size: 12px; }
+.hie-experiment-result pre, .hie-evidence pre { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; padding: 10px; border-radius: 7px; background: var(--surface); font-size: 11px; line-height: 1.5; }
+.hie-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hie-comparison > div:not(.hie-evidence) { display: grid; gap: 5px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.hie-comparison > div span { color: var(--text-secondary); font-size: 11px; }
+.hie-comparison > div strong { font-size: 20px; }
+.hie-comparison > p { grid-column: 1 / -1; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.hie-evidence { grid-column: 1 / -1; display: grid; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
+.hie-evidence > strong { font-size: 12px; }
+.hie-evidence > div > span { font-size: 11px; color: var(--text-secondary); }
+@media (max-width: 560px) {
+  .hie-experiment-modal .hie-experiment-actions .primary-action { width: 100%; }
+  .hie-hash-line { align-items: flex-start; flex-direction: column; gap: 3px; }
+}
+
+.hie-experiment-summary {
+  display: grid;
+  grid-template-columns: minmax(90px, .7fr) minmax(0, 1.5fr);
+  gap: 7px 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.hie-experiment-summary span { color: var(--text-secondary); font-size: 11px; }
+.hie-experiment-summary strong { font-size: 11px; font-weight: 500; overflow-wrap: anywhere; }

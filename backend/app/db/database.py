@@ -135,6 +135,66 @@ def init_db() -> None:
         """)
 
         connection.execute("""
+            CREATE TABLE IF NOT EXISTS hie_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NULL,
+                task_id INTEGER NULL,
+                enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                CHECK ((conversation_id IS NOT NULL AND task_id IS NULL) OR
+                       (conversation_id IS NULL AND task_id IS NOT NULL)),
+                UNIQUE (conversation_id),
+                UNIQUE (task_id),
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS hie_experiments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                source_task_id INTEGER NULL,
+                conversation_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
+                profile_slug TEXT NOT NULL,
+                candidate_origin TEXT NOT NULL DEFAULT 'user_supplied',
+                provider TEXT NOT NULL DEFAULT '',
+                model_name TEXT NOT NULL DEFAULT '',
+                budget_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (
+                    status IN ('draft', 'queued', 'running', 'completed', 'failed', 'rejected')
+                ),
+                baseline_snapshot TEXT NOT NULL,
+                candidate TEXT NOT NULL,
+                fixtures TEXT NOT NULL,
+                candidate_diff TEXT NOT NULL,
+                results TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (source_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )
+        """)
+        hie_experiment_columns = {row["name"] for row in connection.execute("PRAGMA table_info(hie_experiments)").fetchall()}
+        if "candidate_origin" not in hie_experiment_columns:
+            connection.execute("ALTER TABLE hie_experiments ADD COLUMN candidate_origin TEXT NOT NULL DEFAULT 'user_supplied'")
+        if "provider" not in hie_experiment_columns:
+            connection.execute("ALTER TABLE hie_experiments ADD COLUMN provider TEXT NOT NULL DEFAULT ''")
+        if "model_name" not in hie_experiment_columns:
+            connection.execute("ALTER TABLE hie_experiments ADD COLUMN model_name TEXT NOT NULL DEFAULT ''")
+        if "budget_json" not in hie_experiment_columns:
+            connection.execute("ALTER TABLE hie_experiments ADD COLUMN budget_json TEXT NOT NULL DEFAULT '{}'")
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_hie_experiments_task_status
+            ON hie_experiments(task_id, status)
+        """)
+
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 task_id INTEGER NOT NULL,
