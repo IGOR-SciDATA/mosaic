@@ -533,10 +533,18 @@ def run_experiment(experiment_id: int) -> None:
                     "automatic_promotion": False,
                 },
             )
+            # Experiment and dedicated Task lifecycle complete together.
+            task_result = {
+                "hie_experiment_id": experiment_id,
+                "assessment": results["assessment"],
+                "results": results,
+            }
+            connection.execute(
+                """UPDATE tasks SET status = 'completed', result = ?, updated_at = ?
+                   WHERE id = ? AND status = 'executing'""",
+                (json.dumps(task_result, ensure_ascii=False), _now(), experiment["task_id"]),
+            )
             connection.commit()
-        task = get_task(experiment["task_id"])
-        if task is not None and task.status == "executing":
-            update_task(task.id, status="completed", result={"hie_experiment_id": experiment_id, "assessment": results["assessment"], "results": results})
     except Exception as exc:
         safe_error = f"{type(exc).__name__}: {str(exc)}"[:500]
         partial_results = {
