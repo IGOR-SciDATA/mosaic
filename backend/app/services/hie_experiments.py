@@ -33,7 +33,7 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _emit(experiment: dict[str, Any], event_name: str, message: str, status: str, metadata: dict[str, Any] | None = None) -> None:
+def _emit(experiment: dict[str, Any], event_name: str, message: str, status: str, metadata: dict[str, Any] | None = None, connection=None) -> None:
     create_task_event(
         task_id=experiment["task_id"],
         conversation_id=experiment["conversation_id"],
@@ -43,6 +43,7 @@ def _emit(experiment: dict[str, Any], event_name: str, message: str, status: str
         message=message,
         status=status,
         metadata={"experiment_id": experiment["id"], **(metadata or {})},
+        connection=connection,
     )
 
 
@@ -407,24 +408,41 @@ def run_experiment(experiment_id: int) -> None:
         if len(encoded_results) > MAX_PERSISTED_EVIDENCE_CHARS:
             raise HieExperimentError("Serialized result exceeds the persistence budget")
         with get_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             cursor = connection.execute(
                 "UPDATE hie_experiments SET status = 'completed', results = ?, updated_at = ? WHERE id = ? AND status = 'running'",
                 (encoded_results, _now(), experiment_id),
             )
-            connection.commit()
             if cursor.rowcount != 1:
                 raise HieExperimentError("Experiment state changed before result persistence")
-        experiment = get_experiment(experiment_id)
-        task = get_task(experiment["task_id"])
-        if task is not None and task.status == "executing":
-            update_task(task.id, status="completed", result={"hie_experiment_id": experiment_id, "assessment": results["assessment"], "results": results})
-        _emit(experiment, "hie.experiment_completed", "Baseline/candidate probes and deterministic fixture checks completed; no candidate was promoted.", "completed", {
-            "assessment": results["assessment"],
-            "baseline_pass_rate": results["baseline_pass_rate"],
-            "candidate_pass_rate": results["candidate_pass_rate"],
-            "candidate_sha256": candidate["sha256"],
-            "automatic_promotion": False,
-        })
+            task_row = connection.execute(
+                "SELECT id, conversation_id, project_id, status, plan, result FROM tasks WHERE id = ?",
+                (experiment["task_id"],),
+            ).fetchone()
+            if task_row is None or task_row["status"] != "executing":
+                raise HieExperimentError("Experiment Task state changed before result finalization")
+            task_result = {"hie_experiment_id": experiment_id, "assessment": results["assessment"], "results": results}
+            task_cursor = connection.execute(
+                "UPDATE tasks SET status = 'completed', result = ?, updated_at = ? WHERE id = ? AND status = 'executing'",
+                (json.dumps(task_result, ensure_ascii=False), _now(), experiment["task_id"]),
+            )
+            if task_cursor.rowcount != 1:
+                raise HieExperimentError("Experiment Task changed concurrently before result finalization")
+            create_task_event(
+                task_id=experiment["task_id"], conversation_id=task_row["conversation_id"],
+                project_id=task_row["project_id"], component="task", event_name="task.status_changed",
+                message="Task status changed from executing to completed", status="completed",
+                metadata={"previous_status": "executing", "status": "completed"}, connection=connection,
+            )
+            completed_experiment = get_experiment(experiment_id)
+            _emit(completed_experiment, "hie.experiment_completed", "Baseline/candidate probes and deterministic fixture checks completed; no candidate was promoted.", "completed", {
+                "assessment": results["assessment"],
+                "baseline_pass_rate": results["baseline_pass_rate"],
+                "candidate_pass_rate": results["candidate_pass_rate"],
+                "candidate_sha256": candidate["sha256"],
+                "automatic_promotion": False,
+            }, connection=connection)
+            connection.commit()
     except Exception as exc:
         safe_error = f"{type(exc).__name__}: {str(exc)}"[:500]
         with get_connection() as connection:
