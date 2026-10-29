@@ -152,24 +152,35 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
     if scope == "task":
         task = get_task(scope_id)
         if task is not None:
-            create_task_event(
-                task_id=task.id,
-                conversation_id=task.conversation_id,
-                project_id=task.project_id,
-                component="hie",
-                event_name="hie.mode_enabled" if payload.enabled else "hie.mode_disabled",
-                message=(
-                    "HIE experimental mode enabled for this Task scope."
-                    if payload.enabled else
-                    "HIE experimental mode disabled for this Task scope."
-                ),
-                status="enabled" if payload.enabled else "disabled",
-                metadata={
-                    "scope": "task",
-                    "scope_id": scope_id,
-                    "experiment_execution_available": experiment_available,
-                },
-            )
+            try:
+                create_task_event(
+                    task_id=task.id,
+                    conversation_id=task.conversation_id,
+                    project_id=task.project_id,
+                    component="hie",
+                    event_name="hie.mode_enabled" if payload.enabled else "hie.mode_disabled",
+                    message=(
+                        "HIE experimental mode enabled for this Task scope."
+                        if payload.enabled else
+                        "HIE experimental mode disabled for this Task scope."
+                    ),
+                    status="enabled" if payload.enabled else "disabled",
+                    metadata={
+                        "scope": "task",
+                        "scope_id": scope_id,
+                        "experiment_execution_available": experiment_available,
+                    },
+                )
+            except Exception as exc:
+                # Roll back the opt-in mutation if its required audit event could
+                # not be recorded; never return a success response without audit.
+                with get_connection() as connection:
+                    connection.execute("DELETE FROM hie_sessions WHERE task_id = ?", (scope_id,))
+                    connection.commit()
+                raise HTTPException(
+                    status_code=503,
+                    detail="HIE setting was not applied because its audit event could not be persisted",
+                ) from exc
     return _payload(scope, scope_id, payload.enabled)
 
 
