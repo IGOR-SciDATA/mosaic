@@ -341,7 +341,7 @@ def run_experiment(experiment_id: int) -> None:
                 ]
                 input_chars = sum(len(item["content"]) for item in preflight_messages)
                 if input_chars > MAX_INPUT_CHARS_PER_CALL:
-                    raise HieExperimentError(f"Input budget exceeded before first provider call for {fixture['id']}")
+                    raise HieExperimentError(f"Input budget exceeded before provider call for {fixture['id']}")
                 total_input_chars += input_chars
         if total_input_chars > MAX_TOTAL_INPUT_CHARS:
             raise HieExperimentError("Aggregate input budget exceeded before first provider call")
