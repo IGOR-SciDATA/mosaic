@@ -533,26 +533,40 @@ def run_experiment(experiment_id: int) -> None:
             "recovery_requires_user": True,
             "evidence": partial_evidence,
         }
-        with get_connection() as connection:
-            connection.execute(
-                "UPDATE hie_experiments SET status = 'failed', results = ?, updated_at = ? WHERE id = ? AND status IN ('running', 'queued')",
-                (json.dumps(partial_results, ensure_ascii=False), _now(), experiment_id),
-            )
-            connection.commit()
         experiment = get_experiment(experiment_id)
-        task = get_task(experiment["task_id"])
+        if experiment is not None:
+            with get_connection() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    "UPDATE hie_experiments SET status = 'failed', results = ?, updated_at = ? WHERE id = ? AND status IN ('running', 'queued')",
+                    (json.dumps(partial_results, ensure_ascii=False), _now(), experiment_id),
+                )
+                if cursor.rowcount == 1:
+                    try:
+                        _insert_experiment_event(
+                            connection, experiment, "hie.experiment_failed",
+                            "HIE experiment failed; active profile was not modified and completed fixture evidence was preserved.",
+                            "failed", {
+                                "error_type": type(exc).__name__,
+                                "provider_calls": provider_calls,
+                                "completed_fixtures": len(partial_evidence),
+                                "candidate_sha256": experiment["candidate"]["sha256"],
+                                "automatic_promotion": False,
+                            },
+                        )
+                    except Exception:
+                        # If audit persistence fails, fail closed: the experiment
+                        # state transition rolls back and remains visibly running
+                        # so startup recovery can mark it interrupted.
+                        raise
+                    connection.commit()
+        experiment = get_experiment(experiment_id)
+        task = get_task(experiment["task_id"]) if experiment is not None else None
         if task is not None and task.status in {"pending", "executing"}:
             try:
                 update_task(task.id, status="failed", result={"hie_experiment_id": experiment_id, "error": safe_error})
             except ValueError:
                 pass
-        _emit(experiment, "hie.experiment_failed", "HIE experiment failed; active profile was not modified and completed fixture evidence was preserved.", "failed", {
-            "error_type": type(exc).__name__,
-            "provider_calls": provider_calls,
-            "completed_fixtures": len(partial_evidence),
-            "candidate_sha256": experiment["candidate"]["sha256"],
-            "automatic_promotion": False,
-        })
 
 def reject_experiment(experiment_id: int) -> dict[str, Any]:
     experiment = get_experiment(experiment_id)
