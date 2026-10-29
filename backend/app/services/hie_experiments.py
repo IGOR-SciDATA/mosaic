@@ -18,6 +18,11 @@ MAX_FIXTURES = 8
 MAX_FIXTURE_PROMPT_CHARS = 2_000
 MAX_ASSERTIONS = 10
 MAX_OUTPUT_CHARS = 6_000
+MAX_OUTPUT_TOKENS = 1_500
+MAX_INPUT_CHARS_PER_CALL = 28_000
+MAX_TOTAL_INPUT_CHARS = 448_000
+PROVIDER_TIMEOUT_SECONDS = 90
+MAX_PERSISTED_EVIDENCE_CHARS = MAX_FIXTURES * 2 * MAX_OUTPUT_CHARS + 20_000
 
 
 class HieExperimentError(ValueError):
@@ -196,6 +201,11 @@ def create_experiment(
                     "max_fixtures": MAX_FIXTURES,
                     "max_provider_calls": MAX_FIXTURES * 2,
                     "max_output_chars_per_call": MAX_OUTPUT_CHARS,
+                    "max_output_tokens_per_call": MAX_OUTPUT_TOKENS,
+                    "max_input_chars_per_call": MAX_INPUT_CHARS_PER_CALL,
+                    "max_total_input_chars": MAX_TOTAL_INPUT_CHARS,
+                    "provider_request_timeout_seconds": PROVIDER_TIMEOUT_SECONDS,
+                    "max_persisted_evidence_chars": MAX_PERSISTED_EVIDENCE_CHARS,
                     "max_candidate_chars": 12000,
                     "fixture_count": len(normalized_fixtures),
                     "estimated_provider_calls": len(normalized_fixtures) * 2,
@@ -298,9 +308,19 @@ def run_experiment(experiment_id: int) -> None:
             for skill in active_skills
         ) or "(no enabled Skills in the baseline snapshot)"
         outputs = []
+        total_input_chars = 0
+        provider_calls = 0
+        evidence_chars = 0
+        # Fail closed for providers without the output and request-timeout controls
+        # used by the existing registered adapters.
+        provider_kind = model.provider.casefold()
+        if provider_kind not in {"ollama", "remote_inference"}:
+            raise HieExperimentError("HIE requires a provider with enforced output-token and request-timeout controls")
         for fixture in experiment["fixtures"]:
             case_result = {"fixture_id": fixture["id"]}
             for variant, instructions in (("baseline", baseline_content), ("candidate", candidate_content)):
+                if provider_calls >= len(experiment["fixtures"]) * 2:
+                    raise HieExperimentError("Provider-call budget exhausted before the next provider call")
                 messages = [
                     {
                         "role": "system",
@@ -308,24 +328,41 @@ def run_experiment(experiment_id: int) -> None:
                             "You are participating in an isolated HIE evaluation probe. Follow the supplied "
                             "declarative instructions as guidance only. Do not call tools, perform external "
                             "actions, claim to have changed system state, or reveal private reasoning. "
-                            "Answer only the test prompt.\n\n"
-                            f"Profile: /{baseline['slug']} v{baseline['version']}\n"
-                            f"Instructions under test:\n{instructions}\n\n"
-                            f"Enabled Skills held constant across variants:\n{fixed_skills_context}"
+                            "Answer only the test prompt.\\n\\n"
+                            f"Profile: /{baseline['slug']} v{baseline['version']}\\n"
+                            f"Instructions under test:\\n{instructions}\\n\\n"
+                            f"Enabled Skills held constant across variants:\\n{fixed_skills_context}"
                         ),
                     },
                     {"role": "user", "content": fixture["prompt"]},
                 ]
+                input_chars = sum(len(item["content"]) for item in messages)
+                if input_chars > MAX_INPUT_CHARS_PER_CALL:
+                    raise HieExperimentError(f"Input budget exceeded before provider call for {fixture['id']}")
+                if total_input_chars + input_chars > MAX_TOTAL_INPUT_CHARS:
+                    raise HieExperimentError("Aggregate input budget exceeded before provider call")
+                total_input_chars += input_chars
+                configuration = dict(model.configuration or {})
+                if provider_kind == "ollama":
+                    configuration["num_predict"] = min(int(configuration.get("num_predict", MAX_OUTPUT_TOKENS)), MAX_OUTPUT_TOKENS)
+                else:
+                    configuration["max_output_tokens"] = min(int(configuration.get("max_output_tokens", MAX_OUTPUT_TOKENS)), MAX_OUTPUT_TOKENS)
+                configuration["request_timeout_seconds"] = min(float(configuration.get("request_timeout_seconds", PROVIDER_TIMEOUT_SECONDS)), PROVIDER_TIMEOUT_SECONDS)
                 started = time.monotonic()
+                provider_calls += 1
                 output = provider.generate(
                     messages=messages,
                     model_name=model.model_name,
-                    configuration=model.configuration,
+                    configuration=configuration,
                 )
                 duration_ms = max(0, int((time.monotonic() - started) * 1000))
                 if not isinstance(output, str) or not output.strip():
                     raise HieExperimentError(f"{variant} returned an empty output for {fixture['id']}")
-                output = output[:MAX_OUTPUT_CHARS]
+                if len(output) > MAX_OUTPUT_CHARS:
+                    raise HieExperimentError(f"{variant} output exceeded {MAX_OUTPUT_CHARS} characters; evidence was not persisted")
+                evidence_chars += len(output)
+                if evidence_chars > MAX_PERSISTED_EVIDENCE_CHARS:
+                    raise HieExperimentError("Persisted evidence budget exceeded; results were not marked complete")
                 case_result[variant] = {
                     "output": output,
                     "evaluation": _evaluate(output, fixture),
@@ -344,7 +381,11 @@ def run_experiment(experiment_id: int) -> None:
         candidate_passes = sum(1 for item in outputs if item["candidate"]["evaluation"]["passed"])
         results = {
             "fixture_count": len(outputs),
-            "provider_calls": len(outputs) * 2,
+            "provider_calls": provider_calls,
+            "total_input_chars": total_input_chars,
+            "max_output_tokens_per_call": MAX_OUTPUT_TOKENS,
+            "provider_request_timeout_seconds": PROVIDER_TIMEOUT_SECONDS,
+            "evidence_chars": evidence_chars,
             "duration_ms": max(0, int((time.monotonic() - total_started) * 1000)),
             "execution_mode": "isolated_prompt_probe_no_tools",
             "baseline_passed": baseline_passes,
@@ -360,12 +401,17 @@ def run_experiment(experiment_id: int) -> None:
             "automatic_promotion": False,
             "evidence": outputs,
         }
+        encoded_results = json.dumps(results, ensure_ascii=False)
+        if len(encoded_results) > MAX_PERSISTED_EVIDENCE_CHARS:
+            raise HieExperimentError("Serialized result exceeds the persistence budget")
         with get_connection() as connection:
-            connection.execute(
+            cursor = connection.execute(
                 "UPDATE hie_experiments SET status = 'completed', results = ?, updated_at = ? WHERE id = ? AND status = 'running'",
-                (json.dumps(results, ensure_ascii=False), _now(), experiment_id),
+                (encoded_results, _now(), experiment_id),
             )
             connection.commit()
+            if cursor.rowcount != 1:
+                raise HieExperimentError("Experiment state changed before result persistence")
         experiment = get_experiment(experiment_id)
         task = get_task(experiment["task_id"])
         if task is not None and task.status == "executing":
