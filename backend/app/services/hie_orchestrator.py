@@ -276,7 +276,10 @@ def run_candidate_experiment(
             task.id, baseline_output, candidate_output, max_bytes=output_budget,
         )
         record["evidence"] = evidence
-        used_bytes = sum(int(ref.get("budget_bytes", ref["size_bytes"])) for ref in evidence.values())
+        used_bytes = sum(
+            int(ref.get("budget_bytes", ref.get("size_bytes", 0)))
+            for ref in evidence.values()
+        )
         remaining_bytes = active_budgets.artifact_bytes - used_bytes
         if remaining_bytes <= 0:
             raise HIEBudgetExceeded("HIE output evidence leaves no budget for the experiment record")
