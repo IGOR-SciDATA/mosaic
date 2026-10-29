@@ -492,24 +492,33 @@ def run_experiment(experiment_id: int) -> None:
             "automatic_promotion": False,
             "evidence": outputs,
         }
+        experiment = get_experiment(experiment_id)
+        if experiment is None:
+            raise HieExperimentError("Experiment disappeared before result persistence")
         with get_connection() as connection:
-            connection.execute(
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
                 "UPDATE hie_experiments SET status = 'completed', results = ?, updated_at = ? WHERE id = ? AND status = 'running'",
                 (json.dumps(results, ensure_ascii=False), _now(), experiment_id),
             )
+            if cursor.rowcount != 1:
+                raise HieExperimentError("Experiment state changed before result persistence")
+            _insert_experiment_event(
+                connection, experiment, "hie.experiment_completed",
+                "Baseline/candidate probes and deterministic fixture checks completed; no candidate was promoted.",
+                "completed", {
+                    "assessment": results["assessment"],
+                    "assessment_scope": results["assessment_scope"],
+                    "baseline_pass_rate": results["baseline_pass_rate"],
+                    "candidate_pass_rate": results["candidate_pass_rate"],
+                    "candidate_sha256": candidate["sha256"],
+                    "automatic_promotion": False,
+                },
+            )
             connection.commit()
-        experiment = get_experiment(experiment_id)
         task = get_task(experiment["task_id"])
         if task is not None and task.status == "executing":
             update_task(task.id, status="completed", result={"hie_experiment_id": experiment_id, "assessment": results["assessment"], "results": results})
-        _emit(experiment, "hie.experiment_completed", "Baseline/candidate probes and deterministic fixture checks completed; no candidate was promoted.", "completed", {
-            "assessment": results["assessment"],
-            "assessment_scope": results["assessment_scope"],
-            "baseline_pass_rate": results["baseline_pass_rate"],
-            "candidate_pass_rate": results["candidate_pass_rate"],
-            "candidate_sha256": candidate["sha256"],
-            "automatic_promotion": False,
-        })
     except Exception as exc:
         safe_error = f"{type(exc).__name__}: {str(exc)}"[:500]
         partial_results = {
