@@ -918,7 +918,7 @@ def test_scoped_workspace_exploration_only_reads_requested_directory(tmp_path: P
         )}
 
     result = run_agent(task.id, decide)
-    assert result["status"] == "completed"
+    assert result["status"] == "awaiting_approval"
     assert "docs/ARCHITECTURE.md" in observed[0]
     assert "docs/ROADMAP.md" in observed[0]
     assert "UNRELATED_SENTINEL" not in observed[0]
@@ -927,6 +927,14 @@ def test_scoped_workspace_exploration_only_reads_requested_directory(tmp_path: P
         if call.task_id == task.id and call.tool_name == "filesystem" and call.arguments.get("operation") == "explore"
     )
     assert call.arguments["path"] == "docs"
+    artifact_call = next(
+        call for call in list_tool_calls(task.conversation_id)
+        if call.task_id == task.id and call.tool_name == "filesystem" and call.arguments.get("operation") == "create"
+    )
+    assert execute_tool_call(approve_tool_call(artifact_call)).status == "completed"
+    update_task(task.id, status="executing")
+    completed = run_agent(task.id, decide)
+    assert completed["status"] == "completed"
 
 
 def test_workspace_summary_quality_gate_rejects_generic_or_incomplete_output():
