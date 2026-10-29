@@ -233,13 +233,22 @@ def create_experiment(
         )
         connection.commit()
     experiment = get_experiment(cursor.lastrowid)
-    _emit(experiment, "hie.experiment_created", "HIE experiment created with a hash-sealed declarative candidate.", "draft", {
-        "profile_slug": profile_slug,
-        "baseline_version": baseline["version"],
-        "baseline_sha256": baseline["sha256"],
-        "candidate_sha256": candidate["sha256"],
-        "fixture_count": len(normalized_fixtures),
-    })
+    if experiment is None:
+        raise HieExperimentError("Experiment was not persisted")
+    with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        _insert_experiment_event(
+            connection, experiment, "hie.experiment_created",
+            "HIE experiment created with a hash-sealed declarative candidate.", "draft", {
+                "profile_slug": profile_slug,
+                "baseline_version": baseline["version"],
+                "baseline_sha256": baseline["sha256"],
+                "candidate_sha256": candidate["sha256"],
+                "fixture_count": len(normalized_fixtures),
+                "automatic_promotion": False,
+            },
+        )
+        connection.commit()
     return experiment
 
 
