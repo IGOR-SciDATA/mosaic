@@ -49,6 +49,7 @@ def _row_to_experiment(row) -> dict[str, Any]:
         "conversation_id": row["conversation_id"],
         "project_id": row["project_id"],
         "profile_slug": row["profile_slug"],
+        "candidate_origin": row["candidate_origin"],
         "provider": row["provider"],
         "model_name": row["model_name"],
         "budget": json.loads(row["budget_json"]),
@@ -276,6 +277,7 @@ def run_experiment(experiment_id: int) -> None:
         "candidate_sha256": experiment["candidate"]["sha256"],
         "fixture_count": len(experiment["fixtures"]),
     })
+    total_started = time.monotonic()
     try:
         baseline = experiment["baseline_snapshot"]
         candidate = experiment["candidate"]
@@ -342,6 +344,9 @@ def run_experiment(experiment_id: int) -> None:
         candidate_passes = sum(1 for item in outputs if item["candidate"]["evaluation"]["passed"])
         results = {
             "fixture_count": len(outputs),
+            "provider_calls": len(outputs) * 2,
+            "duration_ms": max(0, int((time.monotonic() - total_started) * 1000)),
+            "execution_mode": "isolated_prompt_probe_no_tools",
             "baseline_passed": baseline_passes,
             "candidate_passed": candidate_passes,
             "baseline_pass_rate": baseline_passes / len(outputs),
