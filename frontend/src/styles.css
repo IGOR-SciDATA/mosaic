@@ -3448,3 +3448,32 @@ body { overflow: hidden; }
 .observed-timeline li strong { font-size: .82rem; }
 .observed-timeline li span,
 .observed-timeline li small { color: var(--muted, #9aa0a6); font-size: .78rem; }
+
+
+.chat-task-trigger {
+  border: 1px solid var(--border, rgba(255,255,255,.16));
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: .76rem;
+  white-space: nowrap;
+}
+.chat-task-trigger:disabled { opacity: .45; cursor: not-allowed; }
+.chat-task-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0 24px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, rgba(255,255,255,.12));
+  border-radius: 10px;
+  font-size: .82rem;
+}
+.chat-task-status span { color: var(--muted, #9aa0a6); }
+.chat-task-status button {
+  margin-left: auto;
+  border: 1px solid var(--border, rgba(255,255,255,.16));
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: .78rem;
+}
