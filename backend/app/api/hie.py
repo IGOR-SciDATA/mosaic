@@ -71,18 +71,12 @@ def _experiment_scope_available(scope: str, scope_id: int) -> bool:
 def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
     experiment_available = _experiment_scope_available(scope, scope_id)
     supported = ["persisted_opt_in"]
-    unavailable = [
-        "project_scoped_agent_profile_required",
-        "isolated_baseline_candidate_probes",
-        "deterministic_fixture_evaluation",
-        "candidate_diff",
-        "candidate_hash",
-        "explicit_rejection",
-        "versioned_promotion",
-        "rollback",
-    ]
+    unavailable = ["project_scoped_agent_profile_required"]
     if experiment_available:
+        # Stable API capability identifiers. Promotion and rollback are available
+        # operations only when the scope has a project profile; neither is automatic.
         supported.extend([
+            "project_scoped_agent_profile_required",
             "candidate_validation",
             "persisted_experiment_lifecycle",
             "isolated_baseline_candidate_probes",
@@ -90,8 +84,10 @@ def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
             "candidate_diff",
             "candidate_hash",
             "explicit_rejection",
+            "version_bound_approval",
+            "versioned_promotion",
+            "rollback",
         ])
-        supported.extend(["version_bound_approval", "explicit_versioned_promotion", "audited_rollback"])
         unavailable = []
     message = (
         "Modo experimental habilitado. Experimentos isolados estão disponíveis; aprovação, promoção e rollback exigem confirmação explícita."
