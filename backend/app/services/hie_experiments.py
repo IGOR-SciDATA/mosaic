@@ -370,20 +370,26 @@ def run_experiment(experiment_id: int) -> None:
             "UPDATE hie_experiments SET status = 'running', updated_at = ? WHERE id = ? AND status = 'queued'",
             (_now(), experiment_id),
         )
-        connection.commit()
         if cursor.rowcount != 1:
             return
-    experiment = get_experiment(experiment_id)
-    if experiment is None:
-        return
+        row = connection.execute("SELECT * FROM hie_experiments WHERE id = ?", (experiment_id,)).fetchone()
+        if row is None:
+            connection.rollback()
+            return
+        experiment = _row_to_experiment(row)
+        _insert_experiment_event(
+            connection, experiment, "hie.experiment_started",
+            "Running baseline and candidate against the same fixtures without tools or external actions.",
+            "running", {
+                "candidate_sha256": experiment["candidate"]["sha256"],
+                "fixture_count": len(experiment["fixtures"]),
+                "automatic_promotion": False,
+            },
+        )
+        connection.commit()
     task = get_task(experiment["task_id"])
     if task is not None and task.status == "pending":
         update_task(task.id, status="executing")
-    _emit(experiment, "hie.experiment_started", "Running baseline and candidate against the same fixtures without tools or external actions.", "running", {
-        "candidate_sha256": experiment["candidate"]["sha256"],
-        "fixture_count": len(experiment["fixtures"]),
-        "automatic_promotion": False,
-    })
     total_started = time.monotonic()
     partial_evidence: list[dict[str, Any]] = []
     provider_calls = 0
