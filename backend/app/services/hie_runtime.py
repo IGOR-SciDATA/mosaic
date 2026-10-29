@@ -64,7 +64,21 @@ class HIEExecutionBudget:
         if timeout < 1:
             raise HIERuntimeLimitExceeded("Insufficient wall-clock budget to start another provider request")
         self.provider_calls += 1
-        return {**configuration, "request_timeout_seconds": timeout}
+        # Token-to-character conversion is provider/model dependent. Apply a
+        # conservative request cap where supported, then enforce the exact
+        # character limit on the returned text; do not claim token equivalence.
+        token_ceiling = max(1, self.max_output_chars_per_call // 4)
+        bounded = {**configuration, "request_timeout_seconds": timeout}
+        for key in ("num_predict", "max_output_tokens"):
+            configured = bounded.get(key)
+            if configured is None:
+                bounded[key] = token_ceiling
+            else:
+                try:
+                    bounded[key] = min(int(configured), token_ceiling)
+                except (TypeError, ValueError):
+                    raise HIERuntimeLimitExceeded(f"Invalid provider output limit: {key}") from None
+        return bounded
 
     def after_provider_call(self, output: str) -> None:
         """Reject oversized output and check cancellation/deadline after the call."""
