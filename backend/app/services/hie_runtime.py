@@ -72,11 +72,15 @@ class HIEExecutionBudget:
             raise HIERuntimeLimitExceeded("HIE provider output exceeds the per-call character budget")
         self._remaining()
 
-    def before_tool_call(self) -> None:
-        """Reserve one real tool execution before the executor is invoked."""
+    def check_tool_call(self) -> None:
+        """Check whether a tool call may be proposed without consuming execution budget."""
         self._remaining()
         if self.tool_calls >= self.max_tool_calls:
             raise HIERuntimeLimitExceeded("HIE tool-call budget exhausted")
+
+    def before_tool_call(self) -> None:
+        """Reserve one real tool execution before the executor is invoked."""
+        self.check_tool_call()
         self.tool_calls += 1
 
     def before_retry(self) -> None:
