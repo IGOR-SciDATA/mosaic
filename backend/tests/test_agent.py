@@ -890,3 +890,69 @@ def test_workspace_exploration_goal_detection_is_deterministic():
     assert _goal_requests_workspace_exploration("Leia todos os arquivos permitidos do projeto.")
     assert _goal_requests_workspace_exploration("Explore the entire workspace")
     assert not _goal_requests_workspace_exploration("Leia README.md")
+
+
+def test_scoped_workspace_exploration_only_reads_requested_directory(tmp_path: Path):
+    from app.services.agent import _requested_workspace_scope, _goal_requests_workspace_exploration
+
+    workspace = tmp_path / "workspace"
+    project = create_project("Scoped exploration", str(workspace))
+    (workspace / "docs").mkdir(parents=True)
+    (workspace / "src").mkdir()
+    (workspace / "docs" / "ARCHITECTURE.md").write_text("# Architecture\nCore responsibilities.\n", encoding="utf-8")
+    (workspace / "docs" / "ROADMAP.md").write_text("# Roadmap\nNext milestones.\n", encoding="utf-8")
+    (workspace / "src" / "secret-unrelated.py").write_text("UNRELATED_SENTINEL = True\n", encoding="utf-8")
+    goal = "Leia todos os arquivos já existentes em '/docs' e crie um resumo chamado task_markdown.md"
+
+    assert _requested_workspace_scope(goal) == "docs"
+    assert _goal_requests_workspace_exploration(goal)
+    task = _task(plan={"goal": goal}, project_id=project.id)
+    observed = []
+
+    def decide(context):
+        observed.append("\n".join(str(item.get("content", "")) for item in context))
+        return {"type": "final", "content": (
+            "# Resumo de docs\n\n"
+            "## docs/ARCHITECTURE.md\n" + ("O arquivo define responsabilidades do Core e seus limites. " * 5) + "\n\n"
+            "## docs/ROADMAP.md\n" + ("O arquivo registra os próximos marcos e a sequência de implementação. " * 5)
+        )}
+
+    result = run_agent(task.id, decide)
+    assert result["status"] == "awaiting_approval"
+    assert "docs/ARCHITECTURE.md" in observed[0]
+    assert "docs/ROADMAP.md" in observed[0]
+    assert "UNRELATED_SENTINEL" not in observed[0]
+    call = next(
+        call for call in list_tool_calls(task.conversation_id)
+        if call.task_id == task.id and call.tool_name == "filesystem" and call.arguments.get("operation") == "explore"
+    )
+    assert call.arguments["path"] == "docs"
+    artifact_call = next(
+        call for call in list_tool_calls(task.conversation_id)
+        if call.task_id == task.id and call.tool_name == "filesystem" and call.arguments.get("operation") == "create"
+    )
+    assert execute_tool_call(approve_tool_call(artifact_call)).status == "completed"
+    update_task(task.id, status="executing")
+    completed = run_agent(task.id, decide)
+    assert completed["status"] == "completed"
+
+
+def test_workspace_summary_quality_gate_rejects_generic_or_incomplete_output():
+    from app.services.agent import _validate_workspace_summary_content
+
+    evidence = {
+        "status": "success",
+        "files_not_passed_to_model": [],
+        "files_partially_passed_to_model": [],
+        "files_passed_to_model": ["docs/ARCHITECTURE.md", "docs/ROADMAP.md"],
+    }
+    generic = "Para criar um resumo eu seguiria os seguintes passos. Primeiro, eu precisaria ler todos os arquivos."
+    assert _validate_workspace_summary_content(generic, evidence) is not None
+    missing_source = "# Resumo\n\n## docs/ARCHITECTURE.md\n" + ("O Core organiza as responsabilidades do sistema. " * 12)
+    assert _validate_workspace_summary_content(missing_source, evidence) is not None
+    complete = (
+        "# Resumo\n\n"
+        "## docs/ARCHITECTURE.md\n" + ("O Core organiza as responsabilidades do sistema e mantém limites claros. " * 5)
+        + "\n## docs/ROADMAP.md\n" + ("O roadmap descreve marcos, prioridades e a sequência de implementação. " * 5)
+    )
+    assert _validate_workspace_summary_content(complete, evidence) is None

@@ -177,7 +177,7 @@ def _agent_context(
                     "role": "system",
                     "content": "Mosaic allowed tools: " + (", ".join(names) if names else "none"),
                 })
-            elif current_step.get("kind") in {"summarize_source", "transform_source", "answer_from_source", "draft_content", "create_artifact", "write_artifact"}:
+            elif current_step.get("kind") in {"summarize_source", "transform_source", "answer_from_source", "draft_content", "summarize_workspace", "create_artifact", "write_artifact"}:
                 filtered.append({
                     "role": "system",
                     "content": "Mosaic allowed tools: none",
@@ -807,6 +807,37 @@ def _artifact_operation(goal: str) -> str:
 
 
 
+def _validate_workspace_summary_content(content: str, exploration: dict[str, Any] | None) -> str | None:
+    """Reject generic tutorials and drafts that omit source paths from the manifest."""
+    if not isinstance(exploration, dict):
+        return "Não há relatório de exploração disponível para validar o resumo."
+    if exploration.get("status") != "success":
+        return "A exploração da pasta não foi concluída integralmente."
+    if exploration.get("files_not_passed_to_model") or exploration.get("files_partially_passed_to_model"):
+        return "Nem todos os arquivos foram entregues integralmente ao modelo."
+    paths = exploration.get("files_passed_to_model", [])
+    if not isinstance(paths, list) or not paths:
+        return "Nenhum arquivo-fonte foi entregue ao modelo para resumir."
+    normalized = content.casefold()
+    generic_patterns = (
+        r"para criar (?:um|o) resumo.{0,100}(?:eu seguiria|seguir os seguintes passos)",
+        r"primeiro,?\s+eu precisaria ler todos os arquivos",
+        r"como não há uma função específica.{0,100}(?:ferramenta|script)",
+        r"i would (?:first )?need to read all (?:the )?files",
+        r"here are the steps to (?:read|summarize) the files",
+    )
+    if any(re.search(pattern, normalized, re.DOTALL) for pattern in generic_patterns):
+        return "O conteúdo gerado é uma instrução genérica, não um resumo dos arquivos."
+    missing = [str(path) for path in paths if str(path).casefold() not in normalized]
+    if missing:
+        return "O resumo não referencia todos os arquivos-fonte entregues: " + ", ".join(missing[:20])
+    substantive = re.sub(r"(?m)^\s*#{1,6}\s+.*$", "", content)
+    substantive = re.sub(r"[*_>#|\-]+", " ", substantive)
+    if len(re.findall(r"\b[\wÀ-ÿ]{3,}\b", substantive)) < max(40, 8 * len(paths)):
+        return "O conteúdo é curto demais para demonstrar um resumo substantivo dos arquivos-fonte."
+    return None
+
+
 def _artifact_content_from_final(content: str) -> str | None:
     """Extract document content from a final response, dropping trailing tool-use narration."""
     text = content.strip()
@@ -837,6 +868,8 @@ def _artifact_content_from_final(content: str) -> str | None:
 def _build_task_steps(goal: str) -> list[dict[str, Any]]:
     """Decompose common file workflows deterministically without another model call."""
     sources = _required_source_paths(goal)
+    workspace_scope = _requested_workspace_scope(goal)
+    workspace_summary = workspace_scope is not None and _goal_requires_file_artifact(goal)
     creates_artifact = _goal_requires_file_artifact(goal)
     researches_web = _goal_requires_web_research(goal)
     artifact_format = _artifact_format(goal)
@@ -927,6 +960,31 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
                 "status": "pending",
                 "depends_on": ["draft_content"],
                 "instruction": "The Core will create the output file from the generated content and validate it after approval.",
+            },
+        ])
+    elif workspace_summary:
+        steps.extend([
+            {
+                "id": "summarize_workspace",
+                "kind": "summarize_workspace",
+                "status": "pending",
+                "depends_on": [],
+                "instruction": (
+                    "Summarize the actual contents of every eligible file under workspace-relative directory "
+                    + repr(workspace_scope)
+                    + ". The Core has already explored that exact directory. Use the supplied file evidence; "
+                    "do not explain how you would read files, write sample scripts, invent file contents, or claim "
+                    "that a tool is unavailable. Include a section for each source file with its path and a concise, "
+                    "content-specific summary. Produce the requested artifact content only."
+                ),
+            },
+            {
+                "id": "create_artifact",
+                "kind": "create_artifact",
+                "path": _artifact_output_path(goal),
+                "status": "pending",
+                "depends_on": ["summarize_workspace"],
+                "instruction": "The Core will create the output file from the generated content and validate its content against the requested scope and source manifest after approval.",
             },
         ])
     elif creates_artifact:
@@ -1053,8 +1111,27 @@ def _set_all_task_steps_completed(task_id: int, artifact: dict[str, Any] | None 
     return plan
 
 
+def _requested_workspace_scope(goal: str) -> str | None:
+    """Resolve an explicitly named directory as a path relative to the active workspace."""
+    patterns = (
+        r"\b(?:arquivos|files|documentos|documents)\b.{0,100}?\b(?:em|no|na|dentro\s+de|in|inside|under|within)\s+['\" ]*/?([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)",
+        r"\b(?:diret[oó]rio|pasta|folder|directory)\s+['\" ]*/?([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, goal, flags=re.IGNORECASE)
+        if not match:
+            continue
+        candidate = Path(match.group(1))
+        if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
+            continue
+        return candidate.as_posix()
+    return None
+
+
 def _goal_requests_workspace_exploration(goal: str) -> bool:
-    """Recognize explicit requests to inspect all files in the active project."""
+    """Recognize requests to inspect a workspace or a specifically named directory."""
+    if _requested_workspace_scope(goal) is not None:
+        return True
     patterns = (
         r"\b(?:all|every|entire)\s+(?:project\s+)?(?:files|file tree|workspace|codebase)\b",
         r"\b(?:todos|todas)\s+(?:os\s+)?(?:arquivos|pastas|diret[oó]rios)\b",
@@ -1089,7 +1166,9 @@ def _prepare_workspace_exploration(
     except Exception:
         pass
 
-    arguments = {"operation": "explore", "path": "."}
+    requested_scope = _requested_workspace_scope(goal)
+    scope = requested_scope or "."
+    arguments = {"operation": "explore", "path": scope}
     call = None
     try:
         policy = resolve_tool_policy("filesystem", arguments)
@@ -1129,7 +1208,8 @@ def _prepare_workspace_exploration(
 
     data = result.data
     files = data.get("files", [])
-    context_budget = 24_000
+    # Bounded budget sized for ordinary documentation folders.
+    context_budget = 80_000
     context_used = 0
     passed_to_model = []
     partially_passed = []
@@ -1159,6 +1239,8 @@ def _prepare_workspace_exploration(
     summary = {
         "status": data.get("status"),
         "workspace": data.get("workspace"),
+        "scope": data.get("scope", scope),
+        "requested_scope": scope,
         "directories": data.get("directories", []),
         "directories_found": data.get("directories_found", 0),
         "files_found": data.get("files_found", 0),
@@ -1168,8 +1250,8 @@ def _prepare_workspace_exploration(
         "bytes_read": data.get("bytes_read", 0),
         "duration_ms": data.get("duration_ms", 0),
         "limits_reached": data.get("limits_reached", []),
-        "files_passed_to_model": passed_to_model,
-        "files_partially_passed_to_model": partially_passed,
+        "files_passed_to_model": list(passed_to_model),
+        "files_partially_passed_to_model": list(partially_passed),
         "files_not_passed_to_model": [item.get("path") for item in files if isinstance(item, dict) and item.get("path") not in passed_set],
         "ignored": data.get("ignored", [])[:100],
         "ignored_records_truncated": max(0, len(data.get("ignored", [])) - 100),
@@ -1188,6 +1270,8 @@ def _prepare_workspace_exploration(
             duration_ms=int(data.get("duration_ms", 0)),
             metadata={
                 "workspace": data.get("workspace"),
+                "scope": data.get("scope", scope),
+                "requested_scope": scope,
                 "directories_found": data.get("directories_found", 0),
                 "files_found": data.get("files_found", 0),
                 "files_read": data.get("files_read", 0),
@@ -1198,6 +1282,7 @@ def _prepare_workspace_exploration(
                 "files_passed_to_model": len(passed_to_model),
                 "files_partially_passed_to_model": len(partially_passed),
                 "files_not_passed_to_model": len(summary["files_not_passed_to_model"]),
+                "requested_scope": scope,
                 "ignored_reasons": {
                     reason: sum(1 for item in data.get("ignored", []) if item.get("reason") == reason)
                     for reason in reasons
@@ -1208,8 +1293,12 @@ def _prepare_workspace_exploration(
         pass
     context.append({
         "role": "system",
-        "content": "Mosaic workspace exploration report (persisted ToolResult is authoritative):\n"
-        + json.dumps(summary, ensure_ascii=False, sort_keys=True),
+        "content": (
+            "Mosaic workspace exploration report (persisted ToolResult is authoritative). "
+            "Distinguish files read by Core from files delivered to the model. Use only the listed scope and "
+            "evidence; do not claim omitted files were reviewed.\n"
+            + json.dumps(summary, ensure_ascii=False, sort_keys=True)
+        ),
     })
     return summary
 
@@ -1336,7 +1425,7 @@ def _allowed_tools_for_step(plan: dict[str, Any] | None) -> set[str] | None:
     if step.get("kind") == "research_sources":
         allowed = step.get("allowed_tools", [])
         return {name for name in allowed if isinstance(name, str)}
-    if step.get("kind") in {"summarize_source", "transform_source", "answer_from_source", "draft_content", "create_artifact", "write_artifact"}:
+    if step.get("kind") in {"summarize_source", "transform_source", "answer_from_source", "draft_content", "summarize_workspace", "create_artifact", "write_artifact"}:
         return set()
     return None
 
@@ -1379,6 +1468,19 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
         if current is not None and current.status == "executing":
             update_task(task_id, status="failed", result={"error": error, "iterations": 0})
         return {"status": "failed", "error": error, "iterations": 0}
+
+    if exploration is not None and _requested_workspace_scope(goal) is not None:
+        if exploration.get("status") != "success" or exploration.get("files_not_passed_to_model") or exploration.get("files_partially_passed_to_model"):
+            error = (
+                "A tarefa exige cobertura integral da pasta "
+                + str(exploration.get("requested_scope", "."))
+                + ", mas a descoberta, leitura ou contextualização ficou parcial. "
+                "Nenhum artefato será criado para evitar um resumo incompleto."
+            )
+            current = get_task(task_id)
+            if current is not None and current.status == "executing":
+                update_task(task_id, status="failed", result={"error": error, "iterations": 0, "exploration": exploration})
+            return {"status": "failed", "error": error, "iterations": 0, "exploration": exploration}
 
     plan = dict((get_task(task_id).plan or plan))
     if _goal_requires_file_artifact(goal):
@@ -1475,6 +1577,23 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                     update_task(task_id, status="failed", result={"error": error, "iterations": iteration})
                     return {"status": "failed", "error": error, "iterations": iteration}
 
+                validation_step = _current_task_step(current.plan)
+                if validation_step is not None and validation_step.get("kind") == "summarize_workspace":
+                    validation_error = _validate_workspace_summary_content(artifact_content, exploration)
+                    if validation_error:
+                        context.append({
+                            "role": "system",
+                            "content": (
+                                "Mosaic artifact quality gate rejected the draft: " + validation_error
+                                + " Revise using the supplied source contents. Do not provide instructions or example scripts. "
+                                "Return the complete artifact content only."
+                            ),
+                        })
+                        if iteration == iteration_limit:
+                            update_task(task_id, status="failed", result={"error": validation_error, "iterations": iteration})
+                            return {"status": "failed", "error": validation_error, "iterations": iteration}
+                        continue
+
                 step = _current_task_step(current.plan)
                 output_sha256 = hashlib.sha256(artifact_content.encode("utf-8")).hexdigest()
                 if step is not None and step.get("kind") == "research_sources":
@@ -1503,7 +1622,7 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                         output_sha256=output_sha256,
                         output_chars=len(artifact_content),
                     )
-                elif step is not None and step.get("kind") in {"summarize_source", "transform_source", "draft_content"}:
+                elif step is not None and step.get("kind") in {"summarize_source", "transform_source", "draft_content", "summarize_workspace"}:
                     _set_task_step_status(
                         task_id,
                         str(step["id"]),

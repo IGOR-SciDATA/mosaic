@@ -148,6 +148,7 @@ class FilesystemTool(Tool):
         if operation == "explore":
             return _explore_workspace(
                 root,
+                scope=path,
                 max_files=arguments.get("max_files"),
                 max_file_bytes=arguments.get("max_file_bytes"),
                 max_total_bytes=arguments.get("max_total_bytes"),
@@ -991,6 +992,7 @@ def _is_sensitive_workspace_path(relative_path: str) -> bool:
 def _explore_workspace(
     root: Path,
     *,
+    scope: Path | None = None,
     max_files: int | None = None,
     max_file_bytes: int | None = None,
     max_total_bytes: int | None = None,
@@ -1007,6 +1009,15 @@ def _explore_workspace(
     total_bytes = 0
     limits: list[str] = []
     root = root.resolve(strict=True)
+    scan_root = (scope or root).resolve(strict=True)
+    try:
+        scan_root.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("Workspace exploration scope must remain inside the active workspace") from exc
+    if not scan_root.is_dir():
+        raise ValueError("Workspace exploration scope must be a directory")
+    scope_relative = scan_root.relative_to(root).as_posix()
+    directories = {scope_relative}
 
     def record_walk_error(error: OSError) -> None:
         raw_path = getattr(error, "filename", None)
@@ -1017,7 +1028,7 @@ def _explore_workspace(
         failures.append({"path": relative, "reason": "directory_scan_error"})
 
     for current_dir, dir_names, file_names in os.walk(
-        root, topdown=True, onerror=record_walk_error, followlinks=False
+        scan_root, topdown=True, onerror=record_walk_error, followlinks=False
     ):
         if cancel_check is not None and cancel_check():
             limits.append("cancelled")
@@ -1119,6 +1130,7 @@ def _explore_workspace(
         "operation": "explore",
         "status": "success" if not limits and not failures else "partial",
         "workspace": str(root),
+        "scope": scope_relative,
         "directories_found": len(directories),
         "directories": sorted(directories, key=str.casefold),
         "files_found": files_found,
