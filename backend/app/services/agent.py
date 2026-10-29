@@ -237,6 +237,7 @@ def _auto_paginate_read(
     initial_result: ToolResult,
     *,
     native_protocol: bool,
+    execution_budget: HIEExecutionBudget | None = None,
 ) -> None:
     """Fetch remaining chunks in Core code; do not spend model turns on deterministic pagination."""
     result = initial_result
@@ -274,7 +275,11 @@ def _auto_paginate_read(
                 raise ValueError("Read-only pagination unexpectedly requires approval")
             call = create_tool_call(conversation_id, "filesystem", arguments, task_id=task_id)
             approved = approve_tool_call(call)
+            if execution_budget is not None:
+                execution_budget.before_tool_call()
             result = execute_tool_call(approved)
+        except HIERuntimeLimitExceeded:
+            raise
         except Exception as exc:
             context.append({
                 "role": "system",
@@ -1058,6 +1063,8 @@ def _prepare_task_sources(
     conversation_id: int,
     goal: str,
     context: list[dict[str, Any]],
+    *,
+    execution_budget: HIEExecutionBudget | None = None,
 ) -> list[str]:
     """Read explicitly requested source files through the Core before asking the model."""
     sources = _required_source_paths(goal)
@@ -1076,6 +1083,8 @@ def _prepare_task_sources(
                 raise ValueError("Read-only filesystem operation unexpectedly requires approval")
             call = create_tool_call(conversation_id, "filesystem", arguments, task_id=task_id)
             approved = approve_tool_call(call)
+            if execution_budget is not None:
+                execution_budget.before_tool_call()
             result = execute_tool_call(approved)
             context.append(_tool_context(call.id, result))
             if result.status == "completed":
@@ -1085,7 +1094,10 @@ def _prepare_task_sources(
                     context,
                     result,
                     native_protocol=False,
+                    execution_budget=execution_budget,
                 )
+        except HIERuntimeLimitExceeded:
+            raise
         except Exception as exc:
             context.append({
                 "role": "system",
@@ -1197,12 +1209,22 @@ def run_agent(
     # Explicit source paths are deterministic work, not a tool-choice quiz for the model.
     # Read them through the normal ToolCall/ToolResult path and paginate in Core code.
     source_context: list[dict[str, Any]] = []
-    missing_sources = _prepare_task_sources(
-        task_id,
-        task.conversation_id,
-        goal,
-        source_context,
-    )
+    try:
+        missing_sources = _prepare_task_sources(
+            task_id,
+            task.conversation_id,
+            goal,
+            source_context,
+            execution_budget=execution_budget,
+        )
+    except HIERuntimeCancelled as exc:
+        result = {"error": str(exc), "iterations": 0, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+        update_task(task_id, status="cancelled", result=result)
+        return {"status": "cancelled", **result}
+    except HIERuntimeLimitExceeded as exc:
+        result = {"error": str(exc), "iterations": 0, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+        update_task(task_id, status="failed", result=result)
+        return {"status": "failed", **result}
     if missing_sources:
         error = "Não foi possível ler integralmente o(s) arquivo(s) solicitado(s): " + ", ".join(missing_sources)
         current = get_task(task_id)
@@ -1494,6 +1516,7 @@ def run_agent(
                 context,
                 tool_result,
                 native_protocol=native_message is not None,
+                execution_budget=execution_budget,
             )
 
     result = {"error": "Agent iteration limit reached", "iterations": iteration_limit}
