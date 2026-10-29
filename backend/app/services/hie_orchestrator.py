@@ -243,6 +243,11 @@ def run_candidate_experiment(
         record = {
             "schema_version": 1,
             "task_id": task.id,
+            "baseline_profile": {
+                "slug": baseline_snapshot["slug"],
+                "version": baseline_snapshot["version"],
+                "sha256": baseline_snapshot["sha256"],
+            },
             "candidate_sha256": candidate_sha256,
             "diff_sha256": diff_sha256,
             "target_kind": candidate["target"]["kind"],
@@ -261,6 +266,11 @@ def run_candidate_experiment(
                 "elapsed_ms": int((time.monotonic() - started) * 1000),
             },
         }
+        # Seal the exact experiment record so downstream reviewers can detect
+        # accidental or unauthorized edits to its data-only fields.
+        record["record_sha256"] = hashlib.sha256(
+            canonical_json(record).encode("utf-8")
+        ).hexdigest()
         if len(canonical_json(record).encode("utf-8")) > active_budgets.artifact_bytes:
             raise HIEBudgetExceeded("HIE experiment record exceeds artifact-size budget")
         _emit(task, "hie.experiment.completed", "HIE comparison completed without promotion", status="completed", metadata=record)
