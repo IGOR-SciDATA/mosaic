@@ -287,13 +287,9 @@ def run_candidate_experiment(
         record_size = len(canonical_json(record).encode("utf-8"))
         if record_size > remaining_bytes:
             raise HIEBudgetExceeded("HIE experiment record exceeds the remaining aggregate artifact budget")
-        record_artifact = persist_record_evidence(task.id, record, max_bytes=remaining_bytes)
-        record["record_artifact"] = {
-            "artifact_id": record_artifact["artifact_id"],
-            "sha256": record_artifact["sha256"],
-            "size_bytes": record_artifact["size_bytes"],
-        }
-        # The sealed record deliberately does not self-reference its Artifact.
+        # The sealed record deliberately does not self-reference its Artifact;
+        # Core Artifact lookup remains the source for the record Artifact ID.
+        persist_record_evidence(task.id, record, max_bytes=remaining_bytes)
         _emit(task, "hie.experiment.completed", "HIE comparison completed without promotion", status="completed", metadata=record)
         return record
     except HIEExperimentCancelled as exc:
