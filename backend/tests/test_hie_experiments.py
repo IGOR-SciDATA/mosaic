@@ -85,6 +85,9 @@ def test_experiment_runs_isolated_baseline_candidate_and_persists_evidence(clien
     assert result["results"]["automatic_promotion"] is False
     assert result["results"]["evidence"][0]["baseline"]["output_preview"] == "baseline result"
     assert result["results"]["evidence"][0]["candidate"]["output_preview"] == "approved result"
+    assert result["results"]["evidence"][0]["artifact_evidence"]["baseline_output"]["artifact_id"]
+    assert result["results"]["evidence"][0]["artifact_evidence"]["candidate_output"]["sha256"]
+    assert "path" not in result["results"]["evidence"][0]["artifact_evidence"]["candidate_output"]
     active_profile = get_project_agent(project.id, "qa-agent")
     assert active_profile["instructions"] == "Answer concisely."
     assert active_profile["version"] == 1
