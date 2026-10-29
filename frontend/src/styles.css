@@ -3394,3 +3394,14 @@ body { overflow: hidden; }
   .hie-experiment-modal .hie-experiment-actions .primary-action { width: 100%; }
   .hie-hash-line { align-items: flex-start; flex-direction: column; gap: 3px; }
 }
+
+.hie-experiment-summary {
+  display: grid;
+  grid-template-columns: minmax(90px, .7fr) minmax(0, 1.5fr);
+  gap: 7px 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.hie-experiment-summary span { color: var(--text-secondary); font-size: 11px; }
+.hie-experiment-summary strong { font-size: 11px; font-weight: 500; overflow-wrap: anywhere; }
