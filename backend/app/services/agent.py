@@ -11,12 +11,13 @@ from typing import Any
 from app.context.manager import build_context
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task, update_task
-from app.models.tool_call_repository import create_tool_call, list_tool_calls
+from app.models.tool_call_repository import create_tool_call, list_tool_calls, update_tool_call
 from app.models.tool_result import ToolResult
 from app.models.tool_result_repository import list_tool_results
 from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_policy, resolve_tool_workspace
 from app.services.agent_profiles import validate_agent_profile_snapshot
 from app.services.agent_library import agent_snapshot_messages, validate_agent_snapshot
+from app.services.hie_runtime import HIEExecutionBudget, HIERuntimeLimitExceeded, HIERuntimeCancelled
 
 DEFAULT_ITERATION_LIMIT = 10
 TOOL_OBSERVATION_MAX_CHARS = 12_000
@@ -236,6 +237,7 @@ def _auto_paginate_read(
     initial_result: ToolResult,
     *,
     native_protocol: bool,
+    execution_budget: HIEExecutionBudget | None = None,
 ) -> None:
     """Fetch remaining chunks in Core code; do not spend model turns on deterministic pagination."""
     result = initial_result
@@ -273,7 +275,18 @@ def _auto_paginate_read(
                 raise ValueError("Read-only pagination unexpectedly requires approval")
             call = create_tool_call(conversation_id, "filesystem", arguments, task_id=task_id)
             approved = approve_tool_call(call)
+            if execution_budget is not None:
+                execution_budget.before_tool_call()
             result = execute_tool_call(approved)
+        except HIERuntimeCancelled:
+            update_tool_call(call.id, status="cancelled")
+            raise
+        except HIERuntimeCancelled:
+            update_tool_call(call.id, status="cancelled")
+            raise
+        except HIERuntimeLimitExceeded:
+            update_tool_call(call.id, status="failed")
+            raise
         except Exception as exc:
             context.append({
                 "role": "system",
@@ -1057,6 +1070,8 @@ def _prepare_task_sources(
     conversation_id: int,
     goal: str,
     context: list[dict[str, Any]],
+    *,
+    execution_budget: HIEExecutionBudget | None = None,
 ) -> list[str]:
     """Read explicitly requested source files through the Core before asking the model."""
     sources = _required_source_paths(goal)
@@ -1075,6 +1090,8 @@ def _prepare_task_sources(
                 raise ValueError("Read-only filesystem operation unexpectedly requires approval")
             call = create_tool_call(conversation_id, "filesystem", arguments, task_id=task_id)
             approved = approve_tool_call(call)
+            if execution_budget is not None:
+                execution_budget.before_tool_call()
             result = execute_tool_call(approved)
             context.append(_tool_context(call.id, result))
             if result.status == "completed":
@@ -1084,7 +1101,14 @@ def _prepare_task_sources(
                     context,
                     result,
                     native_protocol=False,
+                    execution_budget=execution_budget,
                 )
+        except HIERuntimeCancelled:
+            update_tool_call(call.id, status="cancelled")
+            raise
+        except HIERuntimeLimitExceeded:
+            update_tool_call(call.id, status="failed")
+            raise
         except Exception as exc:
             context.append({
                 "role": "system",
@@ -1167,7 +1191,13 @@ def _allowed_tools_for_step(plan: dict[str, Any] | None) -> set[str] | None:
     return None
 
 
-def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, Any]], *, iteration_limit: int = DEFAULT_ITERATION_LIMIT) -> dict[str, Any]:
+def run_agent(
+    task_id: int,
+    decide: Callable[[list[dict[str, Any]]], dict[str, Any]],
+    *,
+    iteration_limit: int = DEFAULT_ITERATION_LIMIT,
+    execution_budget: HIEExecutionBudget | None = None,
+) -> dict[str, Any]:
     if iteration_limit <= 0:
         raise ValueError("iteration_limit must be greater than zero")
     task = get_task(task_id)
@@ -1190,12 +1220,22 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
     # Explicit source paths are deterministic work, not a tool-choice quiz for the model.
     # Read them through the normal ToolCall/ToolResult path and paginate in Core code.
     source_context: list[dict[str, Any]] = []
-    missing_sources = _prepare_task_sources(
-        task_id,
-        task.conversation_id,
-        goal,
-        source_context,
-    )
+    try:
+        missing_sources = _prepare_task_sources(
+            task_id,
+            task.conversation_id,
+            goal,
+            source_context,
+            execution_budget=execution_budget,
+        )
+    except HIERuntimeCancelled as exc:
+        result = {"error": str(exc), "iterations": 0, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+        update_task(task_id, status="cancelled", result=result)
+        return {"status": "cancelled", **result}
+    except HIERuntimeLimitExceeded as exc:
+        result = {"error": str(exc), "iterations": 0, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+        update_task(task_id, status="failed", result=result)
+        return {"status": "failed", **result}
     if missing_sources:
         error = "Não foi possível ler integralmente o(s) arquivo(s) solicitado(s): " + ", ".join(missing_sources)
         current = get_task(task_id)
@@ -1247,7 +1287,16 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
             raise ValueError(f"Task is not executable: {current.status}")
 
         try:
-            decision = decide(context)
+            try:
+                decision = decide(context)
+            except HIERuntimeCancelled as exc:
+                result = {"error": str(exc), "iterations": iteration, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+                update_task(task_id, status="cancelled", result=result)
+                return {"status": "cancelled", **result}
+            except HIERuntimeLimitExceeded as exc:
+                result = {"error": str(exc), "iterations": iteration, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+                update_task(task_id, status="failed", result=result)
+                return {"status": "failed", **result}
         except Exception as exc:
             update_task(task_id, status="failed", result={"error": str(exc), "iterations": iteration})
             return {"status": "failed", "error": str(exc), "iterations": iteration}
@@ -1443,7 +1492,19 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                 update_task(task_id, status="awaiting_approval", result={"tool_call_id": call.id, "iterations": iteration})
                 return {"status": "awaiting_approval", "tool_call_id": call.id, "iterations": iteration}
             approved = approve_tool_call(call)
+            if execution_budget is not None:
+                execution_budget.before_tool_call()
             tool_result = execute_tool_call(approved)
+        except HIERuntimeCancelled as exc:
+            update_tool_call(call.id, status="cancelled")
+            result = {"error": str(exc), "iterations": iteration, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+            update_task(task_id, status="cancelled", result=result)
+            return {"status": "cancelled", **result}
+        except HIERuntimeLimitExceeded as exc:
+            update_tool_call(call.id, status="failed")
+            result = {"error": str(exc), "iterations": iteration, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+            update_task(task_id, status="failed", result=result)
+            return {"status": "failed", **result}
         except Exception as exc:
             context.append({
                 "role": "system",
@@ -1466,6 +1527,7 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                 context,
                 tool_result,
                 native_protocol=native_message is not None,
+                execution_budget=execution_budget,
             )
 
     result = {"error": "Agent iteration limit reached", "iterations": iteration_limit}
