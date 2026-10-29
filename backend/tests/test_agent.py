@@ -850,3 +850,43 @@ def test_explicit_save_path_after_content_request_plans_and_targets_artifact():
     assert steps[-1]["path"] == "docs/PRODUCT_BACKLOG.md"
     assert steps[-1]["depends_on"] == ["summarize_source"]
 
+
+
+def test_agent_explores_workspace_before_model_without_invented_paths_or_read_approvals(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    project = create_project("Workspace exploration", str(workspace))
+    (workspace / "src" / "nested").mkdir(parents=True)
+    (workspace / "src" / "one.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (workspace / "src" / "nested" / "two.md").write_text("Second file content.\n", encoding="utf-8")
+    goal = "Leia todos os arquivos permitidos do projeto e analise sua estrutura."
+    task = _task(plan={"goal": goal}, project_id=project.id)
+    observed = []
+
+    def decide(context):
+        observed.append(context)
+        flattened = "\n".join(str(item.get("content", "")) for item in context)
+        assert "src/one.py" in flattened
+        assert "VALUE = 1" in flattened
+        assert "src/nested/two.md" in flattened
+        assert "Second file content." in flattened
+        assert "workspace exploration report" in flattened
+        return {"type": "final", "content": "Analisei os arquivos lidos."}
+
+    result = run_agent(task.id, decide)
+    assert result["status"] == "completed"
+    assert len(observed) == 1
+    calls = [call for call in list_tool_calls(task.conversation_id) if call.task_id == task.id]
+    explore = next(call for call in calls if call.tool_name == "filesystem" and call.arguments.get("operation") == "explore")
+    assert explore.status == "completed"
+    assert len(list_tool_results(explore.id)) == 1
+    assert not any(call.status == "pending" for call in calls)
+    events = [event.event_name for event in list_task_events(task.id)]
+    assert "workspace.discovery.started" in events
+    assert "workspace.discovery.completed" in events
+
+
+def test_workspace_exploration_goal_detection_is_deterministic():
+    from app.services.agent import _goal_requests_workspace_exploration
+    assert _goal_requests_workspace_exploration("Leia todos os arquivos permitidos do projeto.")
+    assert _goal_requests_workspace_exploration("Explore the entire workspace")
+    assert not _goal_requests_workspace_exploration("Leia README.md")
