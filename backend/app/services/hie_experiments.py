@@ -9,7 +9,7 @@ from app.models.conversation_repository import get_conversation
 from app.models.project_repository import get_project
 from app.models.repository import get_model
 from app.models.task_event_repository import create_task_event
-from app.models.task_repository import create_task, get_task
+from app.models.task_repository import create_task, get_task, update_task
 from app.providers.factory import resolve_model_provider
 from app.services.agent_library import get_project_agent
 from app.services.hie_candidate import build_candidate, candidate_diff, validate_candidate
@@ -248,6 +248,9 @@ def run_experiment(experiment_id: int) -> None:
         if cursor.rowcount != 1:
             return
     experiment = get_experiment(experiment_id)
+    task = get_task(experiment["task_id"])
+    if task is not None and task.status == "pending":
+        update_task(task.id, status="executing")
     _emit(experiment, "hie.experiment_started", "Running baseline and candidate against the same fixtures without tools or external actions.", "running", {
         "candidate_sha256": experiment["candidate"]["sha256"],
         "fixture_count": len(experiment["fixtures"]),
@@ -330,6 +333,9 @@ def run_experiment(experiment_id: int) -> None:
             )
             connection.commit()
         experiment = get_experiment(experiment_id)
+        task = get_task(experiment["task_id"])
+        if task is not None and task.status == "executing":
+            update_task(task.id, status="completed", result={"hie_experiment_id": experiment_id, "assessment": results["assessment"], "results": results})
         _emit(experiment, "hie.experiment_completed", "Baseline/candidate probes and deterministic fixture checks completed; no candidate was promoted.", "completed", {
             "assessment": results["assessment"],
             "baseline_pass_rate": results["baseline_pass_rate"],
@@ -346,6 +352,15 @@ def run_experiment(experiment_id: int) -> None:
             )
             connection.commit()
         experiment = get_experiment(experiment_id)
+        task = get_task(experiment["task_id"])
+        if task is not None and task.status in {"pending", "executing"}:
+            try:
+                if task.status == "pending":
+                    update_task(task.id, status="failed", result={"hie_experiment_id": experiment_id, "error": safe_error})
+                else:
+                    update_task(task.id, status="failed", result={"hie_experiment_id": experiment_id, "error": safe_error})
+            except ValueError:
+                pass
         _emit(experiment, "hie.experiment_failed", "HIE experiment failed; active profile was not modified.", "failed", {
             "error_type": type(exc).__name__,
             "candidate_sha256": experiment["candidate"]["sha256"],
