@@ -975,7 +975,7 @@ function HieExperimentModal({scope,onClose}) {
     const candidateHash=experiment.candidate?.sha256;
     const baseline=experiment.baseline_snapshot;
     if(!candidateHash||!baseline?.version||!baseline?.sha256)return;
-    const confirmation=`Aprovar candidato para revisão final?\\n\\nCandidato SHA-256: ${candidateHash}\\nPerfil ativo observado: v${baseline.version}\\nHash ativo: ${baseline.sha256}\\n\\nA aprovação não altera o perfil ativo.`;
+    const confirmation=`Aprovar candidato para revisão final?\n\nCandidato SHA-256: ${candidateHash}\nPerfil ativo observado: v${baseline.version}\nHash ativo: ${baseline.sha256}\n\nA aprovação não altera o perfil ativo.`;
     if(!window.confirm(confirmation))return;
     setBusy(true);setError("");setNotice("");
     try{
@@ -991,7 +991,7 @@ function HieExperimentModal({scope,onClose}) {
     if(!experiment||!approved||busy)return;
     const baseline=activeProfile||experiment.baseline_snapshot;
     const candidateHash=experiment.candidate?.sha256;
-    const confirmation=`PROMOVER candidato para o perfil ativo?\\n\\nCandidato SHA-256: ${candidateHash}\\nVersão ativa esperada: v${baseline.version}\\nHash ativo esperado: ${baseline.sha256}\\n\\nIsso altera as instruções usadas em execuções futuras. O perfil anterior será preservado para rollback.`;
+    const confirmation=`PROMOVER candidato para o perfil ativo?\n\nCandidato SHA-256: ${candidateHash}\nVersão ativa esperada: v${baseline.version}\nHash ativo esperado: ${baseline.sha256}\n\nIsso altera as instruções usadas em execuções futuras. O perfil anterior será preservado para rollback.`;
     if(!window.confirm(confirmation))return;
     setBusy(true);setError("");setNotice("");
     try{
@@ -1006,7 +1006,7 @@ function HieExperimentModal({scope,onClose}) {
 
   async function rollbackPromotedCandidate(){
     if(!promotion||!activeProfile||busy)return;
-    const confirmation=`Restaurar o conteúdo anterior à promoção #${promotion.promotion_id}?\\n\\nVersão ativa esperada: v${activeProfile.version}\\nHash ativo esperado: ${activeProfile.sha256}\\n\\nO rollback criará uma nova versão; não apagará o histórico.`;
+    const confirmation=`Restaurar o conteúdo anterior à promoção #${promotion.promotion_id}?\n\nVersão ativa esperada: v${activeProfile.version}\nHash ativo esperado: ${activeProfile.sha256}\n\nO rollback criará uma nova versão; não apagará o histórico.`;
     if(!window.confirm(confirmation))return;
     setBusy(true);setError("");setNotice("");
     try{
@@ -1202,11 +1202,11 @@ export default function App(){
     if(!conversation||sending)return; setError("");setSending(true);
     const localUser={localId:`user-${Date.now()}`,role:"user",content,created_at:new Date().toISOString()};
     const localAssistant={localId:`assistant-${Date.now()}`,role:"assistant",content:"",created_at:new Date().toISOString()};
-    const taskIntent = /^\\/[a-z0-9-]+(?:\\s|$)/i.test(content.trim()) || /\\b(implemente|implementar|desenvolva|desenvolver|crie um arquivo|crie uma funcionalidade|altere o (frontend|backend|código)|corrija o (bug|erro)|execute essa tarefa|faça essa tarefa|como tarefa|gere um projeto|construa o aplicativo)\\b/i.test(content);
+    const taskIntent = /^\/[a-z0-9-]+(?:\s|$)/i.test(content.trim()) || /\b(implemente|implementar|desenvolva|desenvolver|crie um arquivo|crie uma funcionalidade|altere o (frontend|backend|código)|corrija o (bug|erro)|execute essa tarefa|faça essa tarefa|como tarefa|gere um projeto|construa o aplicativo)\b/i.test(content);
     setMessages(items=>[...items,localUser,localAssistant]);
     try{
       if(taskIntent){
-        const task=await api.tasks.start({conversation_id:conversation.id,goal:content,type:/\\b(relatório|relatorio|documento|texto|pdf)\\b/i.test(content)?"document":/\\b(análise|analise|pesquise|compare)\\b/i.test(content)?"analysis":/\\b(código|codigo|frontend|backend|aplicativo|app|bug|implemente|desenvolva)\\b/i.test(content)?"code_project":"generic"});
+        const task=await api.tasks.start({conversation_id:conversation.id,goal:content,type:/\b(relatório|relatorio|documento|texto|pdf)\b/i.test(content)?"document":/\b(análise|analise|pesquise|compare)\b/i.test(content)?"analysis":/\b(código|codigo|frontend|backend|aplicativo|app|bug|implemente|desenvolva)\b/i.test(content)?"code_project":"generic"});
         setMessages(items=>items.map(item=>item.localId===localAssistant.localId?{...item,content:"Iniciei a execução como tarefa. Acompanhe as etapas neste painel."}:item));
         setTaskTraces(items=>({...items,[localAssistant.localId]:{taskId:task.id,status:task.status||"executing",events:[],expanded:true}}));
         let lastEventId=0;
