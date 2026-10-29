@@ -159,6 +159,9 @@ def init_db() -> None:
                 conversation_id INTEGER NOT NULL,
                 project_id INTEGER NOT NULL,
                 profile_slug TEXT NOT NULL,
+                provider TEXT NOT NULL DEFAULT '',
+                model_name TEXT NOT NULL DEFAULT '',
+                budget_json TEXT NOT NULL DEFAULT '{}',
                 status TEXT NOT NULL DEFAULT 'draft' CHECK (
                     status IN ('draft', 'queued', 'running', 'completed', 'failed', 'rejected')
                 ),
@@ -175,6 +178,14 @@ def init_db() -> None:
                 FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
             )
         """)
+        hie_experiment_columns = {row["name"] for row in connection.execute("PRAGMA table_info(hie_experiments)").fetchall()}
+        if "provider" not in hie_experiment_columns:
+            connection.execute("ALTER TABLE hie_experiments ADD COLUMN provider TEXT NOT NULL DEFAULT ''")
+        if "model_name" not in hie_experiment_columns:
+            connection.execute("ALTER TABLE hie_experiments ADD COLUMN model_name TEXT NOT NULL DEFAULT ''")
+        if "budget_json" not in hie_experiment_columns:
+            connection.execute("ALTER TABLE hie_experiments ADD COLUMN budget_json TEXT NOT NULL DEFAULT '{}'")
+
         connection.execute("""
             CREATE INDEX IF NOT EXISTS idx_hie_experiments_task_status
             ON hie_experiments(task_id, status)
