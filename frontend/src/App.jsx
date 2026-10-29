@@ -933,7 +933,7 @@ function HieExperimentModal({scope,onClose}) {
     setBusy(true);setError("");setNotice("");
     try{
       const payload={
-        ...scope,
+        ...(scope?.taskId ? {task_id:scope.taskId} : {conversation_id:scope?.conversationId}),
         profile_slug:profileSlug.trim(),
         candidate_content:candidateContent,
         fixtures:[{
