@@ -144,6 +144,9 @@ export const api = {
     getExperiment: (id) => request(`/hie/experiments/${id}`),
     runExperiment: (id) => request(`/hie/experiments/${id}/run`, { method: "POST" }),
     rejectExperiment: (id) => request(`/hie/experiments/${id}/reject`, { method: "POST" }),
+    approveCandidate: (id, payload) => request(`/hie/experiments/${id}/approve`, { method: "POST", body: JSON.stringify(payload) }),
+    promoteCandidate: (id, payload) => request(`/hie/experiments/${id}/promote`, { method: "POST", body: JSON.stringify(payload) }),
+    rollbackPromotion: (id, payload) => request(`/hie/promotions/${id}/rollback`, { method: "POST", body: JSON.stringify(payload) }),
   },
   toolCalls: {
     list: (conversationId, taskId) => request(`/tool-calls?conversation_id=${conversationId}${taskId ? `&task_id=${taskId}` : ""}`),
