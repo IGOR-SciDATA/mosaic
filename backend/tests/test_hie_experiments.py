@@ -122,6 +122,7 @@ def test_creation_event_failure_rolls_back_experiment_and_marks_task_failed(clie
             fixtures=[{"prompt": "Explain.", "expected_contains": ["detail"]}],
         )
 
+    from app.db.database import get_connection
     with get_connection() as connection:
         rows = connection.execute("SELECT id FROM hie_experiments").fetchall()
     assert rows == []
