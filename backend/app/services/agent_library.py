@@ -7,6 +7,7 @@ import re
 import unicodedata
 from typing import Any
 
+from app.db.database import get_connection
 from app.models.project_repository import get_project, update_project
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -142,30 +143,59 @@ def create_project_agent(project_id: int, payload: dict[str, Any]) -> dict[str, 
     return copy.deepcopy(profile)
 
 
-def update_project_agent(project_id: int, slug: str, payload: dict[str, Any]) -> dict[str, Any] | None:
-    project, library = _profile_state(project_id)
-    current = library.get(slug)
-    if current is None:
-        return None
-    next_profile = copy.deepcopy(current)
-    for key, limit in (("name", MAX_NAME_CHARS), ("description", MAX_DESCRIPTION_CHARS), ("instructions", MAX_INSTRUCTIONS_CHARS)):
-        if key not in payload:
-            continue
-        value = payload[key]
-        if not isinstance(value, str) or (key != "description" and not value.strip()) or len(value) > limit:
-            raise ValueError(f"Invalid {key}; maximum length is {limit}")
-        next_profile[key] = value.strip() if key != "instructions" else value
-    if "skills" in payload:
-        next_profile["skills"] = _normalize_skills(payload["skills"], current.get("skills", []))
-    comparable = {key: next_profile[key] for key in ("name", "description", "instructions", "skills")}
-    old_comparable = {key: current[key] for key in ("name", "description", "instructions", "skills")}
-    if comparable != old_comparable:
-        next_profile["version"] = int(current.get("version", 1)) + 1
-    next_profile = _seal_profile(next_profile)
-    library = dict(library)
-    library[slug] = next_profile
-    _save_library(project_id, project, library)
-    return copy.deepcopy(next_profile)
+def update_project_agent(
+    project_id: int,
+    slug: str,
+    payload: dict[str, Any],
+    *,
+    expected_version: int | None = None,
+    expected_sha256: str | None = None,
+) -> dict[str, Any] | None:
+    """Update a profile under a SQLite write lock; optional CAS protects HIE lifecycle."""
+    with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute("SELECT state FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if row is None:
+            return None
+        state = json.loads(row["state"] or "{}")
+        library = state.get("agent_library", {})
+        if not isinstance(library, dict):
+            raise ValueError("Project agent library state is invalid")
+        current = library.get(slug)
+        if current is None:
+            return None
+        if expected_version is not None and current.get("version") != expected_version:
+            raise ValueError("Active profile version changed")
+        if expected_sha256 is not None and current.get("sha256") != expected_sha256:
+            raise ValueError("Active profile hash changed")
+
+        next_profile = copy.deepcopy(current)
+        for key, limit in (("name", MAX_NAME_CHARS), ("description", MAX_DESCRIPTION_CHARS), ("instructions", MAX_INSTRUCTIONS_CHARS)):
+            if key not in payload:
+                continue
+            value = payload[key]
+            if not isinstance(value, str) or (key != "description" and not value.strip()) or len(value) > limit:
+                raise ValueError(f"Invalid {key}; maximum length is {limit}")
+            next_profile[key] = value.strip() if key != "instructions" else value
+        if "skills" in payload:
+            next_profile["skills"] = _normalize_skills(payload["skills"], current.get("skills", []))
+        comparable = {key: next_profile[key] for key in ("name", "description", "instructions", "skills")}
+        old_comparable = {key: current[key] for key in ("name", "description", "instructions", "skills")}
+        if comparable != old_comparable:
+            next_profile["version"] = int(current.get("version", 1)) + 1
+        next_profile = _seal_profile(next_profile)
+        library = dict(library)
+        library[slug] = next_profile
+        state["agent_library"] = library
+        updated_at = datetime.now(timezone.utc).isoformat()
+        cursor = connection.execute(
+            "UPDATE projects SET state = ?, updated_at = ? WHERE id = ? AND state = ?",
+            (json.dumps(state, ensure_ascii=False), updated_at, project_id, row["state"]),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("Project state changed concurrently")
+        connection.commit()
+        return copy.deepcopy(next_profile)
 
 
 def delete_project_agent(project_id: int, slug: str) -> bool:
