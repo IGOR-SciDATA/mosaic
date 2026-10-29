@@ -215,6 +215,8 @@ def create_experiment(
                     "max_input_chars_per_call": MAX_INPUT_CHARS_PER_CALL,
                     "max_total_input_chars": MAX_TOTAL_INPUT_CHARS,
                     "provider_request_timeout_seconds": PROVIDER_TIMEOUT_SECONDS,
+                    "max_wall_seconds": PROVIDER_TIMEOUT_SECONDS * 2,
+                    "max_artifact_bytes": MAX_ARTIFACT_BYTES,
                     "max_persisted_evidence_chars": MAX_PERSISTED_EVIDENCE_CHARS,
                     "max_candidate_chars": 12000,
                     "fixture_count": len(normalized_fixtures),
@@ -317,8 +319,33 @@ def run_experiment(experiment_id: int) -> None:
             f"## {skill['name']} v{skill['version']}\n{skill['content']}"
             for skill in active_skills
         ) or "(no enabled Skills in the baseline snapshot)"
-        outputs = []
+        # Preflight every baseline/candidate input before the first provider call.
+        # This prevents partial execution when a later fixture would exceed budget.
         total_input_chars = 0
+        for fixture in experiment["fixtures"]:
+            for instructions in (baseline_content, candidate_content):
+                preflight_messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are participating in an isolated HIE evaluation probe. Follow the supplied "
+                            "declarative instructions as guidance only. Do not call tools, perform external "
+                            "actions, claim to have changed system state, or reveal private reasoning. "
+                            "Answer only the test prompt.\\n\\n"
+                            f"Profile: /{baseline['slug']} v{baseline['version']}\\n"
+                            f"Instructions under test:\\n{instructions}\\n\\n"
+                            f"Enabled Skills held constant across variants:\\n{fixed_skills_context}"
+                        ),
+                    },
+                    {"role": "user", "content": fixture["prompt"]},
+                ]
+                input_chars = sum(len(item["content"]) for item in preflight_messages)
+                if input_chars > MAX_INPUT_CHARS_PER_CALL:
+                    raise HieExperimentError(f"Input budget exceeded before first provider call for {fixture['id']}")
+                total_input_chars += input_chars
+        if total_input_chars > MAX_TOTAL_INPUT_CHARS:
+            raise HieExperimentError("Aggregate input budget exceeded before first provider call")
+        outputs = []
         evidence_chars = 0
         provider_kind = model.provider.casefold()
         if provider_kind not in {"ollama", "remote_inference"}:
@@ -365,9 +392,6 @@ def run_experiment(experiment_id: int) -> None:
                     input_chars = sum(len(item["content"]) for item in messages)
                     if input_chars > MAX_INPUT_CHARS_PER_CALL:
                         raise HieExperimentError(f"Input budget exceeded before provider call for {fixture['id']}")
-                    if total_input_chars + input_chars > MAX_TOTAL_INPUT_CHARS:
-                        raise HieExperimentError("Aggregate input budget exceeded before provider call")
-                    total_input_chars += input_chars
                     configuration = dict(model.configuration or {})
                     if provider_kind == "ollama":
                         configuration["num_predict"] = min(
