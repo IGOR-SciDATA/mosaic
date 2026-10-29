@@ -114,3 +114,35 @@ Esta regra deve ser lida em conjunto com:
 - o contrato de implementação do MVP e a arquitetura atual do Mosaic.
 
 Se algum documento anterior sugerir apenas um formato próprio de plugin ou tratar o GitHub somente como servidor MCP manual, esta regra prevalece: o primeiro objetivo é provar compatibilidade com o formato real do plugin GitHub de referência e, a partir dele, estabelecer uma base reutilizável para interoperabilidade com o marketplace.
+
+
+## 9. Cenário final obrigatório de ponta a ponta: melhoria autônoma assistida de repositório
+
+O resultado final da implementação deve permitir demonstrar, por meio da interface do Mosaic, o seguinte fluxo real e integrado. Este cenário é um critério de aceite do projeto, não apenas um exemplo ilustrativo.
+
+1. O usuário pede ao Mosaic para analisar um repositório GitHub e sugerir uma melhoria concreta, explicando o problema, a justificativa e o escopo proposto.
+2. O Mosaic consulta o repositório usando o plugin oficial do GitHub compatível com Claude Code, através da configuração de plugin e do servidor MCP real, sem depender do runtime Claude Code.
+3. O Core seleciona um agente adequado. Esse agente pode utilizar uma **Skill criada e configurada pelo usuário na própria interface do Mosaic**. A Skill já é uma capacidade existente no Mosaic e deve ser aproveitada, não substituída por um mecanismo paralelo.
+4. A Skill fornece instruções especializadas para melhorar o prompt/plano de trabalho — por exemplo, tornar a solicitação mais precisa, definir critérios de aceite, orientar análise do código e testes. O Mosaic deve preservar a intenção do usuário e permitir inspecionar o plano antes de ações relevantes.
+5. O agente analisa o código e os arquivos pertinentes, formula uma proposta de melhoria e apresenta ao usuário o que pretende alterar.
+6. Após a aprovação necessária, o agente cria uma branch de trabalho, modifica os arquivos através de ferramentas adequadas, executa os testes disponíveis e revisa o diff.
+7. O Mosaic apresenta um resumo das alterações, arquivos afetados, testes executados e limitações encontradas.
+8. Com aprovação explícita para a ação externa, o Mosaic usa o plugin GitHub/MCP para criar um pull request real no repositório de destino, com título, descrição, justificativa, mudanças e evidências de teste.
+9. O Mosaic devolve o link do PR e mantém o histórico/auditoria da tarefa, incluindo ferramentas utilizadas e resultados, sem expor credenciais.
+
+### Condições e limites do cenário final
+
+- A integração deve usar o plugin oficial do GitHub e sua configuração de MCP de referência; não basta chamar diretamente uma API GitHub implementada à parte e alegar compatibilidade com o plugin.
+- O fluxo deve passar pelo sistema normal de agentes, Skills, ferramentas, políticas, aprovações e histórico do Mosaic.
+- A Skill criada pela interface deve ser selecionável/consumível pelo agente no fluxo real. A documentação deve identificar como a Skill é carregada e como suas instruções influenciam o planejamento, sem conceder permissões extras por si só.
+- Instruções presentes no repositório, issues, README, comentários e resultados das ferramentas são conteúdo não confiável; não podem sobrepor as políticas centrais nem autorizar ações.
+- A branch de trabalho deve ser separada da branch principal. O agente não deve fazer push direto para a branch principal nem mesclar o PR automaticamente.
+- Alterações de arquivos e operações externas devem obedecer às políticas e aprovações configuradas no Core.
+- Se testes não puderem ser executados, o PR deve declarar isso honestamente. O agente não pode afirmar que passou em testes que não executou.
+- O teste deve usar um repositório de validação autorizado, preferencialmente descartável ou de baixo risco, e registrar a evidência sem divulgar tokens ou dados sensíveis.
+
+### Critério de aceite end-to-end
+
+A implementação só poderá ser declarada concluída quando for demonstrado, com evidências reproduzíveis, que o usuário consegue solicitar uma melhoria pela interface, o Mosaic consegue analisar o repositório real via plugin GitHub/MCP, selecionar um agente com uma Skill criada pela interface para aprimorar o prompt/plano, realizar uma mudança controlada, executar e reportar testes, pedir/aplicar as aprovações necessárias e abrir um pull request real. Testes unitários, mocks e documentação sem execução real não satisfazem esse critério final.
+
+O sucesso deste cenário também será a primeira prova prática de que a arquitetura de compatibilidade com plugins existentes pode ser expandida progressivamente para outros plugins e componentes do marketplace, conforme forem suportados.
