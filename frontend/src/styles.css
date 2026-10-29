@@ -3261,3 +3261,24 @@ body { overflow: hidden; }
   .app-shell.sidebar-collapsed .sidebar .side-primary,
   .app-shell.sidebar-collapsed .sidebar .side-bottom { display: flex; }
 }
+
+
+/* Context observability: make the known instrumentation gap explicit. */
+.app-shell.sidebar-collapsed .sidebar {
+  flex: 0 0 68px;
+}
+.observability-note { margin-top: 12px; }
+.observability-note p,
+.observability-footnote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.observability-note p { margin: 12px 0 8px; }
+.observability-status { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.status-dot { display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; }
+.status-warning { background: #e5a34b; }
+.observability-footnote {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
