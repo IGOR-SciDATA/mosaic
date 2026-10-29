@@ -1046,7 +1046,12 @@ function HieExperimentModal({scope,onClose}) {
         </div>}
         {experiment.results?.error&&<div className="task-inline-error">{experiment.results.error}</div>}
         {["completed","failed","draft"].includes(experiment.status)&&<button type="button" className="secondary-action" onClick={rejectCandidate} disabled={busy}>Rejeitar candidato</button>}
-        <p className="modal-hint">Nenhuma versão ativa foi alterada. A promoção e o rollback exigem uma etapa posterior com aprovação vinculada ao hash e à versão ativa.</p>
+        {experiment.status==="completed"&&experiment.results?.assessment==="candidate_better"&&!promotion&&<div className="hie-experiment-actions">
+           <button type="button" className="secondary-action" onClick={approveCandidate} disabled={busy||approved}>Aprovar hash e versão</button>
+           <button type="button" className="primary-action" onClick={promoteApprovedCandidate} disabled={busy||!approved}>{busy?"Processando…":"Promover versão aprovada"}</button>
+         </div>}
+         {promotion&&<div className="hie-experiment-actions"><span className="hie-hash-line">Promovido como v{promotion.profile?.version} · promoção #{promotion.promotion_id}</span><button type="button" className="secondary-action" onClick={rollbackPromotedCandidate} disabled={busy}>Rollback com confirmação</button></div>}
+         <p className="modal-hint">{promotion?"A promoção foi explícita e a versão anterior está preservada. O rollback só funciona se o perfil ativo ainda corresponder exatamente à versão promovida.":"Nenhuma versão ativa é alterada até a confirmação explícita de promoção. Uma aprovação fica inválida se o hash do candidato ou a versão/hash do perfil ativo mudar."}</p>
       </section>}
     </div>
   </Modal>;
