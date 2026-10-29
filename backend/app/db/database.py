@@ -159,6 +159,7 @@ def init_db() -> None:
                 conversation_id INTEGER NOT NULL,
                 project_id INTEGER NOT NULL,
                 profile_slug TEXT NOT NULL,
+                candidate_origin TEXT NOT NULL DEFAULT 'user_supplied',
                 provider TEXT NOT NULL DEFAULT '',
                 model_name TEXT NOT NULL DEFAULT '',
                 budget_json TEXT NOT NULL DEFAULT '{}',
@@ -179,6 +180,8 @@ def init_db() -> None:
             )
         """)
         hie_experiment_columns = {row["name"] for row in connection.execute("PRAGMA table_info(hie_experiments)").fetchall()}
+        if "candidate_origin" not in hie_experiment_columns:
+            connection.execute("ALTER TABLE hie_experiments ADD COLUMN candidate_origin TEXT NOT NULL DEFAULT 'user_supplied'")
         if "provider" not in hie_experiment_columns:
             connection.execute("ALTER TABLE hie_experiments ADD COLUMN provider TEXT NOT NULL DEFAULT ''")
         if "model_name" not in hie_experiment_columns:
