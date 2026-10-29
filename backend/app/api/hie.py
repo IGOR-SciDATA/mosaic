@@ -135,7 +135,10 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
     scope, scope_id = _resolve_scope(payload.conversation_id, payload.task_id)
     column = "task_id" if scope == "task" else "conversation_id"
     now = _now()
+    experiment_available = _experiment_scope_available(scope, scope_id)
+    task = get_task(scope_id) if scope == "task" else None
     with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         connection.execute(
             f"""
             INSERT INTO hie_sessions ({column}, enabled, created_at, updated_at)
@@ -146,41 +149,33 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
             """,
             (scope_id, int(payload.enabled), now, now),
         )
-        connection.commit()
-
-    experiment_available = _experiment_scope_available(scope, scope_id)
-    if scope == "task":
-        task = get_task(scope_id)
+        # Persist Task-scoped opt-in and its required audit evidence atomically.
+        # Project-less conversations use the existing setting path, with no new
+        # Task or event requirement introduced.
         if task is not None:
-            try:
-                create_task_event(
-                    task_id=task.id,
-                    conversation_id=task.conversation_id,
-                    project_id=task.project_id,
-                    component="hie",
-                    event_name="hie.mode_enabled" if payload.enabled else "hie.mode_disabled",
-                    message=(
-                        "HIE experimental mode enabled for this Task scope."
-                        if payload.enabled else
-                        "HIE experimental mode disabled for this Task scope."
-                    ),
-                    status="enabled" if payload.enabled else "disabled",
-                    metadata={
-                        "scope": "task",
-                        "scope_id": scope_id,
-                        "experiment_execution_available": experiment_available,
-                    },
-                )
-            except Exception as exc:
-                # Roll back the opt-in mutation if its required audit event could
-                # not be recorded; never return a success response without audit.
-                with get_connection() as connection:
-                    connection.execute("DELETE FROM hie_sessions WHERE task_id = ?", (scope_id,))
-                    connection.commit()
-                raise HTTPException(
-                    status_code=503,
-                    detail="HIE setting was not applied because its audit event could not be persisted",
-                ) from exc
+            event_name = "hie.mode_enabled" if payload.enabled else "hie.mode_disabled"
+            message = (
+                "HIE experimental mode enabled for this Task scope."
+                if payload.enabled else
+                "HIE experimental mode disabled for this Task scope."
+            )
+            metadata = json.dumps({
+                "scope": "task",
+                "scope_id": scope_id,
+                "experiment_execution_available": experiment_available,
+            }, ensure_ascii=False, separators=(",", ":"))
+            connection.execute(
+                """INSERT INTO task_events (
+                    task_id, conversation_id, project_id, tool_call_id, action_id,
+                    timestamp, level, component, event_name, message, duration_ms,
+                    status, metadata
+                ) VALUES (?, ?, ?, NULL, NULL, ?, 'info', 'hie', ?, ?, NULL, ?, ?)""",
+                (
+                    task.id, task.conversation_id, task.project_id, now,
+                    event_name, message, "enabled" if payload.enabled else "disabled", metadata,
+                ),
+            )
+        connection.commit()
     return _payload(scope, scope_id, payload.enabled)
 
 
