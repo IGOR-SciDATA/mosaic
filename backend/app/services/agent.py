@@ -17,6 +17,7 @@ from app.models.tool_result_repository import list_tool_results
 from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_policy, resolve_tool_workspace
 from app.services.agent_profiles import validate_agent_profile_snapshot
 from app.services.agent_library import agent_snapshot_messages, validate_agent_snapshot
+from app.services.hie_runtime import HIEExecutionBudget, HIERuntimeLimitExceeded, HIERuntimeCancelled
 
 DEFAULT_ITERATION_LIMIT = 10
 TOOL_OBSERVATION_MAX_CHARS = 12_000
@@ -1167,7 +1168,13 @@ def _allowed_tools_for_step(plan: dict[str, Any] | None) -> set[str] | None:
     return None
 
 
-def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, Any]], *, iteration_limit: int = DEFAULT_ITERATION_LIMIT) -> dict[str, Any]:
+def run_agent(
+    task_id: int,
+    decide: Callable[[list[dict[str, Any]]], dict[str, Any]],
+    *,
+    iteration_limit: int = DEFAULT_ITERATION_LIMIT,
+    execution_budget: HIEExecutionBudget | None = None,
+) -> dict[str, Any]:
     if iteration_limit <= 0:
         raise ValueError("iteration_limit must be greater than zero")
     task = get_task(task_id)
@@ -1247,7 +1254,16 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
             raise ValueError(f"Task is not executable: {current.status}")
 
         try:
-            decision = decide(context)
+            try:
+                decision = decide(context)
+            except HIERuntimeCancelled as exc:
+                result = {"error": str(exc), "iterations": iteration, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+                update_task(task_id, status="cancelled", result=result)
+                return {"status": "cancelled", **result}
+            except HIERuntimeLimitExceeded as exc:
+                result = {"error": str(exc), "iterations": iteration, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+                update_task(task_id, status="failed", result=result)
+                return {"status": "failed", **result}
         except Exception as exc:
             update_task(task_id, status="failed", result={"error": str(exc), "iterations": iteration})
             return {"status": "failed", "error": str(exc), "iterations": iteration}
@@ -1443,7 +1459,19 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                 update_task(task_id, status="awaiting_approval", result={"tool_call_id": call.id, "iterations": iteration})
                 return {"status": "awaiting_approval", "tool_call_id": call.id, "iterations": iteration}
             approved = approve_tool_call(call)
+            if execution_budget is not None:
+                execution_budget.before_tool_call()
             tool_result = execute_tool_call(approved)
+        except HIERuntimeCancelled as exc:
+            result = {"error": str(exc), "iterations": iteration, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+            update_task(task_id, status="cancelled", result=result)
+            return {"status": "cancelled", **result}
+        except HIERuntimeLimitExceeded as exc:
+            from app.models.tool_call_repository import update_tool_call
+            update_tool_call(call.id, status="failed")
+            result = {"error": str(exc), "iterations": iteration, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
+            update_task(task_id, status="failed", result=result)
+            return {"status": "failed", **result}
         except Exception as exc:
             context.append({
                 "role": "system",
