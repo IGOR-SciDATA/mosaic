@@ -144,6 +144,7 @@ def test_experiment_failure_preserves_completed_fixture_evidence(client, monkeyp
     assert result["results"]["automatic_promotion"] is False
     assert result["results"]["recovery_requires_user"] is True
     assert result["results"]["provider_calls"] == 2
+    assert result["results"]["fixture_count"] == 0
     assert result["results"]["evidence"] == []
     # The first fixture is not complete (baseline succeeded; candidate failed),
     # therefore no fixture-level evidence record should be treated as complete.
