@@ -15,12 +15,14 @@ from app.api.hie import router as hie_router
 from app.api.tool_calls import router as tool_calls_router
 from app.db.database import init_db
 from app.services.recovery import recover_interrupted_tasks
+from app.services.hie_experiments import recover_interrupted_experiments
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
     recover_interrupted_tasks()
+    recover_interrupted_experiments()
     yield
 
 
