@@ -281,6 +281,9 @@ def _auto_paginate_read(
         except HIERuntimeCancelled:
             update_tool_call(call.id, status="cancelled")
             raise
+        except HIERuntimeCancelled:
+            update_tool_call(call.id, status="cancelled")
+            raise
         except HIERuntimeLimitExceeded:
             update_tool_call(call.id, status="failed")
             raise
