@@ -8,7 +8,7 @@
 
 <br>
 
-<img src="assets/branding/8c33d74f-1f72-425b-a34a-1108de13dd98.png" alt="Símbolo do Mosaic" width="600" />
+<img src="assets/branding/mosaic_logo2.png" alt="Símbolo do Mosaic" width="600" />
 
 ### 🧩 Uma inteligência que transforma pedidos em trabalho realizado
 
