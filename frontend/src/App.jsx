@@ -981,10 +981,13 @@ function HieExperimentModal({scope,onClose}) {
       {experiment&&<section className="hie-experiment-result">
         <div className="hie-experiment-result-head"><strong>Experimento #{experiment.id}</strong><span className={"hie-experiment-status status-"+experiment.status}>{experiment.status}</span></div>
         <div className="hie-experiment-summary"><span>Modelo</span><strong>{experiment.provider} · {experiment.model_name}</strong><span>Orçamento</span><strong>{experiment.budget?.estimated_provider_calls ?? "—"} chamadas máximas estimadas · {experiment.budget?.max_output_chars_per_call ?? "—"} caracteres por saída</strong><span>Fixture isolada</span><strong>{experiment.budget?.fixture_count ?? experiment.fixtures?.length ?? 0} prompts · sem ferramentas nem ações externas</strong></div>
+        <div className="hie-hash-line"><span>Origem do candidato</span><strong>{experiment.candidate_origin==="user_supplied"?"Fornecido pelo usuário":experiment.candidate_origin}</strong></div>
         <div className="hie-hash-line"><span>Baseline v{experiment.baseline_snapshot?.version}</span><code>{experiment.baseline_snapshot?.sha256?.slice(0,16)}…</code></div>
         <div className="hie-hash-line"><span>Hash do candidato</span><code>{experiment.candidate?.sha256?.slice(0,16)}…</code></div>
         <details><summary>Diff do candidato</summary><pre>{experiment.candidate_diff}</pre></details>
         {experiment.results?.assessment&&<div className="hie-comparison">
+          <div><span>Chamadas ao provider</span><strong>{experiment.results.provider_calls ?? "—"}</strong></div>
+          <div><span>Duração total</span><strong>{experiment.results.duration_ms != null ? (experiment.results.duration_ms/1000).toFixed(1)+" s" : "—"}</strong></div>
           <div><span>Baseline</span><strong>{experiment.results.baseline_passed}/{experiment.results.fixture_count}</strong></div>
           <div><span>Candidato</span><strong>{experiment.results.candidate_passed}/{experiment.results.fixture_count}</strong></div>
           <p>{experiment.results.assessment==="candidate_better"?"O candidato passou em mais critérios determinísticos nesta amostra.":experiment.results.assessment==="candidate_regressed"?"O candidato regrediu nos critérios determinísticos desta amostra.":"Resultado inconclusivo: a taxa de aprovação foi igual."} Isso não comprova melhoria geral nem autoriza promoção.</p>
