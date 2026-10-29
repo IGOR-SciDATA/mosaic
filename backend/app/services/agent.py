@@ -1120,6 +1120,7 @@ def _prepare_workspace_exploration(
     context_budget = 24_000
     context_used = 0
     passed_to_model = []
+    partially_passed = []
     for item in files:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str):
             continue
@@ -1139,22 +1140,10 @@ def _prepare_workspace_exploration(
         context_used += len(content)
         passed_to_model.append(item["path"])
         if len(content) < len(original_content):
+            partially_passed.append(item["path"])
             break
 
     passed_set = set(passed_to_model)
-    partially_passed = []
-    for item in files:
-        if not isinstance(item, dict) or item.get("path") not in passed_set:
-            continue
-        # The last included file may have been clipped to the remaining context budget.
-        if item.get("path") == (passed_to_model[-1] if passed_to_model else None):
-            included_chars = sum(
-                len(str(message.get("content", "")))
-                for message in context[-len(passed_to_model)-1:]
-                if message.get("role") == "system" and str(item.get("path")) in str(message.get("content", ""))
-            )
-            if included_chars < len(str(item.get("content", "")):
-                partially_passed.append(item["path"])
     summary = {
         "status": data.get("status"),
         "workspace": data.get("workspace"),
