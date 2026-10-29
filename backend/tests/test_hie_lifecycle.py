@@ -118,3 +118,76 @@ def test_rollback_refuses_to_overwrite_profile_changed_after_promotion(client):
         "expected_active_sha256": active["sha256"],
     })
     assert response.status_code == 409
+
+
+def test_two_concurrent_promotions_cannot_apply_the_same_approval(client):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.services.hie_lifecycle import HieLifecycleError, promote_candidate, approve_candidate
+
+    project, experiment = _completed_experiment(client)
+    profile = get_project_agent(project.id, "qa-agent")
+    payload = _approval_payload(experiment, profile)
+    approve_candidate(experiment["id"], **payload)
+
+    def attempt():
+        try:
+            return promote_candidate(experiment["id"], **payload)
+        except HieLifecycleError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(lambda _: attempt(), range(2)))
+    assert sum(item is not None for item in outcomes) == 1
+    active = get_project_agent(project.id, "qa-agent")
+    assert active["version"] == profile["version"] + 1
+    with get_connection() as connection:
+        rows = connection.execute("SELECT id FROM hie_promotions WHERE experiment_id = ?", (experiment["id"],)).fetchall()
+    assert len(rows) == 1
+
+
+def test_concurrent_rollback_is_idempotently_rejected_after_first_commit(client):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.services.hie_lifecycle import HieLifecycleError, approve_candidate, promote_candidate, rollback_promotion
+
+    project, experiment = _completed_experiment(client)
+    profile = get_project_agent(project.id, "qa-agent")
+    payload = _approval_payload(experiment, profile)
+    approve_candidate(experiment["id"], **payload)
+    promoted = promote_candidate(experiment["id"], **payload)
+    active = get_project_agent(project.id, "qa-agent")
+
+    def attempt():
+        try:
+            return rollback_promotion(promoted["promotion_id"], expected_active_version=active["version"], expected_active_sha256=active["sha256"])
+        except HieLifecycleError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(lambda _: attempt(), range(2)))
+    assert sum(item is not None for item in outcomes) == 1
+    restored = get_project_agent(project.id, "qa-agent")
+    assert restored["instructions"] == profile["instructions"]
+    assert restored["version"] == active["version"] + 1
+
+
+def test_event_failure_rolls_back_profile_and_promotion_record(client, monkeypatch):
+    from app.services import hie_lifecycle
+
+    project, experiment = _completed_experiment(client)
+    profile = get_project_agent(project.id, "qa-agent")
+    payload = _approval_payload(experiment, profile)
+    assert client.post(f"/hie/experiments/{experiment['id']}/approve", json=payload).status_code == 200
+
+    def fail_event(*args, **kwargs):
+        raise RuntimeError("simulated event persistence failure")
+
+    monkeypatch.setattr(hie_lifecycle, "_event", fail_event)
+    with pytest.raises(RuntimeError, match="simulated event persistence failure"):
+        hie_lifecycle.promote_candidate(experiment["id"], **payload)
+
+    active = get_project_agent(project.id, "qa-agent")
+    assert active["version"] == profile["version"]
+    assert active["instructions"] == profile["instructions"]
+    with get_connection() as connection:
+        count = connection.execute("SELECT COUNT(*) FROM hie_promotions WHERE experiment_id = ?", (experiment["id"],)).fetchone()[0]
+    assert count == 0
