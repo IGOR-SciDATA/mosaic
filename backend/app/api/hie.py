@@ -91,7 +91,7 @@ def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
             "candidate_hash",
             "explicit_rejection",
         ])
-        supported.extend(["version_bound_approval", "explicit_versioned_promotion", "audited_rollback"])
+        supported.extend(["version_bound_approval", "versioned_promotion", "rollback"])
         unavailable = []
     message = (
         "Modo experimental habilitado. Experimentos isolados estão disponíveis; aprovação, promoção e rollback exigem confirmação explícita."
