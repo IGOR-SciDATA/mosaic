@@ -6,13 +6,17 @@ provide isolated baseline/candidate runs, evaluation, promotion, or rollback.
 """
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, model_validator
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.db.database import get_connection
 from app.models.conversation_repository import get_conversation
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task
+from app.services.hie_experiments import (
+    HieExperimentError, create_experiment, get_experiment, list_experiments,
+    queue_experiment, reject_experiment, run_experiment,
+)
 
 router = APIRouter(prefix="/hie", tags=["hie"])
 
@@ -50,17 +54,12 @@ def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
         "scope_id": scope_id,
         "enabled": enabled,
         "default_enabled": False,
-        "experiment_execution_available": False,
-        "supported_capabilities": ["persisted_opt_in", "candidate_validation"],
-        "unavailable_capabilities": [
-            "isolated_baseline_candidate_execution",
-            "reproducible_evaluation",
-            "promotion",
-            "rollback",
-        ],
+        "experiment_execution_available": True,
+        "supported_capabilities": ["persisted_opt_in", "candidate_validation", "persisted_experiment_lifecycle", "isolated_baseline_candidate_probes", "deterministic_fixture_evaluation", "candidate_diff", "candidate_hash", "explicit_rejection"],
+        "unavailable_capabilities": ["versioned_promotion", "rollback"],
         "message": (
-            "Modo experimental habilitado para este escopo. A execução de experimentos "
-            "baseline/candidato ainda não está disponível; nenhuma alteração foi aplicada."
+            "Modo experimental habilitado. Experimentos isolados com baseline/candidato estão disponíveis; "
+            "promoção e rollback ainda não estão disponíveis."
             if enabled else
             "HIE está desativado neste escopo. A ativação não executa nem promove candidatos."
         ),
@@ -129,3 +128,84 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
                 },
             )
     return _payload(scope, scope_id, payload.enabled)
+
+
+class HieFixture(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    prompt: str = Field(min_length=1, max_length=2000)
+    expected_contains: list[str] = Field(default_factory=list, max_length=10)
+    expected_not_contains: list[str] = Field(default_factory=list, max_length=10)
+
+
+class HieExperimentCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    conversation_id: int | None = None
+    task_id: int | None = None
+    profile_slug: str = Field(min_length=1, max_length=80)
+    candidate_content: str = Field(min_length=1, max_length=12000)
+    fixtures: list[HieFixture] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if (self.conversation_id is None) == (self.task_id is None):
+            raise ValueError("Provide exactly one of conversation_id or task_id")
+        return self
+
+
+@router.post("/experiments", status_code=201)
+def create_hie_experiment(payload: HieExperimentCreate) -> dict:
+    try:
+        return create_experiment(
+            conversation_id=payload.conversation_id,
+            task_id=payload.task_id,
+            profile_slug=payload.profile_slug,
+            candidate_content=payload.candidate_content,
+            fixtures=[fixture.model_dump() for fixture in payload.fixtures],
+        )
+    except HieExperimentError as exc:
+        message = str(exc)
+        status = 404 if message.endswith("not found") or message == "Agent profile not found in this project" else 409 if "enabled" in message or "already" in message else 422
+        raise HTTPException(status_code=status, detail=message) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/experiments")
+def list_hie_experiments(
+    conversation_id: int | None = Query(default=None),
+    task_id: int | None = Query(default=None),
+) -> list[dict]:
+    try:
+        return list_experiments(task_id=task_id, conversation_id=conversation_id)
+    except HieExperimentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/experiments/{experiment_id}")
+def get_hie_experiment(experiment_id: int) -> dict:
+    experiment = get_experiment(experiment_id)
+    if experiment is None:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    return experiment
+
+
+@router.post("/experiments/{experiment_id}/run", status_code=202)
+def run_hie_experiment(experiment_id: int, background_tasks: BackgroundTasks) -> dict:
+    try:
+        experiment = queue_experiment(experiment_id)
+    except HieExperimentError as exc:
+        message = str(exc)
+        status = 404 if message == "Experiment not found" else 409
+        raise HTTPException(status_code=status, detail=message) from exc
+    background_tasks.add_task(run_experiment, experiment_id)
+    return experiment
+
+
+@router.post("/experiments/{experiment_id}/reject")
+def reject_hie_experiment(experiment_id: int) -> dict:
+    try:
+        return reject_experiment(experiment_id)
+    except HieExperimentError as exc:
+        message = str(exc)
+        status = 404 if message == "Experiment not found" else 409
+        raise HTTPException(status_code=status, detail=message) from exc
