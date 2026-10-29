@@ -450,14 +450,6 @@ def run_experiment(experiment_id: int) -> None:
                     },
                 )
                 connection.commit()
-            _emit(experiment, "hie.fixture_evaluated", f"Fixture {fixture['id']} completed for baseline and candidate.", "completed", {
-                "fixture_id": fixture["id"],
-                "baseline_passed": case_result["baseline"]["evaluation"]["passed"],
-                "candidate_passed": case_result["candidate"]["evaluation"]["passed"],
-                "baseline_output_sha256": case_result["baseline"]["output_sha256"],
-                "candidate_output_sha256": case_result["candidate"]["output_sha256"],
-                "provider_calls": provider_calls,
-            })
         baseline_passes = sum(1 for item in outputs if item["baseline"]["evaluation"]["passed"])
         candidate_passes = sum(1 for item in outputs if item["candidate"]["evaluation"]["passed"])
         results = {
