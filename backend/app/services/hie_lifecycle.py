@@ -8,6 +8,7 @@ from typing import Any
 from app.db.database import get_connection
 from app.models.task_event_repository import create_task_event
 from app.services.agent_library import _seal_profile
+from app.services.hie_candidate import validate_candidate
 from app.services.hie_experiments import get_experiment
 
 
@@ -76,6 +77,10 @@ def _check_experiment(experiment: dict[str, Any] | None, candidate_sha256: str) 
         raise HieLifecycleError("Candidate hash changed; review the current candidate again")
     if candidate.get("target", {}).get("kind") != "profile_instructions":
         raise HieLifecycleError("Only profile-instruction candidates are currently promotable")
+    try:
+        validate_candidate(candidate, baseline_snapshot=experiment["baseline_snapshot"])
+    except (TypeError, ValueError) as exc:
+        raise HieLifecycleError("Candidate integrity validation failed; approval and promotion are blocked") from exc
     return candidate
 
 
