@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.db.database import get_connection
-from app.models.task_event_repository import create_task_event
+from app.models.task_event_repository import _redact
 from app.models.task_repository import get_task
 from app.services.agent_library import _seal_profile, _normalize_skills
 from app.services.hie_experiments import get_experiment
@@ -142,12 +142,14 @@ def approve_candidate(
                 candidate_sha256, active_version, active_sha256, _now(),
             ),
         )
+        _event_in_transaction(connection, experiment, "hie.candidate_approved",
+                              "Candidate explicitly approved for the reviewed profile version.",
+                              "completed", {
+            "candidate_sha256": candidate_sha256, "active_version": active_version,
+            "active_sha256": active_sha256,
+        })
         connection.commit()
 
-    _event(experiment, "hie.candidate_approved", "Candidate explicitly approved for the reviewed profile version.", {
-        "candidate_sha256": candidate_sha256, "active_version": active_version,
-        "active_sha256": active_sha256,
-    })
     return {
         "approved": True, "experiment_id": experiment_id, "candidate_sha256": candidate_sha256,
         "active_version": active_version, "active_sha256": active_sha256,
@@ -210,13 +212,15 @@ def promote_candidate(
             ),
         )
         promotion_id = cursor.lastrowid
+        _event_in_transaction(connection, experiment, "hie.candidate_promoted",
+                              "Approved declarative candidate promoted as a new profile version.",
+                              "completed", {
+            "promotion_id": promotion_id, "candidate_sha256": candidate_sha256,
+            "previous_version": profile["version"], "promoted_version": updated["version"],
+            "promoted_sha256": updated["sha256"], "automatic_promotion": False,
+        })
         connection.commit()
 
-    _event(experiment, "hie.candidate_promoted", "Approved declarative candidate promoted as a new profile version.", {
-        "promotion_id": promotion_id, "candidate_sha256": candidate_sha256,
-        "previous_version": profile["version"], "promoted_version": updated["version"],
-        "promoted_sha256": updated["sha256"], "automatic_promotion": False,
-    })
     return {
         "promoted": True, "promotion_id": promotion_id, "profile": updated,
         "previous_version": profile["version"],
@@ -269,21 +273,36 @@ def rollback_promotion(
         )
         if cursor.rowcount != 1:
             raise HieLifecycleError("Promotion state changed concurrently; refresh and retry")
-        connection.commit()
         experiment_id = promotion["experiment_id"]
+        experiment = get_experiment(experiment_id)
+        if experiment:
+            _event_in_transaction(connection, experiment, "hie.candidate_rolled_back",
+                                  "Promotion rolled back by restoring the previous profile content as a new version.",
+                                  "completed", {
+                "promotion_id": promotion_id, "restored_version": restored["version"],
+                "restored_sha256": restored["sha256"],
+            })
+        connection.commit()
 
-    experiment = get_experiment(experiment_id)
-    if experiment:
-        _event(experiment, "hie.candidate_rolled_back", "Promotion rolled back by restoring the previous profile content as a new version.", {
-            "promotion_id": promotion_id, "restored_version": restored["version"],
-            "restored_sha256": restored["sha256"],
-        })
     return {"rolled_back": True, "promotion_id": promotion_id, "profile": restored}
 
 
-def _event(experiment: dict[str, Any], event_name: str, message: str, metadata: dict[str, Any]) -> None:
-    create_task_event(
-        task_id=experiment["task_id"], conversation_id=experiment["conversation_id"],
-        project_id=experiment["project_id"], component="hie", event_name=event_name,
-        message=message, status="completed", metadata={"experiment_id": experiment["id"], **metadata},
+def _event_in_transaction(
+    connection, experiment: dict[str, Any], event_name: str, message: str,
+    status: str, metadata: dict[str, Any],
+) -> None:
+    """Insert the audit record in the same transaction as the lifecycle change."""
+    safe_metadata = _redact({"experiment_id": experiment["id"], **metadata})
+    encoded = json.dumps(safe_metadata, ensure_ascii=False, separators=(",", ":"))
+    if len(encoded) > 4000:
+        encoded = json.dumps({"truncated": True, "preview": encoded[:3960]})
+    connection.execute(
+        """INSERT INTO task_events (
+            task_id, conversation_id, project_id, tool_call_id, action_id,
+            timestamp, level, component, event_name, message, duration_ms, status, metadata
+        ) VALUES (?, ?, ?, NULL, NULL, ?, 'info', 'hie', ?, ?, NULL, ?, ?)""",
+        (
+            experiment["task_id"], experiment["conversation_id"], experiment["project_id"],
+            _now(), event_name, message[:500], status, encoded,
+        ),
     )
