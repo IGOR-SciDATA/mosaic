@@ -204,7 +204,6 @@ def create_experiment(
                     "max_candidate_chars": 12000,
                     "fixture_count": len(normalized_fixtures),
                     "estimated_provider_calls": len(normalized_fixtures) * 2,
-                    "max_duration_seconds": MAX_EXPERIMENT_DURATION_SECONDS,
                 }),
                 json.dumps(baseline, ensure_ascii=False),
                 json.dumps(candidate, ensure_ascii=False),
