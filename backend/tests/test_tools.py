@@ -487,3 +487,42 @@ def test_filesystem_explore_rejects_traversal_and_symlinks(tmp_path: Path) -> No
     result = tool.execute({"operation": "explore", "path": "."}, workspace=workspace)
     assert all(item["path"] != "escape" for item in result["files"])
     assert any(item["path"] == "escape" and item["reason"] == "symlink" for item in result["ignored"])
+
+
+def test_filesystem_explore_handles_empty_directories_and_oversized_files(tmp_path: Path) -> None:
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    result = FilesystemTool().execute({"operation": "explore", "path": "."}, workspace=empty)
+    assert result["status"] == "success"
+    assert result["directories"] == ["."]
+    assert result["files_read"] == 0
+
+    (empty / "large.txt").write_text("x" * 20, encoding="utf-8")
+    result = FilesystemTool().execute(
+        {"operation": "explore", "path": ".", "max_file_bytes": 10},
+        workspace=empty,
+    )
+    assert result["files_read"] == 0
+    assert any(item["path"] == "large.txt" and item["reason"] == "file_size_limit" for item in result["ignored"])
+
+
+def test_filesystem_search_matches_relative_names_and_content_without_approval(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    (workspace / "src").mkdir(parents=True)
+    (workspace / "src" / "engine.py").write_text("class WorkspaceEngine:\\n    pass\\n", encoding="utf-8")
+    tool = FilesystemTool()
+    assert tool.policy_for({"operation": "search", "path": ".", "query": "WorkspaceEngine"})["approval_required"] is False
+
+    content_result = tool.execute(
+        {"operation": "search", "path": ".", "query": "WorkspaceEngine", "search_in": "content"},
+        workspace=workspace,
+    )
+    assert content_result["status"] == "success"
+    assert content_result["matches"][0]["path"] == "src/engine.py"
+    assert content_result["matches"][0]["content_matches"][0]["line"] == 1
+
+    name_result = tool.execute(
+        {"operation": "search", "path": ".", "query": "engine.py", "search_in": "name"},
+        workspace=workspace,
+    )
+    assert name_result["matches"][0]["path"] == "src/engine.py"
