@@ -1266,7 +1266,42 @@ export default function App(){
         setTaskTraces(items=>({...items,[localAssistant.localId]:{taskId:task.id,status:task.status||"executing",events:[],artifacts:[],expanded:false}}));
         let lastEventId=0;
         const source=api.tasks.streamEvents(task.id,0,event=>{lastEventId=Math.max(lastEventId,Number(event.id)||0);setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),taskId:task.id,status:["completed","failed","cancelled","awaiting_approval"].includes(event.status)?event.status:(items[localAssistant.localId]?.status||task.status||"executing"),events:[...(items[localAssistant.localId]?.events||[]).filter(item=>item.id!==event.id),event].slice(-100),expanded:items[localAssistant.localId]?.expanded??false}}));},state=>{if(state==="reconnecting")api.tasks.events(task.id,lastEventId).then(events=>{if(events?.length)setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),events:[...(items[localAssistant.localId]?.events||[]),...events.filter(ev=>Number(ev.id)>lastEventId)].slice(-100)}}));}).catch(()=>{});});
-        window.setTimeout(()=>source.close(),30*60*1000);
+        let pollCount = 0;
+        const poll = window.setInterval(async () => {
+          pollCount += 1;
+          try {
+            const [currentTask, artifactResponse] = await Promise.all([
+              api.tasks.get(task.id),
+              api.tasks.artifacts(task.id).catch(() => ({ items: [] })),
+            ]);
+            const artifacts = artifactResponse?.items || [];
+            setTaskTraces(items => ({
+              ...items,
+              [localAssistant.localId]: {
+                ...(items[localAssistant.localId] || {}),
+                taskId: task.id,
+                status: currentTask.status || items[localAssistant.localId]?.status || "executing",
+                artifacts,
+              },
+            }));
+            if (["completed", "failed", "cancelled", "awaiting_approval"].includes(currentTask.status)) {
+              window.clearInterval(poll);
+              source.close();
+              if (currentTask.status === "completed") {
+                const result = currentTask.result;
+                const summary = typeof result === "string" ? result : (result?.summary || result?.message || result?.final_answer || "");
+                if (summary) setMessages(items => items.map(item => item.localId === localAssistant.localId ? { ...item, content: summary } : item));
+              } else if (currentTask.status === "failed") {
+                const result = currentTask.result;
+                const detail = typeof result === "string" ? result : (result?.error || result?.message || "");
+                if (detail) setTaskTraces(items => ({ ...items, [localAssistant.localId]: { ...(items[localAssistant.localId] || {}), error: detail } }));
+              }
+            }
+          } catch (error) {
+            if (pollCount > 900) window.clearInterval(poll);
+          }
+        }, 2000);
+        window.setTimeout(() => { window.clearInterval(poll); source.close(); }, 30 * 60 * 1000);
       }else{let streamed="";await api.conversations.stream(conversation.id,content,chunk=>{streamed+=chunk;setMessages(items=>items.map(item=>item.localId===localAssistant.localId?{...item,content:streamed}:item));});setMessages(await api.conversations.messages(conversation.id));}
       setConversations(items=>items.map(item=>item.id===conversation.id?{...item,updated_at:new Date().toISOString()}:item));
     }catch(err){setMessages(items=>items.map(item=>item.localId===localAssistant.localId?{...item,content:"Não foi possível concluir a solicitação."}:item));setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),status:"failed",error:err.message,expanded:true}}));setError("Não foi possível concluir a solicitação: "+err.message);}
