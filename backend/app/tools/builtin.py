@@ -28,6 +28,22 @@ MAX_FILE_BYTES = 1_000_000
 MAX_READ_LINES = 80
 MAX_READ_CHARS = 5_000
 MAX_LIST_ENTRIES = 500
+MAX_WORKSPACE_FILES = 200
+MAX_WORKSPACE_FILE_BYTES = 32_000
+MAX_WORKSPACE_TOTAL_BYTES = 250_000
+WORKSPACE_SCAN_TIMEOUT_SECONDS = 5
+WORKSPACE_EXCLUDED_DIRS = {
+    ".git", ".hg", ".svn", "node_modules", "vendor", "dist", "build",
+    ".next", ".nuxt", ".cache", "__pycache__", ".pytest_cache", ".mypy_cache",
+    ".ruff_cache", ".tox", ".venv", "venv", "env", "virtualenv", "coverage",
+    ".idea", ".vscode", ".ssh", ".aws", ".azure", ".gnupg", ".kube",
+    "target", "out", "tmp", "temp",
+}
+WORKSPACE_SECRET_NAMES = {
+    ".env", ".env.local", ".env.production", ".npmrc", ".pypirc",
+    "id_rsa", "id_dsa", "id_ed25519", "authorized_keys", "known_hosts",
+    "credentials", "credentials.json", "secrets.json", "service-account.json",
+}
 MAX_COMMAND_LENGTH = 2_000
 MAX_PROCESS_OUTPUT_BYTES = 200_000
 COMMAND_TIMEOUT_SECONDS = 30
@@ -72,12 +88,15 @@ class FilesystemTool(Tool):
         "required": ["operation", "path"],
         "additionalProperties": False,
         "properties": {
-            "operation": {"type": "string", "enum": ["read", "write", "create", "mkdir", "list"], "maxLength": 16},
+            "operation": {"type": "string", "enum": ["read", "write", "create", "mkdir", "list", "explore"], "maxLength": 16},
             "path": {"type": "string", "minLength": 1, "maxLength": 2048},
             "content": {"type": "string", "maxLength": MAX_FILE_BYTES},
             "overwrite": {"type": "boolean"},
             "start_line": {"type": "integer", "minimum": 1, "maximum": 1_000_000},
             "max_lines": {"type": "integer", "minimum": 1, "maximum": 200},
+            "max_files": {"type": "integer", "minimum": 1, "maximum": MAX_WORKSPACE_FILES},
+            "max_file_bytes": {"type": "integer", "minimum": 1, "maximum": MAX_WORKSPACE_FILE_BYTES},
+            "max_total_bytes": {"type": "integer", "minimum": 1, "maximum": MAX_WORKSPACE_TOTAL_BYTES},
         },
     }
     permission_policy = {"approval_required": True, "scope": "active_workspace"}
@@ -95,17 +114,27 @@ class FilesystemTool(Tool):
             raise ValueError("Argument overwrite is only allowed for operation write")
         if operation != "read" and ({"start_line", "max_lines"} & set(arguments)):
             raise ValueError("Arguments start_line and max_lines are only allowed for operation read")
+        if operation != "explore" and ({"max_files", "max_file_bytes", "max_total_bytes"} & set(arguments)):
+            raise ValueError("Workspace exploration limits are only allowed for operation explore")
 
     def policy_for(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Allow harmless workspace reads without approval; keep side effects gated."""
-        if arguments.get("operation") in {"read", "list"}:
+        if arguments.get("operation") in {"read", "list", "explore"}:
             return {**self.permission_policy, "approval_required": False}
         return self.permission_policy
 
     def execute(self, arguments: dict[str, Any], *, workspace: Path | None = None, cancel_check: Callable[[], bool] | None = None) -> Any:
         root = _require_workspace(workspace)
         operation = arguments["operation"]
-        path = _workspace_path(root, arguments["path"], allow_root=operation in {"list", "mkdir"})
+        path = _workspace_path(root, arguments["path"], allow_root=operation in {"list", "mkdir", "explore"})
+        if operation == "explore":
+            return _explore_workspace(
+                root,
+                max_files=arguments.get("max_files", 100),
+                max_file_bytes=arguments.get("max_file_bytes", 16_000),
+                max_total_bytes=arguments.get("max_total_bytes", 100_000),
+                cancel_check=cancel_check,
+            )
         if operation == "read":
             path = _workspace_path(root, arguments["path"], allow_root=False)
             if not path.is_file():
@@ -931,6 +960,156 @@ class WebFetchTool(Tool):
                 "truncated": truncated or len(content) > 100_000,
                 "fetched_at": datetime.now(timezone.utc).isoformat(),
             }
+
+def _is_sensitive_workspace_path(relative_path: str) -> bool:
+    name = Path(relative_path).name.casefold()
+    if name in WORKSPACE_SECRET_NAMES or name.startswith(".env."):
+        return True
+    if name.endswith((".pem", ".key", ".p12", ".pfx", ".keystore")):
+        return True
+    return any(token in name for token in ("secret", "credential", "private_key", "id_rsa", "id_ed25519"))
+
+
+def _explore_workspace(
+    root: Path,
+    *,
+    max_files: int,
+    max_file_bytes: int,
+    max_total_bytes: int,
+    cancel_check: Callable[[], bool] | None = None,
+) -> dict[str, Any]:
+    """Discover and read eligible UTF-8 text files deterministically under the authorized root."""
+    started = time.monotonic()
+    excluded_dirs = {name.casefold() for name in WORKSPACE_EXCLUDED_DIRS}
+    directories: set[str] = {"."}
+    found: list[Path] = []
+    ignored: list[dict[str, str]] = []
+    failures: list[dict[str, str]] = []
+    contents: list[dict[str, Any]] = []
+    total_bytes = 0
+    limits: list[str] = []
+    root = root.resolve(strict=True)
+
+    for current_dir, dir_names, file_names in os.walk(root, topdown=True, followlinks=False):
+        if cancel_check is not None and cancel_check():
+            limits.append("cancelled")
+            break
+        if time.monotonic() - started >= WORKSPACE_SCAN_TIMEOUT_SECONDS:
+            limits.append("time_limit")
+            break
+        current = Path(current_dir)
+        try:
+            current.resolve(strict=True).relative_to(root)
+        except (OSError, ValueError):
+            ignored.append({"path": ".", "reason": "directory_outside_workspace"})
+            dir_names[:] = []
+            continue
+        kept_dirs = []
+        for name in sorted(dir_names):
+            candidate = current / name
+            relative = candidate.relative_to(root).as_posix()
+            try:
+                if name.casefold() in excluded_dirs:
+                    ignored.append({"path": relative, "reason": "excluded_directory"})
+                    continue
+                if candidate.is_symlink():
+                    ignored.append({"path": relative, "reason": "symlink"})
+                    continue
+                resolved = candidate.resolve(strict=True)
+                resolved.relative_to(root)
+                if not resolved.is_dir():
+                    ignored.append({"path": relative, "reason": "not_directory"})
+                    continue
+                directories.add(relative)
+                kept_dirs.append(name)
+            except (OSError, ValueError):
+                ignored.append({"path": relative, "reason": "unsafe_or_unreadable_directory"})
+        dir_names[:] = kept_dirs
+        for name in sorted(file_names):
+            candidate = current / name
+            relative = candidate.relative_to(root).as_posix()
+            if candidate.is_symlink():
+                ignored.append({"path": relative, "reason": "symlink"})
+                continue
+            if _is_sensitive_workspace_path(relative):
+                ignored.append({"path": relative, "reason": "sensitive_filename"})
+                continue
+            try:
+                resolved = candidate.resolve(strict=True)
+                resolved.relative_to(root)
+                if not resolved.is_file():
+                    ignored.append({"path": relative, "reason": "not_regular_file"})
+                    continue
+                found.append(resolved)
+            except (OSError, ValueError):
+                failures.append({"path": relative, "reason": "path_or_stat_error"})
+
+    found.sort(key=lambda item: item.relative_to(root).as_posix().casefold())
+    files_found = len(found)
+    for candidate in found:
+        if cancel_check is not None and cancel_check():
+            limits.append("cancelled")
+            break
+        if time.monotonic() - started >= WORKSPACE_SCAN_TIMEOUT_SECONDS:
+            limits.append("time_limit")
+            break
+        relative = candidate.relative_to(root).as_posix()
+        if len(contents) >= max_files:
+            if "max_files" not in limits:
+                limits.append("max_files")
+            ignored.append({"path": relative, "reason": "max_files_limit"})
+            continue
+        try:
+            size = candidate.stat().st_size
+            if size > max_file_bytes:
+                ignored.append({"path": relative, "reason": "file_size_limit"})
+                continue
+            if total_bytes + size > max_total_bytes:
+                limits.append("max_total_bytes")
+                ignored.append({"path": relative, "reason": "total_bytes_limit"})
+                continue
+            with candidate.open("rb") as handle:
+                raw = handle.read(max_file_bytes + 1)
+            if len(raw) > max_file_bytes:
+                ignored.append({"path": relative, "reason": "file_size_limit"})
+                continue
+            if b"\x00" in raw:
+                ignored.append({"path": relative, "reason": "binary_content"})
+                continue
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                ignored.append({"path": relative, "reason": "unsupported_encoding"})
+                continue
+            import hashlib
+            contents.append({
+                "path": relative,
+                "content": text,
+                "bytes": len(raw),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+            })
+            total_bytes += len(raw)
+        except OSError:
+            failures.append({"path": relative, "reason": "read_error"})
+
+    return {
+        "operation": "explore",
+        "status": "success" if not limits and not failures else "partial",
+        "workspace": str(root),
+        "directories_found": len(directories),
+        "directories": sorted(directories, key=str.casefold),
+        "files_found": files_found,
+        "files_read": len(contents),
+        "files_ignored": len(ignored),
+        "files_failed": len(failures),
+        "bytes_read": total_bytes,
+        "duration_ms": max(0, round((time.monotonic() - started) * 1000)),
+        "limits_reached": sorted(set(limits)),
+        "files": contents,
+        "ignored": ignored,
+        "failures": failures,
+    }
+
 
 def register_builtin_tools() -> None:
     from app.tools.registry import registry
