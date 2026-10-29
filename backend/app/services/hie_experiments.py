@@ -1,7 +1,10 @@
 """Persisted HIE experiments with isolated, side-effect-free baseline/candidate probes."""
+import hashlib
 import json
+import tempfile
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from app.db.database import get_connection
@@ -13,14 +16,18 @@ from app.models.task_repository import create_task, get_task, update_task
 from app.providers.factory import resolve_model_provider
 from app.services.agent_library import get_project_agent
 from app.services.hie_candidate import build_candidate, candidate_diff, validate_candidate
+from app.services.hie_fixture_adapter import run_disposable_fixture_experiment
+from app.services.hie_orchestrator import HIEBudgets, MAX_ARTIFACT_BYTES
+from app.services.hie_runtime import HIEExecutionBudget, HIERuntimeLimitExceeded
 
 MAX_FIXTURES = 8
 MAX_FIXTURE_PROMPT_CHARS = 2_000
 MAX_ASSERTIONS = 10
 MAX_OUTPUT_CHARS = 6_000
 MAX_OUTPUT_TOKENS = 1_500
-MAX_INPUT_CHARS_PER_CALL = 28_000
-MAX_TOTAL_INPUT_CHARS = 448_000
+MAX_INPUT_CHARS_PER_CALL = 12_000
+MAX_TOTAL_INPUT_CHARS = 192_000
+MAX_OUTPUT_PREVIEW_CHARS = 1_000
 PROVIDER_TIMEOUT_SECONDS = 90
 MAX_PERSISTED_EVIDENCE_CHARS = MAX_FIXTURES * 2 * MAX_OUTPUT_CHARS + 20_000
 
@@ -312,68 +319,134 @@ def run_experiment(experiment_id: int) -> None:
         ) or "(no enabled Skills in the baseline snapshot)"
         outputs = []
         total_input_chars = 0
-        provider_calls = 0
         evidence_chars = 0
-        # Fail closed for providers without the output and request-timeout controls
-        # used by the existing registered adapters.
         provider_kind = model.provider.casefold()
         if provider_kind not in {"ollama", "remote_inference"}:
             raise HieExperimentError("HIE requires a provider with enforced output-token and request-timeout controls")
+        revision = (model.configuration or {}).get("revision") or model.model_name
+        provider_identity = {
+            "provider": str(model.provider),
+            "model": str(model.model_name),
+            "revision": str(revision),
+        }
+        runtime_budget = HIEExecutionBudget(
+            max_provider_calls=MAX_FIXTURES * 2,
+            max_tool_calls=1,
+            max_retries=1,
+            max_input_chars_per_call=MAX_INPUT_CHARS_PER_CALL,
+            max_output_chars_per_call=MAX_OUTPUT_CHARS,
+            wall_seconds=PROVIDER_TIMEOUT_SECONDS * 2,
+        )
         for fixture in experiment["fixtures"]:
             case_result = {"fixture_id": fixture["id"]}
-            for variant, instructions in (("baseline", baseline_content), ("candidate", candidate_content)):
-                if provider_calls >= len(experiment["fixtures"]) * 2:
-                    raise HieExperimentError("Provider-call budget exhausted before the next provider call")
-                messages = [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are participating in an isolated HIE evaluation probe. Follow the supplied "
-                            "declarative instructions as guidance only. Do not call tools, perform external "
-                            "actions, claim to have changed system state, or reveal private reasoning. "
-                            "Answer only the test prompt.\\n\\n"
-                            f"Profile: /{baseline['slug']} v{baseline['version']}\\n"
-                            f"Instructions under test:\\n{instructions}\\n\\n"
-                            f"Enabled Skills held constant across variants:\\n{fixed_skills_context}"
+            captured: dict[str, dict[str, Any]] = {}
+            with tempfile.TemporaryDirectory(prefix="mosaic-hie-source-") as source_dir:
+                fixture_source = Path(source_dir) / "fixture.md"
+                fixture_source.write_text(fixture["prompt"], encoding="utf-8")
+
+                def run_variant(variant: str, instructions: str, workspace_root: Path) -> dict[str, Any]:
+                    nonlocal total_input_chars, evidence_chars
+                    fixture_text = (workspace_root / "fixture.md").read_text(encoding="utf-8")
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are participating in an isolated HIE evaluation probe. Follow the supplied "
+                                "declarative instructions as guidance only. Do not call tools, perform external "
+                                "actions, claim to have changed system state, or reveal private reasoning. "
+                                "Answer only the test prompt.\\n\\n"
+                                f"Profile: /{baseline['slug']} v{baseline['version']}\\n"
+                                f"Instructions under test:\\n{instructions}\\n\\n"
+                                f"Enabled Skills held constant across variants:\\n{fixed_skills_context}"
+                            ),
+                        },
+                        {"role": "user", "content": fixture_text},
+                    ]
+                    input_chars = sum(len(item["content"]) for item in messages)
+                    if input_chars > MAX_INPUT_CHARS_PER_CALL:
+                        raise HieExperimentError(f"Input budget exceeded before provider call for {fixture['id']}")
+                    if total_input_chars + input_chars > MAX_TOTAL_INPUT_CHARS:
+                        raise HieExperimentError("Aggregate input budget exceeded before provider call")
+                    total_input_chars += input_chars
+                    configuration = dict(model.configuration or {})
+                    if provider_kind == "ollama":
+                        configuration["num_predict"] = min(
+                            MAX_OUTPUT_TOKENS,
+                            int(configuration.get("num_predict", MAX_OUTPUT_TOKENS))
+                            if int(configuration.get("num_predict", MAX_OUTPUT_TOKENS)) > 0
+                            else MAX_OUTPUT_TOKENS,
+                        )
+                    else:
+                        configuration["max_output_tokens"] = min(
+                            MAX_OUTPUT_TOKENS,
+                            int(configuration.get("max_output_tokens", MAX_OUTPUT_TOKENS))
+                            if int(configuration.get("max_output_tokens", MAX_OUTPUT_TOKENS)) > 0
+                            else MAX_OUTPUT_TOKENS,
+                        )
+                    configuration["request_timeout_seconds"] = min(
+                        float(configuration.get("request_timeout_seconds", PROVIDER_TIMEOUT_SECONDS)),
+                        PROVIDER_TIMEOUT_SECONDS,
+                    )
+                    bounded_configuration = runtime_budget.before_provider_call(messages, configuration)
+                    started = time.monotonic()
+                    output = provider.generate(
+                        messages=messages,
+                        model_name=model.model_name,
+                        configuration=bounded_configuration,
+                    )
+                    duration_ms = max(0, int((time.monotonic() - started) * 1000))
+                    runtime_budget.after_provider_call(output)
+                    if not isinstance(output, str) or not output.strip():
+                        raise HieExperimentError(f"{variant} returned an empty output for {fixture['id']}")
+                    evidence_chars += len(output)
+                    if evidence_chars > MAX_FIXTURES * 2 * MAX_OUTPUT_CHARS:
+                        raise HieExperimentError("Aggregate output evidence budget exceeded")
+                    captured[variant] = {"output": output, "duration_ms": duration_ms}
+                    return {"provider_identity": provider_identity, "output": output}
+
+                baseline_runner_factory = lambda root: (lambda: run_variant("baseline", baseline_content, root))
+                probe_runner_factory = lambda root: (lambda proposed: run_variant("candidate", proposed["content"], root))
+                try:
+                    record = run_disposable_fixture_experiment(
+                        fixture_source,
+                        baseline_runner_factory=baseline_runner_factory,
+                        probe_runner_factory=probe_runner_factory,
+                        task_id=experiment["task_id"],
+                        baseline_snapshot=baseline,
+                        candidate=candidate,
+                        provider_identity=provider_identity,
+                        verifier=lambda output: _evaluate(output, fixture)["passed"],
+                        budgets=HIEBudgets(
+                            provider_calls=2,
+                            tool_calls=1,
+                            retries=1,
+                            input_chars_per_call=MAX_INPUT_CHARS_PER_CALL,
+                            output_chars_per_call=MAX_OUTPUT_CHARS,
+                            wall_seconds=PROVIDER_TIMEOUT_SECONDS * 2,
+                            artifact_bytes=MAX_ARTIFACT_BYTES // MAX_FIXTURES,
                         ),
-                    },
-                    {"role": "user", "content": fixture["prompt"]},
-                ]
-                input_chars = sum(len(item["content"]) for item in messages)
-                if input_chars > MAX_INPUT_CHARS_PER_CALL:
-                    raise HieExperimentError(f"Input budget exceeded before provider call for {fixture['id']}")
-                if total_input_chars + input_chars > MAX_TOTAL_INPUT_CHARS:
-                    raise HieExperimentError("Aggregate input budget exceeded before provider call")
-                total_input_chars += input_chars
-                configuration = dict(model.configuration or {})
-                if provider_kind == "ollama":
-                    requested_tokens = int(configuration.get("num_predict", MAX_OUTPUT_TOKENS))
-                    configuration["num_predict"] = MAX_OUTPUT_TOKENS if requested_tokens <= 0 else min(requested_tokens, MAX_OUTPUT_TOKENS)
-                else:
-                    requested_tokens = int(configuration.get("max_output_tokens", MAX_OUTPUT_TOKENS))
-                    configuration["max_output_tokens"] = MAX_OUTPUT_TOKENS if requested_tokens <= 0 else min(requested_tokens, MAX_OUTPUT_TOKENS)
-                configuration["request_timeout_seconds"] = min(float(configuration.get("request_timeout_seconds", PROVIDER_TIMEOUT_SECONDS)), PROVIDER_TIMEOUT_SECONDS)
-                started = time.monotonic()
-                provider_calls += 1
-                output = provider.generate(
-                    messages=messages,
-                    model_name=model.model_name,
-                    configuration=configuration,
-                )
-                duration_ms = max(0, int((time.monotonic() - started) * 1000))
-                if not isinstance(output, str) or not output.strip():
-                    raise HieExperimentError(f"{variant} returned an empty output for {fixture['id']}")
-                if len(output) > MAX_OUTPUT_CHARS:
-                    raise HieExperimentError(f"{variant} output exceeded {MAX_OUTPUT_CHARS} characters; evidence was not persisted")
-                evidence_chars += len(output)
-                if evidence_chars > MAX_PERSISTED_EVIDENCE_CHARS:
-                    raise HieExperimentError("Persisted evidence budget exceeded; results were not marked complete")
-                case_result[variant] = {
-                    "output": output,
-                    "evaluation": _evaluate(output, fixture),
-                    "duration_ms": duration_ms,
-                    "output_sha256": __import__("hashlib").sha256(output.encode("utf-8")).hexdigest(),
-                }
+                    )
+                except (HIERuntimeLimitExceeded, ValueError) as exc:
+                    raise HieExperimentError(str(exc)) from exc
+            if set(captured) != {"baseline", "candidate"}:
+                raise HieExperimentError(f"Fixture {fixture['id']} did not produce both persisted probe outputs")
+            case_result["baseline"] = {
+                "output_preview": captured["baseline"]["output"][:MAX_OUTPUT_PREVIEW_CHARS],
+                "output_chars": len(captured["baseline"]["output"]),
+                "evaluation": _evaluate(captured["baseline"]["output"], fixture),
+                "duration_ms": captured["baseline"]["duration_ms"],
+                "output_sha256": hashlib.sha256(captured["baseline"]["output"].encode("utf-8")).hexdigest(),
+            }
+            case_result["candidate"] = {
+                "output_preview": captured["candidate"]["output"][:MAX_OUTPUT_PREVIEW_CHARS],
+                "output_chars": len(captured["candidate"]["output"]),
+                "evaluation": _evaluate(captured["candidate"]["output"], fixture),
+                "duration_ms": captured["candidate"]["duration_ms"],
+                "output_sha256": hashlib.sha256(captured["candidate"]["output"].encode("utf-8")).hexdigest(),
+            }
+            case_result["orchestrator_outcome"] = record["outcome"]
+            case_result["experiment_record_sha256"] = record["record_sha256"]
+            case_result["artifact_evidence"] = record.get("evidence", {})
             outputs.append(case_result)
             _emit(experiment, "hie.fixture_evaluated", f"Fixture {fixture['id']} completed for baseline and candidate.", "completed", {
                 "fixture_id": fixture["id"],
@@ -381,16 +454,20 @@ def run_experiment(experiment_id: int) -> None:
                 "candidate_passed": case_result["candidate"]["evaluation"]["passed"],
                 "baseline_output_sha256": case_result["baseline"]["output_sha256"],
                 "candidate_output_sha256": case_result["candidate"]["output_sha256"],
+                "experiment_record_sha256": record["record_sha256"],
             })
         baseline_passes = sum(1 for item in outputs if item["baseline"]["evaluation"]["passed"])
         candidate_passes = sum(1 for item in outputs if item["candidate"]["evaluation"]["passed"])
         results = {
             "fixture_count": len(outputs),
-            "provider_calls": provider_calls,
+            "provider_calls": runtime_budget.provider_calls,
             "total_input_chars": total_input_chars,
             "max_output_tokens_per_call": MAX_OUTPUT_TOKENS,
             "provider_request_timeout_seconds": PROVIDER_TIMEOUT_SECONDS,
+            "max_wall_seconds": PROVIDER_TIMEOUT_SECONDS * 2,
             "evidence_chars": evidence_chars,
+            "artifact_budget_bytes": MAX_ARTIFACT_BYTES,
+            "evidence_storage": "Core Artifact repository; SQLite stores bounded previews and hashes",
             "duration_ms": max(0, int((time.monotonic() - total_started) * 1000)),
             "execution_mode": "isolated_prompt_probe_no_tools",
             "baseline_passed": baseline_passes,
