@@ -362,29 +362,32 @@ def _budget_for_experiment(experiment: dict[str, Any]) -> dict[str, Any]:
 def run_experiment(experiment_id: int) -> None:
     # Claim queued work with a conditional state transition. Another request or
     # recovery process may have changed status since the initial read.
-    with get_connection() as connection:
-        connection.execute("BEGIN IMMEDIATE")
-        cursor = connection.execute(
-            "UPDATE hie_experiments SET status = 'running', updated_at = ? WHERE id = ? AND status = 'queued'",
-            (_now(), experiment_id),
-        )
-        if cursor.rowcount != 1:
-            return
-        row = connection.execute("SELECT * FROM hie_experiments WHERE id = ?", (experiment_id,)).fetchone()
-        if row is None:
-            connection.rollback()
-            return
-        experiment = _row_to_experiment(row)
-        _insert_experiment_event(
-            connection, experiment, "hie.experiment_started",
-            "Running baseline and candidate against the same fixtures without tools or external actions.",
-            "running", {
-                "candidate_sha256": experiment["candidate"]["sha256"],
-                "fixture_count": len(experiment["fixtures"]),
-                "automatic_promotion": False,
-            },
-        )
-        connection.commit()
+    try:
+        with get_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                "UPDATE hie_experiments SET status = 'running', updated_at = ? WHERE id = ? AND status = 'queued'",
+                (_now(), experiment_id),
+            )
+            if cursor.rowcount != 1:
+                return
+            row = connection.execute("SELECT * FROM hie_experiments WHERE id = ?", (experiment_id,)).fetchone()
+            if row is None:
+                connection.rollback()
+                return
+            experiment = _row_to_experiment(row)
+            _insert_experiment_event(
+                connection, experiment, "hie.experiment_started",
+                "Running baseline and candidate against the same fixtures without tools or external actions.",
+                "running", {
+                    "candidate_sha256": experiment["candidate"]["sha256"],
+                    "fixture_count": len(experiment["fixtures"]),
+                    "automatic_promotion": False,
+                },
+            )
+            connection.commit()
+    except Exception as exc:
+        raise HieExperimentError("Could not claim experiment with its audit event") from exc
     task = get_task(experiment["task_id"])
     if task is not None and task.status == "pending":
         update_task(task.id, status="executing")
