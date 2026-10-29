@@ -915,11 +915,18 @@ function HieExperimentModal({scope,onClose}) {
   const [approved,setApproved]=useState(false);
   const [promotion,setPromotion]=useState(null);
   const [activeProfile,setActiveProfile]=useState(null);
+  const [modeStatus,setModeStatus]=useState(null);
 
   const scopeKey=scope?.taskId ? "task_id="+scope.taskId : "conversation_id="+scope?.conversationId;
+  const canExecute=modeStatus?.enabled===true && modeStatus?.experiment_execution_available===true;
+  const canApprove=modeStatus?.supported_capabilities?.includes("version_bound_approval")===true;
+  const canPromote=modeStatus?.supported_capabilities?.includes("versioned_promotion")===true;
+  const canRollback=modeStatus?.supported_capabilities?.includes("rollback")===true;
   useEffect(()=>{
     let active=true;
     const params=scope?.taskId ? {taskId:scope.taskId} : {conversationId:scope?.conversationId};
+    api.hie.status(params).then(status=>{if(active)setModeStatus(status);})
+      .catch(err=>{if(active)setModeStatus({enabled:false,experiment_execution_available:false,message:err.message,supported_capabilities:[],unavailable_capabilities:[]});});
     api.hie.listExperiments(params).then(items=>{if(active)setHistory(items);})
       .catch(err=>{if(active)setError("Não foi possível carregar os experimentos: "+err.message);});
     return ()=>{active=false;};
@@ -1024,15 +1031,16 @@ function HieExperimentModal({scope,onClose}) {
 
   return <Modal title="HIE Experimental · Experimentos" onClose={onClose}>
     <div className="hie-experiment-modal">
-      <p className="modal-hint">O HIE compara instruções declarativas em probes isolados, sem ferramentas nem ações externas. Aprovação, promoção e rollback são ações explícitas, vinculadas a hashes e versões.</p>
+      <p className="modal-hint">O HIE compara instruções declarativas em probes isolados, sem ferramentas nem ações externas. Aprovação, promoção e rollback dependem das capacidades informadas pelo backend e exigem confirmação explícita.</p>
+      {modeStatus&&!canExecute&&<div className="modal-hint" role="status">{modeStatus.message || "Experimentos HIE indisponíveis neste escopo. O chat e as Tasks normais continuam funcionando."}</div>}
       {history.length>0&&<div className="hie-history"><strong>Experimentos anteriores</strong>{history.slice(0,5).map(item=><button type="button" key={item.id} className={experiment?.id===item.id?"active":""} onClick={()=>openHistory(item)}>#{item.id} · {item.profile_slug} · {item.status}</button>)}</div>}
-      <form className="modal-form" onSubmit={createAndRun}>
+      {canExecute&&<form className="modal-form" onSubmit={createAndRun}>
         <label>Slug do perfil <input value={profileSlug} onChange={event=>setProfileSlug(event.target.value.toLowerCase())} required maxLength={80} pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="ex.: qa-agent"/></label>
         <label>Instruções candidatas <textarea value={candidateContent} onChange={event=>setCandidateContent(event.target.value)} required minLength={1} maxLength={12000} rows={4} placeholder="Escreva a versão declarativa que deseja testar."/></label>
         <label>Prompt de teste <textarea value={prompt} onChange={event=>setPrompt(event.target.value)} required maxLength={2000} rows={2} placeholder="Uma solicitação representativa para comparar baseline e candidato."/></label>
         <label>Texto esperado (separado por vírgula) <input value={expectedContains} onChange={event=>setExpectedContains(event.target.value)} required placeholder="ex.: resumo, fonte"/></label>
         <div className="hie-experiment-actions"><button className="primary-action" type="submit" disabled={busy||["queued","running"].includes(experiment?.status)}>{busy?"Preparando…":"Criar e executar experimento"}</button></div>
-      </form>
+      </form>}
       {error&&<div className="task-inline-error" role="alert">{error}</div>}
       {notice&&<div className="agent-config-success" role="status">{notice}</div>}
       {experiment&&<section className="hie-experiment-result">
@@ -1052,11 +1060,11 @@ function HieExperimentModal({scope,onClose}) {
         </div>}
         {experiment.results?.error&&<div className="task-inline-error">{experiment.results.error}</div>}
         {["completed","failed","draft"].includes(experiment.status)&&<button type="button" className="secondary-action" onClick={rejectCandidate} disabled={busy}>Rejeitar candidato</button>}
-        {experiment.status==="completed"&&experiment.results?.assessment==="candidate_better"&&!promotion&&<div className="hie-experiment-actions">
+        {canApprove&&canPromote&&experiment.status==="completed"&&experiment.results?.assessment==="candidate_better"&&!promotion&&<div className="hie-experiment-actions">
            <button type="button" className="secondary-action" onClick={approveCandidate} disabled={busy||approved}>Aprovar hash e versão</button>
            <button type="button" className="primary-action" onClick={promoteApprovedCandidate} disabled={busy||!approved}>{busy?"Processando…":"Promover versão aprovada"}</button>
          </div>}
-         {promotion&&<div className="hie-experiment-actions"><span className="hie-hash-line">Promovido como v{promotion.profile?.version} · promoção #{promotion.promotion_id}</span><button type="button" className="secondary-action" onClick={rollbackPromotedCandidate} disabled={busy}>Rollback com confirmação</button></div>}
+         {promotion&&canRollback&&<div className="hie-experiment-actions"><span className="hie-hash-line">Promovido como v{promotion.profile?.version} · promoção #{promotion.promotion_id}</span><button type="button" className="secondary-action" onClick={rollbackPromotedCandidate} disabled={busy}>Rollback com confirmação</button></div>}
          <p className="modal-hint">{promotion?"A promoção foi explícita e a versão anterior está preservada. O rollback só funciona se o perfil ativo ainda corresponder exatamente à versão promovida.":"Nenhuma versão ativa é alterada até a confirmação explícita de promoção. Uma aprovação fica inválida se o hash do candidato ou a versão/hash do perfil ativo mudar."}</p>
       </section>}
     </div>
