@@ -150,6 +150,7 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
         )
         connection.commit()
 
+    experiment_available = _experiment_scope_available(scope, scope_id)
     if scope == "task":
         task = get_task(scope_id)
         if task is not None:
@@ -168,7 +169,7 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
                 metadata={
                     "scope": "task",
                     "scope_id": scope_id,
-                    "experiment_execution_available": True,
+                    "experiment_execution_available": experiment_available,
                 },
             )
     return _payload(scope, scope_id, payload.enabled)
