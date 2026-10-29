@@ -564,7 +564,16 @@ def run_experiment(experiment_id: int) -> None:
         task = get_task(experiment["task_id"]) if experiment is not None else None
         if task is not None and task.status in {"pending", "executing"}:
             try:
-                update_task(task.id, status="failed", result={"hie_experiment_id": experiment_id, "error": safe_error})
+                update_task(
+                    task.id,
+                    status="failed",
+                    result={
+                        "hie_experiment_id": experiment_id,
+                        "error": safe_error,
+                        "automatic_retry": False,
+                        "recovery_requires_user": True,
+                    },
+                )
             except ValueError:
                 pass
 
