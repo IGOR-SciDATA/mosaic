@@ -95,10 +95,7 @@ def test_approval_rejects_candidate_hash_or_active_profile_version_mismatch(clie
     response = client.post(f"/hie/experiments/{experiment['id']}/approve", json=wrong_candidate)
     assert response.status_code == 409
 
-    changed = client.put(f"/projects/{project.id}/agents/qa-agent", json={
-        "instructions": "Profile changed after experiment.",
-    })
-    # The route is intentionally not assumed to exist; mutate through the repository service.
+    # Mutate through the canonical agent library service, then verify the approval snapshot is stale.
     from app.services.agent_library import update_project_agent
     update_project_agent(project.id, "qa-agent", {"instructions": "Profile changed after experiment."})
     stale = client.post(f"/hie/experiments/{experiment['id']}/approve", json=payload)
