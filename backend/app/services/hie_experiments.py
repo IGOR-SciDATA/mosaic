@@ -193,61 +193,77 @@ def create_experiment(
         plan={"goal": f"HIE experiment for /{profile_slug}", "hie_experiment": True, "source_task_id": task_id},
     )
     now = _now()
-    with get_connection() as connection:
-        connection.execute(
-            """INSERT INTO hie_sessions (task_id, enabled, created_at, updated_at)
-               VALUES (?, 1, ?, ?) ON CONFLICT(task_id) DO UPDATE SET enabled = 1, updated_at = excluded.updated_at""",
-            (experiment_task.id, now, now),
-        )
-        cursor = connection.execute(
-            """INSERT INTO hie_experiments (
-                task_id, source_task_id, conversation_id, project_id, profile_slug, provider, model_name, budget_json, status,
-                baseline_snapshot, candidate, fixtures, candidate_diff, results, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, NULL, ?, ?)""",
-            (
-                experiment_task.id, task_id, resolved_conversation_id, project_id, profile_slug,
-                model.provider, model.model_name,
-                json.dumps({
-                    "max_fixtures": MAX_FIXTURES,
-                    "max_provider_calls": MAX_FIXTURES * 2,
-                    "max_output_chars_per_call": MAX_OUTPUT_CHARS,
-                    "max_output_tokens_per_call": MAX_OUTPUT_TOKENS,
-                    "max_input_chars_per_call": MAX_INPUT_CHARS_PER_CALL,
-                    "max_total_input_chars": MAX_TOTAL_INPUT_CHARS,
-                    "provider_request_timeout_seconds": PROVIDER_TIMEOUT_SECONDS,
-                    "max_wall_seconds": PROVIDER_TIMEOUT_SECONDS * 2,
-                    "max_artifact_bytes": MAX_ARTIFACT_BYTES,
-                    "max_persisted_evidence_chars": MAX_PERSISTED_EVIDENCE_CHARS,
-                    "max_candidate_chars": 12000,
-                    "fixture_count": len(normalized_fixtures),
-                    "estimated_provider_calls": len(normalized_fixtures) * 2,
-                }),
-                json.dumps(baseline, ensure_ascii=False),
-                json.dumps(candidate, ensure_ascii=False),
-                json.dumps(normalized_fixtures, ensure_ascii=False),
-                diff, now, now,
-            ),
-        )
-        connection.commit()
-    experiment = get_experiment(cursor.lastrowid)
-    _emit(experiment, "hie.experiment_created", "HIE experiment created with a hash-sealed declarative candidate.", "draft", {
-        "profile_slug": profile_slug,
-        "baseline_version": baseline["version"],
-        "baseline_sha256": baseline["sha256"],
-        "candidate_sha256": candidate["sha256"],
-        "fixture_count": len(normalized_fixtures),
-    })
+    try:
+        with get_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """INSERT INTO hie_sessions (task_id, enabled, created_at, updated_at)
+                   VALUES (?, 1, ?, ?) ON CONFLICT(task_id) DO UPDATE SET enabled = 1, updated_at = excluded.updated_at""",
+                (experiment_task.id, now, now),
+            )
+            cursor = connection.execute(
+                """INSERT INTO hie_experiments (
+                    task_id, source_task_id, conversation_id, project_id, profile_slug, provider, model_name, budget_json, status,
+                    baseline_snapshot, candidate, fixtures, candidate_diff, results, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, NULL, ?, ?)""",
+                (
+                    experiment_task.id, task_id, resolved_conversation_id, project_id, profile_slug,
+                    model.provider, model.model_name,
+                    json.dumps({
+                        "max_fixtures": MAX_FIXTURES,
+                        "max_provider_calls": MAX_FIXTURES * 2,
+                        "max_output_chars_per_call": MAX_OUTPUT_CHARS,
+                        "max_output_tokens_per_call": MAX_OUTPUT_TOKENS,
+                        "max_input_chars_per_call": MAX_INPUT_CHARS_PER_CALL,
+                        "max_total_input_chars": MAX_TOTAL_INPUT_CHARS,
+                        "provider_request_timeout_seconds": PROVIDER_TIMEOUT_SECONDS,
+                        "max_wall_seconds": PROVIDER_TIMEOUT_SECONDS * 2,
+                        "max_artifact_bytes": MAX_ARTIFACT_BYTES,
+                        "max_persisted_evidence_chars": MAX_PERSISTED_EVIDENCE_CHARS,
+                        "max_candidate_chars": 12000,
+                        "fixture_count": len(normalized_fixtures),
+                        "estimated_provider_calls": len(normalized_fixtures) * 2,
+                    }),
+                    json.dumps(baseline, ensure_ascii=False),
+                    json.dumps(candidate, ensure_ascii=False),
+                    json.dumps(normalized_fixtures, ensure_ascii=False),
+                    diff, now, now,
+                ),
+            )
+            experiment = _row_to_experiment(
+                connection.execute("SELECT * FROM hie_experiments WHERE id = ?", (cursor.lastrowid,)).fetchone()
+            )
+            _emit(experiment, "hie.experiment_created", "HIE experiment created with a hash-sealed declarative candidate.", "draft", {
+                "profile_slug": profile_slug,
+                "baseline_version": baseline["version"],
+                "baseline_sha256": baseline["sha256"],
+                "candidate_sha256": candidate["sha256"],
+                "fixture_count": len(normalized_fixtures),
+            }, connection=connection)
+            connection.commit()
+    except Exception as exc:
+        # The Task was created using the Core repository before this transaction.
+        # Keep its lifecycle explicit if the experiment row/event cannot be persisted.
+        try:
+            update_task(
+                experiment_task.id,
+                status="failed",
+                result={"hie_experiment_creation_failed": True, "error_type": type(exc).__name__},
+            )
+        except Exception:
+            pass
+        raise HieExperimentError("HIE experiment creation could not be persisted safely") from exc
     return experiment
 
 
 def queue_experiment(experiment_id: int) -> dict[str, Any]:
-    experiment = get_experiment(experiment_id)
-    if experiment is None:
-        raise HieExperimentError("Experiment not found")
-    if experiment["status"] != "draft":
-        raise HieExperimentError(f"Experiment cannot run from status {experiment['status']}")
     with get_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute("SELECT * FROM hie_experiments WHERE id = ?", (experiment_id,)).fetchone()
+        if row is None:
+            raise HieExperimentError("Experiment not found")
+        if row["status"] != "draft":
+            raise HieExperimentError(f"Experiment cannot run from status {row['status']}")
         running = connection.execute(
             "SELECT id FROM hie_experiments WHERE status IN ('queued', 'running') LIMIT 1"
         ).fetchone()
@@ -257,14 +273,16 @@ def queue_experiment(experiment_id: int) -> dict[str, Any]:
             "UPDATE hie_experiments SET status = 'queued', updated_at = ? WHERE id = ? AND status = 'draft'",
             (_now(), experiment_id),
         )
-        connection.commit()
         if cursor.rowcount != 1:
             raise HieExperimentError("Experiment state changed; refresh and try again")
-    experiment = get_experiment(experiment_id)
-    _emit(experiment, "hie.experiment_queued", "HIE experiment queued for isolated baseline/candidate probes.", "queued", {
-        "candidate_sha256": experiment["candidate"]["sha256"],
-        "fixture_count": len(experiment["fixtures"]),
-    })
+        experiment = _row_to_experiment(
+            connection.execute("SELECT * FROM hie_experiments WHERE id = ?", (experiment_id,)).fetchone()
+        )
+        _emit(experiment, "hie.experiment_queued", "HIE experiment queued for isolated baseline/candidate probes.", "queued", {
+            "candidate_sha256": experiment["candidate"]["sha256"],
+            "fixture_count": len(experiment["fixtures"]),
+        }, connection=connection)
+        connection.commit()
     return experiment
 
 
@@ -578,24 +596,27 @@ def run_experiment(experiment_id: int) -> None:
 
 
 def reject_experiment(experiment_id: int) -> dict[str, Any]:
-    experiment = get_experiment(experiment_id)
-    if experiment is None:
-        raise HieExperimentError("Experiment not found")
-    if experiment["status"] not in {"draft", "completed", "failed"}:
-        raise HieExperimentError(f"Experiment cannot be rejected from status {experiment['status']}")
     with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute("SELECT * FROM hie_experiments WHERE id = ?", (experiment_id,)).fetchone()
+        if row is None:
+            raise HieExperimentError("Experiment not found")
+        if row["status"] not in {"draft", "completed", "failed"}:
+            raise HieExperimentError(f"Experiment cannot be rejected from status {row['status']}")
         cursor = connection.execute(
             "UPDATE hie_experiments SET status = 'rejected', updated_at = ? WHERE id = ? AND status = ?",
-            (_now(), experiment_id, experiment["status"]),
+            (_now(), experiment_id, row["status"]),
         )
-        connection.commit()
         if cursor.rowcount != 1:
             raise HieExperimentError("Experiment state changed; refresh and try again")
-    experiment = get_experiment(experiment_id)
-    _emit(experiment, "hie.experiment_rejected", "Candidate rejected by explicit user action; active profile was not modified.", "rejected", {
-        "candidate_sha256": experiment["candidate"]["sha256"],
-        "automatic_promotion": False,
-    })
+        experiment = _row_to_experiment(
+            connection.execute("SELECT * FROM hie_experiments WHERE id = ?", (experiment_id,)).fetchone()
+        )
+        _emit(experiment, "hie.experiment_rejected", "Candidate rejected by explicit user action; active profile was not modified.", "rejected", {
+            "candidate_sha256": experiment["candidate"]["sha256"],
+            "automatic_promotion": False,
+        }, connection=connection)
+        connection.commit()
     return experiment
 
 
