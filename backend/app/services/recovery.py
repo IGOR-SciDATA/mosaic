@@ -45,6 +45,7 @@ def _insert_hie_recovery_event(connection, experiment: dict[str, Any], message: 
 def recover_interrupted_hie_experiments() -> dict[str, Any]:
     """Fail closed on experiments interrupted by restart; preserve evidence and never replay."""
     recovered: list[int] = []
+    recovered_tasks: list[int] = []
     with get_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
         rows = connection.execute(
@@ -79,47 +80,39 @@ def recover_interrupted_hie_experiments() -> dict[str, Any]:
                 experiment,
                 "HIE experiment was interrupted by restart; partial fixture evidence was kept and no automatic replay occurred.",
             )
-            recovered.append(experiment["id"])
-        connection.commit()
-
-    recovered_tasks: list[int] = []
-    for experiment_id in recovered:
-        experiment = None
-        with get_connection() as connection:
-            row = connection.execute(
-                "SELECT task_id, conversation_id, project_id FROM hie_experiments WHERE id = ?",
-                (experiment_id,),
+            # Recover the dedicated Task in the same transaction so both lifecycles
+            # remain consistent; generic Task recovery will skip its failed state.
+            task_row = connection.execute(
+                "SELECT id, status, result FROM tasks WHERE id = ?", (experiment["task_id"],)
             ).fetchone()
-        if row is None:
-            continue
-        task = get_task(row["task_id"])
-        if task is None or task.status not in {"pending", "planning", "executing", "validating"}:
-            continue
-        try:
-            updated = update_task(
-                task.id,
-                status="failed",
-                result={
-                    **dict(task.result or {}),
-                    "hie_experiment_id": experiment_id,
+            if task_row and task_row["status"] in {"pending", "planning", "executing", "validating"}:
+                try:
+                    task_result = json.loads(task_row["result"]) if task_row["result"] else {}
+                except (TypeError, json.JSONDecodeError):
+                    task_result = {}
+                if not isinstance(task_result, dict):
+                    task_result = {}
+                task_result.update({
+                    "hie_experiment_id": experiment["id"],
                     "recovery": {
                         "status": "interrupted_by_restart",
                         "automatic_retry": False,
                         "resume_requires_user": True,
                     },
-                },
-            )
-        except ValueError:
-            continue
-        if updated is not None:
-            recovered_tasks.append(task.id)
+                })
+                connection.execute(
+                    "UPDATE tasks SET status = 'failed', result = ?, updated_at = ? WHERE id = ?",
+                    (json.dumps(task_result, ensure_ascii=False), _now(), experiment["task_id"]),
+                )
+                recovered_tasks.append(experiment["task_id"])
+            recovered.append(experiment["id"])
+        connection.commit()
 
     return {
         "recovered_experiments": recovered,
         "recovered_tasks": recovered_tasks,
         "automatic_retry": False,
     }
-
 
 def recover_interrupted_tasks() -> dict[str, Any]:
     """Mark nonterminal work interrupted by a prior process as failed and reviewable.
