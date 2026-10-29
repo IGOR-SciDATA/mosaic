@@ -139,8 +139,6 @@ def _emit_terminal_best_effort(
     try:
         _emit(task, event_name, message, status=status, metadata=metadata, level=level)
     except Exception:
-        # Preserve the original exception; event persistence failure is not a
-        # reason to invoke runners again or to claim the experiment succeeded.
         pass
 
 
@@ -267,26 +265,34 @@ def run_candidate_experiment(
                 "elapsed_ms": int((time.monotonic() - started) * 1000),
             },
         }
-        # Seal the exact experiment record so downstream reviewers can detect
-        # accidental or unauthorized edits to its data-only fields.
+
+        # Reserve a bounded portion for the sealed record and its Artifact metadata.
+        # Output bytes and output Artifact metadata share the same aggregate budget.
+        record_reserve = min(16 * 1024, max(1, active_budgets.artifact_bytes // 4))
+        output_budget = active_budgets.artifact_bytes - record_reserve
+        if output_budget <= 0:
+            raise HIEBudgetExceeded("HIE artifact budget cannot fit both output evidence and experiment record")
+        evidence = persist_output_evidence(
+            task.id, baseline_output, candidate_output, max_bytes=output_budget,
+        )
+        record["evidence"] = evidence
+        used_bytes = sum(
+            int(ref.get("budget_bytes", ref.get("size_bytes", 0)))
+            for ref in evidence.values()
+        )
+        remaining_bytes = active_budgets.artifact_bytes - used_bytes
+        if remaining_bytes <= 0:
+            raise HIEBudgetExceeded("HIE output evidence leaves no budget for the experiment record")
+
         record["record_sha256"] = hashlib.sha256(
             canonical_json(record).encode("utf-8")
         ).hexdigest()
-        if len(canonical_json(record).encode("utf-8")) > active_budgets.artifact_bytes:
-            raise HIEBudgetExceeded("HIE experiment record exceeds artifact-size budget")
-        record["evidence"] = persist_output_evidence(
-            task.id, baseline_output, candidate_output,
-            max_bytes=active_budgets.artifact_bytes,
-        )
-        record.pop("record_sha256", None)
-        record["record_sha256"] = hashlib.sha256(
-            canonical_json(record).encode("utf-8")
-        ).hexdigest()
-        persist_record_evidence(
-            task.id, record, max_bytes=active_budgets.artifact_bytes,
-        )
-        # The record Artifact is discoverable through Core's Artifact repository.
-        # Its self-reference is intentionally not embedded in the sealed record.
+        record_size = len(canonical_json(record).encode("utf-8"))
+        if record_size > remaining_bytes:
+            raise HIEBudgetExceeded("HIE experiment record exceeds the remaining aggregate artifact budget")
+        # The sealed record deliberately does not self-reference its Artifact;
+        # Core Artifact lookup remains the source for the record Artifact ID.
+        persist_record_evidence(task.id, record, max_bytes=remaining_bytes)
         _emit(task, "hie.experiment.completed", "HIE comparison completed without promotion", status="completed", metadata=record)
         return record
     except HIEExperimentCancelled as exc:
