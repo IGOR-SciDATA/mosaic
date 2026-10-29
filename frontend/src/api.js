@@ -130,6 +130,13 @@ export const api = {
     },
     cancel: (id) => request(`/tasks/${id}/cancel`, { method: "POST" }),
   },
+  hie: {
+    status: ({ conversationId, taskId }) => {
+      const scope = taskId ? `task_id=${taskId}` : `conversation_id=${conversationId}`;
+      return request(`/hie/status?${scope}`);
+    },
+    setEnabled: (payload) => request("/hie/status", { method: "PUT", body: JSON.stringify(payload) }),
+  },
   toolCalls: {
     list: (conversationId, taskId) => request(`/tool-calls?conversation_id=${conversationId}${taskId ? `&task_id=${taskId}` : ""}`),
     get: (id) => request(`/tool-calls/${id}`),
