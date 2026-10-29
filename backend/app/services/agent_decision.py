@@ -9,6 +9,7 @@ from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task
 from app.providers.factory import resolve_model_provider
 from app.tools import registry
+from app.services.hie_runtime import HIEExecutionBudget
 
 
 _CONTENT_ONLY_INSTRUCTIONS = """A etapa atual é PRODUÇÃO DE CONTEÚDO, não seleção de ações.
@@ -193,7 +194,11 @@ def _record_decision_event(task: Any, event_name: str, message: str, **kwargs: A
         pass
 
 
-def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], dict[str, Any]]:
+def create_provider_decider(
+    task_id: int,
+    *,
+    execution_budget: HIEExecutionBudget | None = None,
+) -> Callable[[list[dict[str, Any]]], dict[str, Any]]:
     """Build a real ModelProvider-backed decision function for one persisted Task."""
     task = get_task(task_id)
     if task is None:
@@ -267,16 +272,22 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                 if content_only:
                     # This is a content-generation stage. Do not ask Ollama for JSON:
                     # the model should return the actual artifact body, not an agent envelope.
+                    provider_configuration = {**model.configuration, "temperature": 0, "think": False}
+                    if execution_budget is not None:
+                        provider_configuration = execution_budget.before_provider_call(messages, provider_configuration)
                     raw = provider.generate(
                         messages=messages,
                         model_name=model.model_name,
-                        configuration={**model.configuration, "temperature": 0, "think": False},
+                        configuration=provider_configuration,
                     )
                 elif callable(generate_with_tools) and active_tool_catalog:
+                    provider_configuration = {**model.configuration, "temperature": 0, "think": False}
+                    if execution_budget is not None:
+                        provider_configuration = execution_budget.before_provider_call(messages, provider_configuration)
                     native_decision = generate_with_tools(
                         messages=messages,
                         model_name=model.model_name,
-                        configuration={**model.configuration, "temperature": 0, "think": False},
+                        configuration=provider_configuration,
                         tools=native_tools,
                     )
                     if not isinstance(native_decision, dict):
@@ -286,11 +297,16 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                 else:
                     # With no tools allowed, use JSON-only generation so the provider
                     # cannot offer a tool the current subtask is forbidden to execute.
+                    provider_configuration = {**model.configuration, "format": "json", "temperature": 0, "think": False}
+                    if execution_budget is not None:
+                        provider_configuration = execution_budget.before_provider_call(messages, provider_configuration)
                     raw = provider.generate(
                         messages=messages,
                         model_name=model.model_name,
-                        configuration={**model.configuration, "format": "json", "temperature": 0, "think": False},
+                        configuration=provider_configuration,
                     )
+                if execution_budget is not None:
+                    execution_budget.after_provider_call(raw)
             except Exception as exc:
                 _record_decision_event(
                     task, "model_request_failed", "A solicitação ao modelo falhou.",
@@ -357,6 +373,8 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                     },
                 )
                 if attempt < _MAX_DECISION_ATTEMPTS:
+                    if execution_budget is not None:
+                        execution_budget.before_retry()
                     _record_decision_event(
                         task, "decision_retry", "Tentando novamente após uma decisão inválida.",
                         level="warning", status="retrying",
