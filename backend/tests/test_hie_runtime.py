@@ -43,3 +43,10 @@ def test_retry_budget_and_cancellation_are_checked_at_boundary():
     with pytest.raises(HIERuntimeCancelled):
         cancelled.before_tool_call()
     assert cancelled.tool_calls == 0
+
+
+def test_invalid_runtime_budgets_fail_closed():
+    with pytest.raises(ValueError, match="positive integer"):
+        HIEExecutionBudget(max_provider_calls=True)
+    with pytest.raises(ValueError, match="positive number"):
+        HIEExecutionBudget(wall_seconds=0)
