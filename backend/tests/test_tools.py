@@ -432,3 +432,58 @@ def test_terminal_output_capture_is_bounded() -> None:
     _read_capped(BytesIO(b"x" * 100), output, 16, truncated, "stdout")
     assert len(output) == 16
     assert truncated["stdout"] is True
+
+
+def test_filesystem_explore_recursively_reads_text_and_excludes_generated_and_sensitive_paths(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    (workspace / "src" / "nested").mkdir(parents=True)
+    (workspace / "node_modules" / "pkg").mkdir(parents=True)
+    (workspace / ".git").mkdir()
+    (workspace / ".venv" / "bin").mkdir(parents=True)
+    (workspace / "src" / "main.py").write_text("print('hello')\n", encoding="utf-8")
+    (workspace / "src" / "nested" / "notes.md").write_text("# Notes\n", encoding="utf-8")
+    (workspace / ".env").write_text("API_KEY=must-not-read", encoding="utf-8")
+    (workspace / "node_modules" / "pkg" / "index.js").write_text("generated", encoding="utf-8")
+    (workspace / ".git" / "config").write_text("git internals", encoding="utf-8")
+    (workspace / ".venv" / "bin" / "activate").write_text("virtualenv", encoding="utf-8")
+    (workspace / "image.bin").write_bytes(b"\x00\x01binary")
+    result = FilesystemTool().execute({"operation": "explore", "path": "."}, workspace=workspace)
+    assert result["status"] == "success"
+    assert result["directories_found"] >= 3
+    assert [item["path"] for item in result["files"]] == ["src/main.py", "src/nested/notes.md"]
+    reasons = {item["reason"] for item in result["ignored"]}
+    assert {"excluded_directory", "sensitive_filename", "binary_content"} <= reasons
+    assert all("must-not-read" not in item["content"] for item in result["files"])
+
+
+def test_filesystem_explore_reports_partial_limits_and_relative_paths(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "a.txt").write_text("12345", encoding="utf-8")
+    (workspace / "b.txt").write_text("67890", encoding="utf-8")
+    result = FilesystemTool().execute(
+        {"operation": "explore", "path": ".", "max_files": 1, "max_file_bytes": 10, "max_total_bytes": 10},
+        workspace=workspace,
+    )
+    assert result["status"] == "partial"
+    assert result["files_read"] == 1
+    assert "max_files" in result["limits_reached"]
+    assert all(not Path(item["path"]).is_absolute() for item in result["files"])
+
+
+def test_filesystem_explore_rejects_traversal_and_symlinks(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside", encoding="utf-8")
+    tool = FilesystemTool()
+    with pytest.raises(ValueError, match="traversal"):
+        tool.execute({"operation": "explore", "path": "../"}, workspace=workspace)
+    link = workspace / "escape"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is not available in this environment")
+    result = tool.execute({"operation": "explore", "path": "."}, workspace=workspace)
+    assert all(item["path"] != "escape" for item in result["files"])
+    assert any(item["path"] == "escape" and item["reason"] == "symlink" for item in result["ignored"])
