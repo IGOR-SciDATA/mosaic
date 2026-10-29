@@ -621,22 +621,20 @@ def reject_experiment(experiment_id: int) -> dict[str, Any]:
 
 
 def recover_interrupted_experiments() -> dict[str, list[int]]:
-    """Reconcile persisted queued/running experiments without replaying provider calls.
-
-    A queued experiment is known not to have entered the runner. A running experiment
-    has an unknown provider outcome, so it is failed for review and never replayed
-    automatically. This reuses the existing startup lifecycle; no worker/queue is added.
-    """
+    """Recover interrupted HIE experiments atomically without replaying provider calls."""
     recovered_queued: list[int] = []
     recovered_running: list[int] = []
     with get_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
         rows = connection.execute(
-            "SELECT id, task_id, status FROM hie_experiments WHERE status IN ('queued', 'running') ORDER BY id"
+            "SELECT * FROM hie_experiments WHERE status IN ('queued', 'running') ORDER BY id"
         ).fetchall()
         for row in rows:
-            previous = row["status"]
+            experiment = _row_to_experiment(row)
+            previous = experiment["status"]
+            existing_results = experiment.get("results") or {}
             recovery = {
+                **existing_results,
                 "error_type": "InterruptedByRestart",
                 "recovery_status": "interrupted_before_execution" if previous == "queued" else "result_unknown_after_restart",
                 "previous_status": previous,
@@ -644,44 +642,64 @@ def recover_interrupted_experiments() -> dict[str, list[int]]:
                 "automatic_retry": False,
                 "requires_user_review": True,
                 "automatic_promotion": False,
+                "preserved_partial_evidence": bool(existing_results.get("evidence")),
             }
             cursor = connection.execute(
                 "UPDATE hie_experiments SET status = 'failed', results = ?, updated_at = ? WHERE id = ? AND status = ?",
-                (json.dumps(recovery), _now(), row["id"], previous),
+                (json.dumps(recovery, ensure_ascii=False), _now(), row["id"], previous),
             )
-            if cursor.rowcount == 1:
-                (recovered_queued if previous == "queued" else recovered_running).append(row["id"])
-        connection.commit()
-    for experiment_id in recovered_queued + recovered_running:
-        experiment = get_experiment(experiment_id)
-        if experiment is None:
-            continue
-        task = get_task(experiment["task_id"])
-        if task is not None and task.status in {"pending", "executing"}:
-            try:
-                update_task(task.id, status="failed", result={
-                    "hie_experiment_id": experiment_id,
+            if cursor.rowcount != 1:
+                continue
+            task_row = connection.execute(
+                "SELECT id, conversation_id, project_id, status, result FROM tasks WHERE id = ?",
+                (experiment["task_id"],),
+            ).fetchone()
+            if task_row is not None and task_row["status"] in {"pending", "planning", "executing", "validating"}:
+                try:
+                    task_result = json.loads(task_row["result"]) if task_row["result"] else {}
+                except (TypeError, json.JSONDecodeError):
+                    task_result = {}
+                if not isinstance(task_result, dict):
+                    task_result = {}
+                task_result.update({
+                    "hie_experiment_id": experiment["id"],
                     "recovery_status": "interrupted_by_restart",
                     "automatic_retry": False,
+                    "preserved_partial_evidence": recovery["preserved_partial_evidence"],
                 })
-            except ValueError:
-                pass
-        previous = "queued" if experiment_id in recovered_queued else "running"
-        try:
+                task_cursor = connection.execute(
+                    "UPDATE tasks SET status = 'failed', result = ?, updated_at = ? WHERE id = ? AND status = ?",
+                    (json.dumps(task_result, ensure_ascii=False), _now(), experiment["task_id"], task_row["status"]),
+                )
+                if task_cursor.rowcount != 1:
+                    raise HieExperimentError("Experiment Task changed during startup recovery")
+                create_task_event(
+                    task_id=experiment["task_id"],
+                    conversation_id=task_row["conversation_id"],
+                    project_id=task_row["project_id"],
+                    component="task",
+                    event_name="task.status_changed",
+                    message=f"Task status changed from {task_row['status']} to failed during HIE recovery",
+                    status="failed",
+                    level="warning",
+                    metadata={"previous_status": task_row["status"], "status": "failed", "recovery": True},
+                    connection=connection,
+                )
+            previous_event_metadata = {
+                "previous_status": previous,
+                "provider_outcome": "not_started" if previous == "queued" else "unknown",
+                "automatic_retry": False,
+                "automatic_promotion": False,
+                "preserved_partial_evidence": recovery["preserved_partial_evidence"],
+            }
             _emit(
                 experiment,
                 "hie.experiment_interrupted_by_restart",
                 "HIE experiment was interrupted by a Core restart; provider calls were not replayed.",
                 "failed",
-                {
-                    "previous_status": previous,
-                    "provider_outcome": "not_started" if previous == "queued" else "unknown",
-                    "automatic_retry": False,
-                    "automatic_promotion": False,
-                },
+                previous_event_metadata,
+                connection=connection,
             )
-        except Exception:
-            # The persisted terminal state remains authoritative; event failure is
-            # not converted into a false success and can be diagnosed from the DB.
-            continue
+            (recovered_queued if previous == "queued" else recovered_running).append(row["id"])
+        connection.commit()
     return {"recovered_queued": recovered_queued, "recovered_running": recovered_running}
