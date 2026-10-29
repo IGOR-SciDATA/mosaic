@@ -253,7 +253,32 @@ function MessageList({ messages, streaming, taskTraces, onToggleTrace }) {
   </div>;
 }
 
-function TaskTrace({ trace, onToggle }) { const expanded=!!trace.expanded; const labels={executing:"Executando tarefa",pending:"Na fila",planning:"Planejando",validating:"Validando resultado",awaiting_approval:"Aguardando aprovação",completed:"Tarefa concluída",failed:"Tarefa falhou",cancelled:"Tarefa cancelada"}; return <section className={`chat-task-trace ${trace.status||"executing"}`}><button type="button" className="chat-task-trace-toggle" onClick={onToggle} aria-expanded={expanded}><span className="chat-task-trace-indicator">{["completed","failed","cancelled"].includes(trace.status)?"✓":"◌"}</span><span className="chat-task-trace-heading"><strong>{labels[trace.status]||trace.status||"Acompanhando execução"}</strong><small>{trace.events?.length?`${trace.events.length} atualizações de execução`:"Aguardando as primeiras atualizações"}</small></span><span className="chat-task-trace-chevron">{expanded?"−":"+"}</span></button>{expanded&&<div className="chat-task-trace-body">{trace.events?.length?<ol>{trace.events.map((event,index)=><li key={event.id||index}><span className="trace-event-dot"/><div><strong>{event.message||event.event_name||"Etapa atualizada"}</strong><small>{[event.component,event.status].filter(Boolean).join(" · ")}{event.timestamp?" · "+new Date(event.timestamp).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):""}</small></div></li>)}</ol>:<p>A tarefa foi iniciada. As atualizações reais aparecerão aqui.</p>}{trace.error&&<p className="trace-error">{trace.error}</p>}</div>}</section>; }
+function TaskTrace({ trace, onToggle }) {
+  const expanded = !!trace.expanded;
+  const labels = { executing: "Pensando e executando", pending: "Na fila", planning: "Planejando tarefa", validating: "Validando resultado", awaiting_approval: "Aguardando sua aprovação", completed: "Tarefa concluída", failed: "Tarefa falhou", cancelled: "Tarefa cancelada" };
+  const terminal = ["completed", "failed", "cancelled"].includes(trace.status);
+  return <section className={`chat-task-trace ${trace.status || "executing"}`}>
+    <button type="button" className="chat-task-trace-toggle" onClick={onToggle} aria-expanded={expanded}>
+      <span className={`chat-task-trace-indicator ${terminal ? "terminal" : "working"}`}>{terminal ? (trace.status === "completed" ? "✓" : "!") : "◌"}</span>
+      <span className="chat-task-trace-heading"><strong>{labels[trace.status] || trace.status || "Pensando e executando"}</strong><small>{trace.events?.length ? `${trace.events.length} atualizações · tarefa #${trace.taskId}` : "Preparando as primeiras etapas…"}</small></span>
+      <span className="chat-task-trace-chevron">{expanded ? "−" : "+"}</span>
+    </button>
+    {expanded && <div className="chat-task-trace-body">
+      {trace.events?.length ? <ol>{trace.events.map((event, index) => {
+        const details = event.metadata && (event.metadata.step || event.metadata.substep || event.metadata.detail);
+        return <li className={event.status === "failed" ? "trace-event-failed" : ""} key={event.id || index}>
+          <span className="trace-event-dot"/><div>
+            <strong>{event.message || event.event_name || "Etapa atualizada"}</strong>
+            {details && <p className="trace-event-substep">{typeof details === "string" ? details : JSON.stringify(details)}</p>}
+            <small>{[event.component, event.status].filter(Boolean).join(" · ")}{event.timestamp ? " · " + new Date(event.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""}</small>
+          </div>
+        </li>;
+      })}</ol> : <p>A tarefa foi iniciada. As etapas aparecerão aqui conforme o Core publicar eventos.</p>}
+      {trace.artifacts?.length > 0 && <div className="chat-task-artifacts"><strong>Arquivos produzidos</strong>{trace.artifacts.map(item => <div key={item.id} className="chat-task-artifact"><span>▧</span><span><b>{item.path}</b><small>{item.type || "artifact"}{item.current_verification ? " · " + item.current_verification : ""}</small></span></div>)}</div>}
+      {trace.error && <p className="trace-error">{trace.error}</p>}
+    </div>}
+  </section>;
+}
 
 function Composer({ disabled, onSubmit, model, models, conversation, projectId, onModelChange, onModelSettings, onFiles, onAgent, text, setText, hieEnabled, onToggleHie, onOpenHieExperiment, hieExperimentAvailable, hieBusy }) {
   const [agents, setAgents] = useState([]);
@@ -1232,15 +1257,15 @@ export default function App(){
     if(!conversation||sending)return; setError("");setSending(true);
     const localUser={localId:`user-${Date.now()}`,role:"user",content,created_at:new Date().toISOString()};
     const localAssistant={localId:`assistant-${Date.now()}`,role:"assistant",content:"",created_at:new Date().toISOString()};
-    const taskIntent = /^\/[a-z0-9-]+(?:\s|$)/i.test(content.trim()) || /\b(implemente|implementar|desenvolva|desenvolver|crie um arquivo|crie uma funcionalidade|altere o (frontend|backend|código)|corrija o (bug|erro)|execute essa tarefa|faça essa tarefa|como tarefa|gere um projeto|construa o aplicativo)\b/i.test(content);
+    const taskIntent = /^\/[a-z0-9-]+(?:\s|$)/i.test(content.trim()) || /\b(implemente|implementar|desenvolva|desenvolver|crie|criar|gere|gerar|construa|construir|edite|editar|altere|alterar|modifique|modificar|corrija|corrigir|execute|executar|implementar|refatore|refatorar|instale|instalar|configure|configurar|adicione|adicionar|remova|remover|salve|salvar|escreva|escrever)\b.{0,100}\b(arquivo|arquivos|código|codigo|função|funcao|componente|frontend|backend|projeto|implementação|implementacao|bug|erro|teste|feature|funcionalidade|documento|relatório|relatorio|script|página|pagina|classe|endpoint|rota|módulo|modulo)\b/i.test(content) || /\b(implemente|implementar|desenvolva|desenvolver|corrija o (bug|erro)|execute essa tarefa|faça essa tarefa|como tarefa|gere um projeto|construa o aplicativo|crie uma funcionalidade|altere o (frontend|backend|código))\b/i.test(content) || /^\s*(faça|faca|realize|execute|implemente|desenvolva|crie|criar|gere|construa|corrija|refatore|edite|modifique|altere|adicione|remova|instale|configure|salve|escreva)\b.{0,120}\b(no projeto|neste projeto|no repositório|no repositorio|no código|no codigo|para mim|por favor)\b/i.test(content);
     setMessages(items=>[...items,localUser,localAssistant]);
     try{
       if(taskIntent){
         const task=await api.tasks.start({conversation_id:conversation.id,goal:content,type:/\b(relatório|relatorio|documento|texto|pdf)\b/i.test(content)?"document":/\b(análise|analise|pesquise|compare)\b/i.test(content)?"analysis":/\b(código|codigo|frontend|backend|aplicativo|app|bug|implemente|desenvolva)\b/i.test(content)?"code_project":"generic"});
         setMessages(items=>items.map(item=>item.localId===localAssistant.localId?{...item,content:"Iniciei a execução como tarefa. Acompanhe as etapas neste painel."}:item));
-        setTaskTraces(items=>({...items,[localAssistant.localId]:{taskId:task.id,status:task.status||"executing",events:[],expanded:true}}));
+        setTaskTraces(items=>({...items,[localAssistant.localId]:{taskId:task.id,status:task.status||"executing",events:[],artifacts:[],expanded:false}}));
         let lastEventId=0;
-        const source=api.tasks.streamEvents(task.id,0,event=>{lastEventId=Math.max(lastEventId,Number(event.id)||0);setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),taskId:task.id,status:["completed","failed","cancelled","awaiting_approval"].includes(event.status)?event.status:(items[localAssistant.localId]?.status||task.status||"executing"),events:[...(items[localAssistant.localId]?.events||[]),event].slice(-100),expanded:items[localAssistant.localId]?.expanded??true}}));},state=>{if(state==="reconnecting")api.tasks.events(task.id,lastEventId).then(events=>{if(events?.length)setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),events:[...(items[localAssistant.localId]?.events||[]),...events.filter(ev=>Number(ev.id)>lastEventId)].slice(-100)}}));}).catch(()=>{});});
+        const source=api.tasks.streamEvents(task.id,0,event=>{lastEventId=Math.max(lastEventId,Number(event.id)||0);setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),taskId:task.id,status:["completed","failed","cancelled","awaiting_approval"].includes(event.status)?event.status:(items[localAssistant.localId]?.status||task.status||"executing"),events:[...(items[localAssistant.localId]?.events||[]).filter(item=>item.id!==event.id),event].slice(-100),expanded:items[localAssistant.localId]?.expanded??false}}));},state=>{if(state==="reconnecting")api.tasks.events(task.id,lastEventId).then(events=>{if(events?.length)setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),events:[...(items[localAssistant.localId]?.events||[]),...events.filter(ev=>Number(ev.id)>lastEventId)].slice(-100)}}));}).catch(()=>{});});
         window.setTimeout(()=>source.close(),30*60*1000);
       }else{let streamed="";await api.conversations.stream(conversation.id,content,chunk=>{streamed+=chunk;setMessages(items=>items.map(item=>item.localId===localAssistant.localId?{...item,content:streamed}:item));});setMessages(await api.conversations.messages(conversation.id));}
       setConversations(items=>items.map(item=>item.id===conversation.id?{...item,updated_at:new Date().toISOString()}:item));
