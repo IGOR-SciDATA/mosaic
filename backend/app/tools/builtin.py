@@ -1068,17 +1068,11 @@ def _explore_workspace(
                 found.append(resolved)
             except (OSError, ValueError):
                 failures.append({"path": relative, "reason": "path_or_stat_error"})
-        if "time_limit" in limits:
-            break
-
     found.sort(key=lambda item: item.relative_to(root).as_posix().casefold())
     files_found = len(found)
     for candidate in found:
         if cancel_check is not None and cancel_check():
             limits.append("cancelled")
-            break
-        if time.monotonic() - started >= WORKSPACE_SCAN_TIMEOUT_SECONDS:
-            limits.append("time_limit")
             break
         relative = candidate.relative_to(root).as_posix()
         if max_files is not None and len(contents) >= max_files:
