@@ -3282,3 +3282,30 @@ body { overflow: hidden; }
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
+
+
+@media (max-width: 900px) {
+  .app-shell:not(.context-hidden) .context-panel {
+    display: block;
+    position: fixed;
+    z-index: 22;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(88vw, 380px);
+    max-width: 100%;
+    border-left: 1px solid var(--border);
+    box-shadow: -18px 0 48px rgba(0,0,0,.4);
+  }
+  .context-overlay {
+    display: block;
+    position: fixed;
+    z-index: 21;
+    inset: 0;
+    background: rgba(0,0,0,.58);
+    border: 0;
+  }
+}
+@media (min-width: 901px) {
+  .context-overlay { display: none; }
+}
