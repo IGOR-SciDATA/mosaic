@@ -76,6 +76,15 @@ def test_promotion_requires_explicit_version_bound_approval_and_rollback_restore
     assert promoted.json()["profile"]["instructions"] == experiment["candidate"]["content"]
     assert promoted.json()["profile"]["version"] == profile["version"] + 1
 
+    # Promotion and its audit evidence are committed as one lifecycle transaction.
+    from app.models.task_event_repository import list_task_events
+    promotion_events = [
+        event for event in list_task_events(experiment["task_id"], limit=200)
+        if event.event_name == "hie.candidate_promoted"
+    ]
+    assert len(promotion_events) == 1
+    assert promotion_events[0].metadata["promotion_id"] == promoted.json()["promotion_id"]
+
     active = get_project_agent(project.id, "qa-agent")
     rollback = client.post(f"/hie/promotions/{promoted.json()['promotion_id']}/rollback", json={
         "expected_active_version": active["version"],
