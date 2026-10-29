@@ -9,7 +9,7 @@ from app.db.database import get_connection
 from app.models.task_event_repository import create_task_event
 from app.services.agent_library import _seal_profile
 from app.services.hie_candidate import validate_candidate
-from app.services.hie_experiments import get_experiment
+from app.services.hie_experiments import _row_to_experiment
 
 
 class HieLifecycleError(ValueError):
@@ -51,6 +51,15 @@ def _init_tables() -> None:
             )
         """)
         connection.commit()
+
+
+def _read_experiment(connection, experiment_id: int) -> dict[str, Any] | None:
+    """Read the experiment inside the same SQLite transaction as the lifecycle action."""
+    row = connection.execute(
+        "SELECT * FROM hie_experiments WHERE id = ?",
+        (experiment_id,),
+    ).fetchone()
+    return _row_to_experiment(row) if row is not None else None
 
 
 def _read_active_profile(connection, project_id: int, slug: str) -> tuple[dict[str, Any], dict[str, Any], str]:
@@ -118,10 +127,10 @@ def _event(connection, experiment: dict[str, Any], event_name: str, message: str
 
 def approve_candidate(experiment_id: int, *, candidate_sha256: str, active_version: int, active_sha256: str) -> dict[str, Any]:
     _init_tables()
-    experiment = get_experiment(experiment_id)
-    candidate = _check_experiment(experiment, candidate_sha256)
     with get_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
+        experiment = _read_experiment(connection, experiment_id)
+        candidate = _check_experiment(experiment, candidate_sha256)
         state, library, state_json = _read_active_profile(connection, experiment["project_id"], experiment["profile_slug"])
         profile = library[experiment["profile_slug"]]
         _check_baseline(candidate, profile)
@@ -148,10 +157,10 @@ def approve_candidate(experiment_id: int, *, candidate_sha256: str, active_versi
 
 def promote_candidate(experiment_id: int, *, candidate_sha256: str, active_version: int, active_sha256: str) -> dict[str, Any]:
     _init_tables()
-    experiment = get_experiment(experiment_id)
-    candidate = _check_experiment(experiment, candidate_sha256)
     with get_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
+        experiment = _read_experiment(connection, experiment_id)
+        candidate = _check_experiment(experiment, candidate_sha256)
         state, library, state_json = _read_active_profile(connection, experiment["project_id"], experiment["profile_slug"])
         profile = library[experiment["profile_slug"]]
         _check_baseline(candidate, profile)
@@ -217,7 +226,7 @@ def rollback_promotion(promotion_id: int, *, expected_active_version: int, expec
         )
         if cursor.rowcount != 1:
             raise HieLifecycleError("Promotion was already rolled back")
-        experiment = get_experiment(promotion["experiment_id"])
+        experiment = _read_experiment(connection, promotion["experiment_id"])
         if experiment:
             _event(connection, experiment, "hie.candidate_rolled_back", "Promotion rolled back by restoring the previous profile content as a new version.", {
                 "promotion_id": promotion_id, "restored_version": restored["version"], "restored_sha256": restored["sha256"],

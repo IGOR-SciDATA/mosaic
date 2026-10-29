@@ -160,7 +160,10 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
     scope, scope_id = _resolve_scope(payload.conversation_id, payload.task_id)
     column = "task_id" if scope == "task" else "conversation_id"
     now = _now()
+    experiment_available = _experiment_scope_available(scope, scope_id)
+    task = get_task(scope_id) if scope == "task" else None
     with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         connection.execute(
             f"""
             INSERT INTO hie_sessions ({column}, enabled, created_at, updated_at)
@@ -171,11 +174,6 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
             """,
             (scope_id, int(payload.enabled), now, now),
         )
-        connection.commit()
-
-    experiment_available = _experiment_scope_available(scope, scope_id)
-    if scope == "task":
-        task = get_task(scope_id)
         if task is not None:
             create_task_event(
                 task_id=task.id,
@@ -194,7 +192,9 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
                     "scope_id": scope_id,
                     "experiment_execution_available": experiment_available,
                 },
+                connection=connection,
             )
+        connection.commit()
     return _payload(scope, scope_id, payload.enabled)
 
 
