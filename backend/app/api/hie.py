@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.db.database import get_connection
 from app.models.conversation_repository import get_conversation
-from app.models.task_event_repository import create_task_event
+from app.models.task_event_repository import create_task_event, _redact
 from app.models.task_repository import get_task
 from app.models.project_repository import get_project
 from app.services.agent_library import list_project_agents
@@ -71,12 +71,11 @@ def _experiment_scope_available(scope: str, scope_id: int) -> bool:
 def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
     experiment_available = _experiment_scope_available(scope, scope_id)
     supported = ["persisted_opt_in"]
-    unavailable = ["project_scoped_agent_profile_required"]
+    unavailable = []
     if experiment_available:
         # Stable API capability identifiers. Promotion and rollback are available
         # operations only when the scope has a project profile; neither is automatic.
         supported.extend([
-            "project_scoped_agent_profile_required",
             "candidate_validation",
             "persisted_experiment_lifecycle",
             "isolated_baseline_candidate_probes",
@@ -88,7 +87,18 @@ def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
             "versioned_promotion",
             "rollback",
         ])
-        unavailable = []
+    else:
+        unavailable = [
+            "project_scoped_agent_profile_required",
+            "isolated_baseline_candidate_probes",
+            "deterministic_fixture_evaluation",
+            "candidate_diff",
+            "candidate_hash",
+            "explicit_rejection",
+            "version_bound_approval",
+            "versioned_promotion",
+            "rollback",
+        ]
     message = (
         "Modo experimental habilitado. Experimentos isolados estão disponíveis; aprovação, promoção e rollback exigem confirmação explícita."
         if enabled and experiment_available else
@@ -159,11 +169,12 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
                 if payload.enabled else
                 "HIE experimental mode disabled for this Task scope."
             )
-            metadata = json.dumps({
+            metadata = _redact({
                 "scope": "task",
                 "scope_id": scope_id,
                 "experiment_execution_available": experiment_available,
-            }, ensure_ascii=False, separators=(",", ":"))
+            })
+            encoded_metadata = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
             connection.execute(
                 """INSERT INTO task_events (
                     task_id, conversation_id, project_id, tool_call_id, action_id,
@@ -172,7 +183,7 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
                 ) VALUES (?, ?, ?, NULL, NULL, ?, 'info', 'hie', ?, ?, NULL, ?, ?)""",
                 (
                     task.id, task.conversation_id, task.project_id, now,
-                    event_name, message, "enabled" if payload.enabled else "disabled", metadata,
+                    event_name, message, "enabled" if payload.enabled else "disabled", encoded_metadata,
                 ),
             )
         connection.commit()
