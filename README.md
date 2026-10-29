@@ -232,6 +232,7 @@ O roadmap é atualizado conforme o código muda e as evidências são revisadas.
 |---|---|---|
 | Core, projetos, conversas e persistência | **Testado no CI** | SQLite, API e estado de domínio; smoke test de implantação e recuperação após reinício real ainda pendentes |
 | Harness, tarefas e segurança | **Testado com fixtures/providers simulados** | Ciclo de ferramenta, políticas, aprovações, eventos, cancelamento e recuperação têm cobertura; provider real e crash/restart E2E pendentes |
+| Observabilidade e autoaperfeiçoamento HIE (Harness²) | **Em implementação; não validado ponta a ponta** | PRs HIE #102–#111 foram auditados como rascunhos empilhados; corrigir budgets reais, persistência/confinamento de evidências, integração controlada, aprovação/rollback e avaliação baseline vs candidata. Ver [contrato da fase](docs/MOSAIC_HIE_OBSERVABILITY_AND_SELF_IMPROVEMENT_PHASE_v1.0.md) e [prompt de implementação](docs/MOSAIC_HIE_COMPLETION_IMPLEMENTATION_PROMPT_v1.0.md) |
 | Contexto, memória e continuidade | **Testado parcialmente** | Isolamento de contexto, memória e histórico cobertos; proveniência completa e recuperação após reinício real continuam em avaliação |
 | Providers de modelos — Fase 13 | **Implementado e testado por mocks/CI ✅** | Ollama preservado; OpenAI Responses API adicionada como provider explícito, SSE e adaptação de tool calls; smoke test real depende de credencial autorizada |
 | Biblioteca de agentes — Fase 14 | **Implementado e testado no CI ✅** | Perfis por projeto, slug, instruções, Skills versionadas/hash, invocação `/slug`, snapshot imutável na Task e isolamento de contexto |
@@ -253,6 +254,7 @@ O roadmap é atualizado conforme o código muda e as evidências são revisadas.
 6. **Adicionar capacidades completas por família:** pesquisa com fontes, documentos, planilhas, apresentações e projetos de software, sempre com validadores.
 7. **Coordenar especialidades sequencialmente:** backend, frontend, pesquisa, design e QA com entradas/saídas e critérios de aceite explícitos.
 8. **Integrar a experiência e avaliar autonomia:** a interface deve refletir o estado real; ampliar autonomia somente após métricas e testes.
+9. **Concluir observabilidade e autoaperfeiçoamento HIE:** instrumentar chamadas reais, impor budgets no ponto de execução, corrigir segurança de evidências e demonstrar baseline/probe/comparação verificável, com aprovação humana e sem expansão desnecessária de arquitetura.
 
 A sequência operacional vigente está em [Sequência Mestre de Implementação por Fases](docs/MOSAIC_MASTER_PHASED_IMPLEMENTATION_SEQUENCE_v1.0.md). O [Roadmap Mestre](docs/MOSAIC_MASTER_ROADMAP_UNIVERSAL_HARNESS_v1.0.md) e o [Plano de Implementação](docs/MOSAIC_IMPLEMENTATION_EXECUTION_PLAN_v1.0.md) preservam detalhes técnicos complementares.
 
@@ -357,6 +359,10 @@ O Mosaic continua em desenvolvimento ativo. CI verde comprova a suíte automatiz
 - [Recuperação resiliente de Tasks](docs/MOSAIC_RESILIENCE_RECOVERY_v1.0.md)
 - [Auditoria do baseline](docs/MOSAIC_PHASE_0_BASELINE_AUDIT_v1.0.md)
 - [Prompt normativo para implementação do agente geral](docs/MOSAIC_UNIVERSAL_AGENT_IMPLEMENTATION_PROMPT_v1.0.md)
+- [Contrato da fase HIE — observabilidade e autoaperfeiçoamento](docs/MOSAIC_HIE_OBSERVABILITY_AND_SELF_IMPROVEMENT_PHASE_v1.0.md)
+- [Prompt mestre de implementação HIE](docs/MOSAIC_HIE_COMPLETION_IMPLEMENTATION_PROMPT_v1.0.md)
+- [Arquitetura do Harness Improvement Engine](docs/MOSAIC_HARNESS_IMPROVEMENT_ENGINE_ARCHITECTURE_v1.0.md)
+- [Prompt de implementação HIE anterior / auditoria inicial](docs/MOSAIC_HARNESS_IMPROVEMENT_ENGINE_IMPLEMENTATION_PROMPT_v1.0.md)
 
 ---
 
