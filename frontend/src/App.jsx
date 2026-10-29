@@ -891,13 +891,39 @@ function AgentLibraryWorkspace({ projectId }) {
 
 function ContextRow({icon,label,children}){return <div className="context-row"><span className="context-row-icon"><Icon name={icon} size={18}/></span><span className="context-row-label">{label}</span><div className="context-row-value">{children}</div></div>;}
 function ContextPanel({tab,setTab,project,conversation,model,memoryCount,messageCount,memories}) {
+  const [taskEvents,setTaskEvents]=useState([]);
+  const [taskSummary,setTaskSummary]=useState(null);
+  const [eventsLoading,setEventsLoading]=useState(false);
+  useEffect(()=>{
+    let cancelled=false;
+    async function loadObservedEvents(){
+      if(!conversation?.id){setTaskEvents([]);setTaskSummary(null);return;}
+      setEventsLoading(true);
+      try{
+        const tasks=await api.tasks.list();
+        const related=(Array.isArray(tasks)?tasks:[]).filter(task=>task.conversation_id===conversation.id).sort((a,b)=>String(b.updated_at||"").localeCompare(String(a.updated_at||"")));
+        const latest=related[0]||null;
+        if(!cancelled)setTaskSummary(latest);
+        if(latest){
+          const events=await api.tasks.events(latest.id);
+          if(!cancelled)setTaskEvents(Array.isArray(events)?events:events?.events||[]);
+        }else if(!cancelled)setTaskEvents([]);
+      }catch{
+        if(!cancelled){setTaskSummary({events_unavailable:true});setTaskEvents([]);}
+      }finally{if(!cancelled)setEventsLoading(false);}
+    }
+    loadObservedEvents();
+    return ()=>{cancelled=true;};
+  },[conversation?.id,messageCount]);
   return <aside className="context-panel"><nav className="context-tabs">{["Contexto","Memória"].map(x=><button key={x} className={tab===x?"active":""} onClick={()=>setTab(x)}>{x}</button>)}</nav>
     {tab==="Contexto"&&<><section className="context-card"><div className="card-heading"><strong>Contexto da conversa</strong><span>Metadados disponíveis na interface atual</span></div>
       <ContextRow icon="cube" label="Projeto">{project?<><strong>{project.name}</strong><small>{project.description || "Development Project"}</small></>:<span className="muted-copy">Nenhum projeto</span>}</ContextRow>
       <ContextRow icon="box" label="Modelo">{model?<><strong>{model.name}</strong><small>{model.provider} · {model.model_name}</small><span className="online"><i/>{model.enabled ? "Disponível" : "Desabilitado"}</span></>:<span className="muted-copy">Nenhum modelo selecionado</span>}</ContextRow>
       <ContextRow icon="layers" label="Memória"><strong>{memoryCount} {memoryCount === 1 ? "item" : "itens"} relevantes</strong><small>Memórias do projeto</small></ContextRow>
       <ContextRow icon="history" label="Histórico"><strong>{messageCount} {messageCount === 1 ? "mensagem" : "mensagens"}</strong><small>Histórico da conversa</small></ContextRow>
-    </section><section className="side-card"><div className="side-card-heading"><strong>Estado real</strong></div><div className="state-line">Projeto <b>{project?.id ?? "—"}</b></div><div className="state-line">Conversa <b>{conversation?.id ?? "—"}</b></div></section><section className="context-card observability-note"><div className="card-heading"><strong>Envio ao modelo</strong><span>Limite atual de observabilidade</span></div><div className="observability-status"><span className="status-dot status-warning"/><strong>Payload exato não registrado</strong></div><p>A interface não recebe o pacote completo de mensagens enviado ao provider nesta conversa. Os dados acima são metadados, não uma reprodução do payload.</p><div className="observability-footnote">Prévia aproximada e proveniência por bloco: não disponíveis para esta chamada. Não é possível confirmar, por este painel, quais fontes foram lidas, selecionadas, truncadas ou enviadas.</div></section></>}
+    </section><section className="side-card"><div className="side-card-heading"><strong>Estado real</strong></div><div className="state-line">Projeto <b>{project?.id ?? "—"}</b></div><div className="state-line">Conversa <b>{conversation?.id ?? "—"}</b></div></section><section className="context-card observed-timeline"><div className="card-heading"><strong>Etapas observadas</strong><span>Eventos reais do Core</span></div>
+       {eventsLoading?<p>Carregando eventos registrados…</p>:taskSummary?.events_unavailable?<p>Não foi possível consultar os eventos agora. Nenhuma etapa é inferida.</p>:!taskSummary?<p>Nenhuma Task vinculada a esta conversa foi encontrada. O chat normal continua funcionando sem Task.</p>:taskEvents.length?<ol>{taskEvents.slice(-12).map(event=><li key={event.id}><strong>{event.event_name}</strong><span>{event.message}</span><small>{event.status||"sem status"}{event.timestamp? " · "+new Date(event.timestamp).toLocaleString("pt-BR"):""}</small></li>)}</ol>:<p>Existe uma Task vinculada, mas não há eventos retornados pela API.</p>}
+     </section><section className="context-card observability-note"><div className="card-heading"><strong>Envio ao modelo</strong><span>Limite atual de observabilidade</span></div><div className="observability-status"><span className="status-dot status-warning"/><strong>Payload exato não registrado</strong></div><p>A interface não recebe o pacote completo de mensagens enviado ao provider nesta conversa. Os dados acima são metadados, não uma reprodução do payload.</p><div className="observability-footnote">Prévia aproximada e proveniência por bloco: não disponíveis para esta chamada. Não é possível confirmar, por este painel, quais fontes foram lidas, selecionadas, truncadas ou enviadas.</div></section></>}
     {tab==="Memória"&&<section className="context-card standalone-card"><div className="card-heading"><strong>Memória</strong><span>{memoryCount} {memoryCount === 1 ? "item" : "itens"} do projeto</span></div>{memoryCount?<div className="memory-list">{memories.map(memory=><div className="memory-item" key={memory.id}><div className="memory-item-head"><strong>{memory.key}</strong><span className="memory-type">{memory.type}</span></div><span>{memory.value}</span><small>Origem: {memory.source}{memory.confidence !== null && memory.confidence !== undefined ? ` · Confiança: ${Math.round(memory.confidence * 100)}%` : ""}</small></div>)}</div>:<div className="empty-state"><Icon name="memory" size={24}/><strong>Nenhuma memória</strong><span>O projeto ainda não possui memórias persistidas.</span></div>}</section>}
   </aside>;
 }
