@@ -1,8 +1,7 @@
-"""Persisted, opt-in HIE mode for conversation and Task scopes.
+"""Persisted HIE opt-in and isolated declarative-instruction experiments.
 
-This API intentionally exposes mode activation separately from experiment execution:
-the current HIE implementation validates declarative candidates but does not yet
-provide isolated baseline/candidate runs, evaluation, promotion, or rollback.
+Promotion and rollback intentionally remain unavailable until their version-bound
+approval and restoration contracts are implemented.
 """
 from datetime import datetime, timezone
 
