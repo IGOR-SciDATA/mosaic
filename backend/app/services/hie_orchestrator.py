@@ -13,6 +13,7 @@ import time
 from typing import Any, Callable
 
 from app.models.task_event_repository import create_task_event
+from app.services.hie_evidence import persist_output_evidence, persist_record_evidence
 from app.models.task_repository import get_task
 from app.services.hie_candidate import (
     CandidateValidationError,
@@ -273,6 +274,19 @@ def run_candidate_experiment(
         ).hexdigest()
         if len(canonical_json(record).encode("utf-8")) > active_budgets.artifact_bytes:
             raise HIEBudgetExceeded("HIE experiment record exceeds artifact-size budget")
+        record["evidence"] = persist_output_evidence(
+            task.id, baseline_output, candidate_output,
+            max_bytes=active_budgets.artifact_bytes,
+        )
+        record.pop("record_sha256", None)
+        record["record_sha256"] = hashlib.sha256(
+            canonical_json(record).encode("utf-8")
+        ).hexdigest()
+        persist_record_evidence(
+            task.id, record, max_bytes=active_budgets.artifact_bytes,
+        )
+        # The record Artifact is discoverable through Core's Artifact repository.
+        # Its self-reference is intentionally not embedded in the sealed record.
         _emit(task, "hie.experiment.completed", "HIE comparison completed without promotion", status="completed", metadata=record)
         return record
     except HIEExperimentCancelled as exc:

@@ -25,6 +25,9 @@ def test_experiment_record_binds_snapshot_and_has_verifiable_digest(monkeypatch)
     events = []
     monkeypatch.setattr(hie, "get_task", lambda _: task)
     monkeypatch.setattr(hie, "create_task_event", lambda **kwargs: events.append(kwargs))
+    # Keep this integrity test focused on the sealed record; storage has dedicated tests.
+    monkeypatch.setattr(hie, "persist_output_evidence", lambda *args, **kwargs: {"baseline": {}, "candidate": {}})
+    monkeypatch.setattr(hie, "persist_record_evidence", lambda *args, **kwargs: None)
 
     snapshot = _snapshot()
     candidate = build_candidate(snapshot, "Require the marker.")

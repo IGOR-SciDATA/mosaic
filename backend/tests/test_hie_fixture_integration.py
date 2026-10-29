@@ -38,6 +38,9 @@ def test_real_orchestrator_compares_independent_fixtures_without_promoting(
     events = []
     monkeypatch.setattr(hie, "get_task", lambda task_id: task if task_id == 42 else None)
     monkeypatch.setattr(hie, "create_task_event", lambda **kwargs: events.append(kwargs))
+    # This integration test covers disposable-fixture isolation and comparison flow.
+    monkeypatch.setattr(hie, "persist_output_evidence", lambda *args, **kwargs: {"baseline": {}, "candidate": {}})
+    monkeypatch.setattr(hie, "persist_record_evidence", lambda *args, **kwargs: None)
 
     snapshot = _snapshot()
     candidate = build_candidate(snapshot, "Required marker: MOSAIC-HIE-CANDIDATE")
