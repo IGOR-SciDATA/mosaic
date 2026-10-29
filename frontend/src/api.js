@@ -116,6 +116,7 @@ export const api = {
   tasks: {
     list: () => request("/tasks"),
     get: (id) => request(`/tasks/${id}`),
+    artifacts: (id) => request(`/tasks/${id}/artifacts`),
     start: (payload) => request("/tasks/start", { method: "POST", body: JSON.stringify(payload) }),
     events: (id, afterId = 0) => request(`/tasks/${id}/events?after_id=${afterId}&limit=100`),
     decideToolCall: (taskId, toolCallId, decision) => request(`/tasks/${taskId}/tool-calls/${toolCallId}/decision`, { method: "POST", body: JSON.stringify({ decision }) }),
