@@ -169,3 +169,21 @@ def test_experiment_capability_is_unavailable_for_provider_without_enforced_budg
     assert status.json()["experiment_execution_available"] is False
     assert "provider_budget_controls_required" in status.json()["unavailable_capabilities"]
     assert set(status.json()["supported_capabilities"]).isdisjoint(status.json()["unavailable_capabilities"])
+
+
+def test_task_start_supports_standalone_conversation_without_project(client, monkeypatch):
+    from app.api import tasks as tasks_api
+
+    monkeypatch.setattr(tasks_api, "_run_provider_agent", lambda task_id: None)
+    model = create_model("Standalone Task Start Model", "ollama", "qwen3:3b")
+    conversation = create_conversation("Standalone Task Start", model.id)
+    response = client.post("/tasks/start", json={
+        "conversation_id": conversation.id,
+        "goal": "Create a simple report",
+        "type": "generic",
+    })
+    assert response.status_code == 202, response.text
+    task = response.json()
+    assert task["conversation_id"] == conversation.id
+    assert task["project_id"] is None
+    assert task["status"] == "executing"
