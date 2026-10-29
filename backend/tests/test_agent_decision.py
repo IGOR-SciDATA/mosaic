@@ -174,3 +174,40 @@ def test_diagnostic_preview_keeps_response_tail_and_redacts_thinking_and_secrets
     assert len(preview) <= 100
     assert "AAAA" in preview
     assert "token=[REDACTED]" in preview
+
+
+def test_provider_budget_blocks_second_real_provider_request(monkeypatch):
+    from types import SimpleNamespace
+
+    import app.services.agent_decision as adapter
+    from app.services.hie_runtime import HIEExecutionBudget, HIERuntimeLimitExceeded
+
+    task = SimpleNamespace(id=71, conversation_id=31, project_id=21)
+    monkeypatch.setattr(adapter, "get_task", lambda task_id: task)
+    monkeypatch.setattr(adapter, "get_conversation", lambda conversation_id: SimpleNamespace(model_id=41))
+    monkeypatch.setattr(
+        adapter,
+        "get_model",
+        lambda model_id: SimpleNamespace(
+            enabled=True, provider="ollama", model_name="test:model", configuration={}
+        ),
+    )
+
+    class FakeProvider:
+        calls = 0
+
+        def generate(self, **kwargs):
+            self.calls += 1
+            return "not JSON"
+
+    provider = FakeProvider()
+    monkeypatch.setattr(adapter, "resolve_model_provider", lambda model: provider)
+    monkeypatch.setattr(adapter, "create_task_event", lambda **kwargs: None)
+    budget = HIEExecutionBudget(max_provider_calls=1, max_retries=1)
+
+    with pytest.raises(HIERuntimeLimitExceeded, match="provider-call budget"):
+        adapter.create_provider_decider(task.id, execution_budget=budget)([])
+
+    assert provider.calls == 1
+    assert budget.provider_calls == 1
+    assert budget.retries == 1
