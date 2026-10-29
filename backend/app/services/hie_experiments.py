@@ -283,12 +283,12 @@ def run_experiment(experiment_id: int) -> None:
     task = get_task(experiment["task_id"])
     if task is not None and task.status == "pending":
         update_task(task.id, status="executing")
-    _emit(experiment, "hie.experiment_started", "Running baseline and candidate against the same fixtures without tools or external actions.", "running", {
-        "candidate_sha256": experiment["candidate"]["sha256"],
-        "fixture_count": len(experiment["fixtures"]),
-    })
     total_started = time.monotonic()
     try:
+        _emit(experiment, "hie.experiment_started", "Running baseline and candidate against the same fixtures without tools or external actions.", "running", {
+            "candidate_sha256": experiment["candidate"]["sha256"],
+            "fixture_count": len(experiment["fixtures"]),
+        })
         baseline = experiment["baseline_snapshot"]
         candidate = experiment["candidate"]
         validate_candidate(candidate, baseline_snapshot=baseline)
