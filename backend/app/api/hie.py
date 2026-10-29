@@ -12,6 +12,8 @@ from app.db.database import get_connection
 from app.models.conversation_repository import get_conversation
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task
+from app.models.project_repository import get_project
+from app.services.agent_library import list_project_agents
 from app.services.hie_experiments import (
     HieExperimentError, create_experiment, get_experiment, list_experiments,
     queue_experiment, reject_experiment, run_experiment,
@@ -46,24 +48,67 @@ def _read_session(scope: str, scope_id: int) -> bool:
     return bool(row["enabled"]) if row else False
 
 
+def _experiment_scope_available(scope: str, scope_id: int) -> bool:
+    if scope == "task":
+        task = get_task(scope_id)
+        if task is None:
+            return False
+        conversation = get_conversation(task.conversation_id) if task.conversation_id is not None else None
+        project_id = (conversation.project_id if conversation else None) or task.project_id
+    else:
+        conversation = get_conversation(scope_id)
+        project_id = conversation.project_id if conversation else None
+    if project_id is None or get_project(project_id) is None:
+        return False
+    try:
+        return bool(list_project_agents(project_id))
+    except ValueError:
+        return False
+
+
 def _payload(scope: str, scope_id: int, enabled: bool) -> dict:
+    experiment_available = _experiment_scope_available(scope, scope_id)
+    supported = ["persisted_opt_in"]
+    unavailable = [
+        "project_scoped_agent_profile_required",
+        "isolated_baseline_candidate_probes",
+        "deterministic_fixture_evaluation",
+        "candidate_diff",
+        "candidate_hash",
+        "explicit_rejection",
+        "versioned_promotion",
+        "rollback",
+    ]
+    if experiment_available:
+        supported.extend([
+            "candidate_validation",
+            "persisted_experiment_lifecycle",
+            "isolated_baseline_candidate_probes",
+            "deterministic_fixture_evaluation",
+            "candidate_diff",
+            "candidate_hash",
+            "explicit_rejection",
+        ])
+        unavailable = ["versioned_promotion", "rollback"]
+    message = (
+        "Modo experimental habilitado. Experimentos isolados com baseline/candidato estão disponíveis; "
+        "promoção e rollback ainda não estão disponíveis."
+        if enabled and experiment_available else
+        "HIE está habilitado, mas é necessário um projeto com pelo menos um perfil de agente para criar experimentos."
+        if enabled else
+        "HIE está desativado neste escopo. A ativação não executa nem promove candidatos."
+    )
     return {
         "available": True,
         "scope": scope,
         "scope_id": scope_id,
         "enabled": enabled,
         "default_enabled": False,
-        "experiment_execution_available": True,
-        "supported_capabilities": ["persisted_opt_in", "candidate_validation", "persisted_experiment_lifecycle", "isolated_baseline_candidate_probes", "deterministic_fixture_evaluation", "candidate_diff", "candidate_hash", "explicit_rejection"],
-        "unavailable_capabilities": ["versioned_promotion", "rollback"],
-        "message": (
-            "Modo experimental habilitado. Experimentos isolados com baseline/candidato estão disponíveis; "
-            "promoção e rollback ainda não estão disponíveis."
-            if enabled else
-            "HIE está desativado neste escopo. A ativação não executa nem promove candidatos."
-        ),
+        "experiment_execution_available": experiment_available,
+        "supported_capabilities": supported,
+        "unavailable_capabilities": unavailable,
+        "message": message,
     }
-
 
 class HieModeUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
