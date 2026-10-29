@@ -382,9 +382,13 @@ def test_failure_event_failure_rolls_back_hie_and_task_status(client, monkeypatc
     })
     assert created.status_code == 201
     created_id = created.json()["id"]
-    assert client.post(f"/hie/experiments/{created_id}/run").status_code == 202
 
-    # The event failure must roll back terminal state and Task transition.
+    # TestClient executes FastAPI BackgroundTasks before returning. The simulated
+    # audit outage therefore propagates to the caller; the SQLite transaction
+    # must still roll the terminal transition back.
+    with pytest.raises(OSError, match="failure event store unavailable"):
+        client.post(f"/hie/experiments/{created_id}/run")
+
     stored = hie_experiments.get_experiment(created_id)
     assert stored["status"] == "running"
     task = get_task(stored["task_id"])
