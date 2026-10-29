@@ -27,6 +27,8 @@ def _ensure_real_directory(path: Path) -> Path:
     try:
         path.mkdir(parents=True, exist_ok=True)
     except FileExistsError as exc:
+        if path.is_symlink():
+            raise ValueError("HIE evidence directories must not be symlinks") from exc
         raise ValueError("HIE evidence path is not a directory") from exc
     try:
         mode = path.lstat().st_mode
