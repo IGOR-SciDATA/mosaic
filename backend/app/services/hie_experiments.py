@@ -344,9 +344,11 @@ def run_experiment(experiment_id: int) -> None:
                 total_input_chars += input_chars
                 configuration = dict(model.configuration or {})
                 if provider_kind == "ollama":
-                    configuration["num_predict"] = min(int(configuration.get("num_predict", MAX_OUTPUT_TOKENS)), MAX_OUTPUT_TOKENS)
+                    requested_tokens = int(configuration.get("num_predict", MAX_OUTPUT_TOKENS))
+                    configuration["num_predict"] = MAX_OUTPUT_TOKENS if requested_tokens <= 0 else min(requested_tokens, MAX_OUTPUT_TOKENS)
                 else:
-                    configuration["max_output_tokens"] = min(int(configuration.get("max_output_tokens", MAX_OUTPUT_TOKENS)), MAX_OUTPUT_TOKENS)
+                    requested_tokens = int(configuration.get("max_output_tokens", MAX_OUTPUT_TOKENS))
+                    configuration["max_output_tokens"] = MAX_OUTPUT_TOKENS if requested_tokens <= 0 else min(requested_tokens, MAX_OUTPUT_TOKENS)
                 configuration["request_timeout_seconds"] = min(float(configuration.get("request_timeout_seconds", PROVIDER_TIMEOUT_SECONDS)), PROVIDER_TIMEOUT_SECONDS)
                 started = time.monotonic()
                 provider_calls += 1
