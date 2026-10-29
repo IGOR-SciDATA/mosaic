@@ -11,7 +11,7 @@ from typing import Any
 from app.context.manager import build_context
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task, update_task
-from app.models.tool_call_repository import create_tool_call, list_tool_calls
+from app.models.tool_call_repository import create_tool_call, list_tool_calls, update_tool_call
 from app.models.tool_result import ToolResult
 from app.models.tool_result_repository import list_tool_results
 from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_policy, resolve_tool_workspace
@@ -278,7 +278,11 @@ def _auto_paginate_read(
             if execution_budget is not None:
                 execution_budget.before_tool_call()
             result = execute_tool_call(approved)
+        except HIERuntimeCancelled:
+            update_tool_call(call.id, status="cancelled")
+            raise
         except HIERuntimeLimitExceeded:
+            update_tool_call(call.id, status="failed")
             raise
         except Exception as exc:
             context.append({
@@ -1485,11 +1489,11 @@ def run_agent(
                 execution_budget.before_tool_call()
             tool_result = execute_tool_call(approved)
         except HIERuntimeCancelled as exc:
+            update_tool_call(call.id, status="cancelled")
             result = {"error": str(exc), "iterations": iteration, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
             update_task(task_id, status="cancelled", result=result)
             return {"status": "cancelled", **result}
         except HIERuntimeLimitExceeded as exc:
-            from app.models.tool_call_repository import update_tool_call
             update_tool_call(call.id, status="failed")
             result = {"error": str(exc), "iterations": iteration, "hie_usage": execution_budget.snapshot() if execution_budget else {}}
             update_task(task_id, status="failed", result=result)
