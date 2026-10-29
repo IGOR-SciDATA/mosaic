@@ -1142,9 +1142,23 @@ def _prepare_workspace_exploration(
             break
 
     passed_set = set(passed_to_model)
+    partially_passed = []
+    for item in files:
+        if not isinstance(item, dict) or item.get("path") not in passed_set:
+            continue
+        # The last included file may have been clipped to the remaining context budget.
+        if item.get("path") == (passed_to_model[-1] if passed_to_model else None):
+            included_chars = sum(
+                len(str(message.get("content", "")))
+                for message in context[-len(passed_to_model)-1:]
+                if message.get("role") == "system" and str(item.get("path")) in str(message.get("content", ""))
+            )
+            if included_chars < len(str(item.get("content", "")):
+                partially_passed.append(item["path"])
     summary = {
         "status": data.get("status"),
         "workspace": data.get("workspace"),
+        "directories": data.get("directories", []),
         "directories_found": data.get("directories_found", 0),
         "files_found": data.get("files_found", 0),
         "files_read": data.get("files_read", 0),
@@ -1154,9 +1168,12 @@ def _prepare_workspace_exploration(
         "duration_ms": data.get("duration_ms", 0),
         "limits_reached": data.get("limits_reached", []),
         "files_passed_to_model": passed_to_model,
+        "files_partially_passed_to_model": partially_passed,
         "files_not_passed_to_model": [item.get("path") for item in files if isinstance(item, dict) and item.get("path") not in passed_set],
-        "ignored": data.get("ignored", []),
-        "failures": data.get("failures", []),
+        "ignored": data.get("ignored", [])[:100],
+        "ignored_records_truncated": max(0, len(data.get("ignored", [])) - 100),
+        "failures": data.get("failures", [])[:100],
+        "failure_records_truncated": max(0, len(data.get("failures", [])) - 100),
     }
     try:
         reasons = sorted({item.get("reason", "unknown") for item in data.get("ignored", [])})
