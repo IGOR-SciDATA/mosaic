@@ -122,3 +122,86 @@ def test_experiment_rejects_unbounded_or_ambiguous_input(client):
         "fixtures": [{"prompt": "Check.", "expected_contains": ["yes"]}],
     })
     assert response.status_code == 422
+
+
+def test_input_budget_blocks_provider_call_before_generation(client, monkeypatch):
+    from app.services import hie_experiments
+
+    calls = []
+    class RecordingProvider(FakeProvider):
+        def generate(self, messages, model_name, configuration):
+            calls.append((messages, configuration))
+            return super().generate(messages, model_name, configuration)
+
+    provider = RecordingProvider()
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: provider)
+    monkeypatch.setattr(hie_experiments, "MAX_INPUT_CHARS_PER_CALL", 1)
+    project, conversation = _scope()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    created = client.post("/hie/experiments", json={
+        "conversation_id": conversation.id,
+        "profile_slug": "qa-agent",
+        "candidate_content": "Always include the word approved.",
+        "fixtures": [{"prompt": "Return the test response.", "expected_contains": ["approved"]}],
+    })
+    assert created.status_code == 201
+    run = client.post(f"/hie/experiments/{created.json()['id']}/run")
+    assert run.status_code == 202
+    failed = client.get(f"/hie/experiments/{created.json()['id']}").json()
+    assert failed["status"] == "failed"
+    assert "Input budget exceeded before provider call" in failed["results"]["error"]
+    assert calls == []
+
+
+def test_provider_receives_output_token_and_timeout_caps(client, monkeypatch):
+    from app.services import hie_experiments
+
+    configurations = []
+    class RecordingProvider(FakeProvider):
+        def generate(self, messages, model_name, configuration):
+            configurations.append(dict(configuration))
+            return super().generate(messages, model_name, configuration)
+
+    provider = RecordingProvider()
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: provider)
+    project, conversation = _scope()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    created = client.post("/hie/experiments", json={
+        "conversation_id": conversation.id,
+        "profile_slug": "qa-agent",
+        "candidate_content": "Always include the word approved.",
+        "fixtures": [{"prompt": "Return the test response.", "expected_contains": ["approved"]}],
+    })
+    assert created.status_code == 201
+    run = client.post(f"/hie/experiments/{created.json()['id']}/run")
+    assert run.status_code == 202
+    finished = client.get(f"/hie/experiments/{created.json()['id']}").json()
+    assert finished["status"] == "completed"
+    assert len(configurations) == 2
+    assert all(config["num_predict"] <= hie_experiments.MAX_OUTPUT_TOKENS for config in configurations)
+    assert all(config["request_timeout_seconds"] <= hie_experiments.PROVIDER_TIMEOUT_SECONDS for config in configurations)
+
+
+def test_excessive_provider_output_fails_without_truncating_and_persisting_it(client, monkeypatch):
+    from app.services import hie_experiments
+
+    class ExcessiveProvider(FakeProvider):
+        def generate(self, messages, model_name, configuration):
+            return "x" * (hie_experiments.MAX_OUTPUT_CHARS + 1)
+
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: ExcessiveProvider())
+    project, conversation = _scope()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    created = client.post("/hie/experiments", json={
+        "conversation_id": conversation.id,
+        "profile_slug": "qa-agent",
+        "candidate_content": "Always include the word approved.",
+        "fixtures": [{"prompt": "Return the test response.", "expected_contains": ["approved"]}],
+    })
+    assert created.status_code == 201
+    run = client.post(f"/hie/experiments/{created.json()['id']}/run")
+    assert run.status_code == 202
+    failed = client.get(f"/hie/experiments/{created.json()['id']}").json()
+    assert failed["status"] == "failed"
+    assert "output exceeded" in failed["results"]["error"]
+    assert "evidence" not in failed["results"]
