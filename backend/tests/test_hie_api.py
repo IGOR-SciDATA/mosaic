@@ -53,8 +53,13 @@ def test_conversation_hie_is_disabled_by_default_and_persisted(client):
 
     reread = client.get(f"/hie/status?conversation_id={conversation.id}")
     assert reread.json()["enabled"] is True
-    assert reread.json()["unavailable_capabilities"] == ["versioned_promotion", "rollback"]
+    assert reread.json()["default_enabled"] is False
+    assert reread.json()["unavailable_capabilities"] == []
     assert "isolated_baseline_candidate_probes" in reread.json()["supported_capabilities"]
+    assert "version_bound_approval" in reread.json()["supported_capabilities"]
+    assert "versioned_promotion" in reread.json()["supported_capabilities"]
+    assert "rollback" in reread.json()["supported_capabilities"]
+    assert "project_scoped_agent_profile_required" not in reread.json()["supported_capabilities"]
 
 
 def test_conversation_opt_in_is_inherited_by_new_task(client):
@@ -119,3 +124,7 @@ def test_experiment_capability_is_unavailable_without_project_profile(client):
     assert status.json()["available"] is True
     assert status.json()["experiment_execution_available"] is False
     assert "project_scoped_agent_profile_required" in status.json()["unavailable_capabilities"]
+    assert "versioned_promotion" in status.json()["unavailable_capabilities"]
+    assert "rollback" in status.json()["unavailable_capabilities"]
+    assert "versioned_promotion" not in status.json()["supported_capabilities"]
+    assert "rollback" not in status.json()["supported_capabilities"]
