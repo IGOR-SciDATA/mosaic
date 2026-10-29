@@ -93,6 +93,12 @@ def test_promotion_requires_explicit_version_bound_approval_and_rollback_restore
     assert rollback.status_code == 200
     assert rollback.json()["profile"]["instructions"] == profile["instructions"]
     assert rollback.json()["profile"]["version"] == active["version"] + 1
+    rollback_events = [
+        event for event in list_task_events(experiment["task_id"], limit=200)
+        if event.event_name == "hie.candidate_rolled_back"
+    ]
+    assert len(rollback_events) == 1
+    assert rollback_events[0].metadata["promotion_id"] == promoted.json()["promotion_id"]
 
 
 def test_approval_rejects_candidate_hash_or_active_profile_version_mismatch(client):
