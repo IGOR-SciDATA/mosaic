@@ -145,6 +145,8 @@ def create_experiment(
     model = get_model(conversation.model_id)
     if model is None or not model.enabled:
         raise HieExperimentError("The conversation model is missing or disabled")
+    if model.provider.casefold() not in {"ollama", "remote_inference"}:
+        raise HieExperimentError("The selected provider does not expose the output-token and request-timeout controls required by HIE")
     baseline = get_project_agent(project_id, profile_slug)
     if baseline is None:
         raise HieExperimentError("Agent profile not found in this project")
