@@ -248,6 +248,12 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                     },
                 ]
             started = time.monotonic()
+            generate_with_tools = getattr(provider, "generate_with_tools", None)
+            delivered_tool_names = (
+                [item["name"] for item in active_tool_catalog]
+                if callable(generate_with_tools) and active_tool_catalog and not content_only
+                else []
+            )
             _record_decision_event(
                 task, "model_request_started",
                 f"Solicitação ao modelo iniciada (tentativa {attempt}/{_MAX_DECISION_ATTEMPTS}).",
@@ -259,11 +265,12 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                     "message_roles": [message.get("role") for message in messages[-10:]],
                     "registered_tools": [item["name"] for item in tool_catalog],
                     "available_tools": [item["name"] for item in active_tool_catalog],
+                    "delivered_tools": delivered_tool_names,
+                    "tool_execution_policy": "validated by Core at each ToolCall boundary",
                 },
             )
             native_message = None
             try:
-                generate_with_tools = getattr(provider, "generate_with_tools", None)
                 if content_only:
                     # This is a content-generation stage. Do not ask Ollama for JSON:
                     # the model should return the actual artifact body, not an agent envelope.
