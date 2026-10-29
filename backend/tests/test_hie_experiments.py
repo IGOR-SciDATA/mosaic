@@ -8,7 +8,7 @@ from app.models.project_repository import create_project
 from app.models.repository import create_model
 from app.models.task_event_repository import list_task_events
 from app.models.task_repository import get_task
-from app.services.agent_library import create_project_agent
+from app.services.agent_library import create_project_agent, get_project_agent
 
 
 @pytest.fixture(autouse=True)
@@ -64,6 +64,9 @@ def test_experiment_runs_isolated_baseline_candidate_and_persists_evidence(clien
     experiment = created.json()
     assert experiment["status"] == "draft"
     assert experiment["candidate"]["sha256"]
+    assert experiment["provider"] == "ollama"
+    assert experiment["model_name"] == "qwen3:3b"
+    assert experiment["budget"]["estimated_provider_calls"] == 2
     assert "candidate/profile-instructions" in experiment["candidate_diff"]
 
     run = client.post(f"/hie/experiments/{experiment['id']}/run")
@@ -78,6 +81,9 @@ def test_experiment_runs_isolated_baseline_candidate_and_persists_evidence(clien
     assert result["results"]["automatic_promotion"] is False
     assert result["results"]["evidence"][0]["baseline"]["output"] == "baseline result"
     assert result["results"]["evidence"][0]["candidate"]["output"] == "approved result"
+    active_profile = get_project_agent(project.id, "qa-agent")
+    assert active_profile["instructions"] == "Answer concisely."
+    assert active_profile["version"] == 1
 
     task = get_task(result["task_id"])
     assert task.status == "completed"
