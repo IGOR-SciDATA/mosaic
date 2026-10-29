@@ -265,9 +265,9 @@ function Composer({ disabled, onSubmit, model, models, conversation, projectId, 
       .catch(() => { if (active) setAgents([]); });
     return () => { active = false; };
   }, [projectId]);
-  const skillSlug = value => (value || "").normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  const agentMatch = text.match(/^\\/([a-z0-9-]*)$/i);
-  const skillMatch = text.match(/^\\/([a-z0-9-]+)\\s+@([a-z0-9-]*)$/i);
+  const skillSlug = value => (value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const agentMatch = text.match(/^\/([a-z0-9-]*)$/i);
+  const skillMatch = text.match(/^\/([a-z0-9-]+)\s+@([a-z0-9-]*)$/i);
   const chosenAgent = skillMatch ? agents.find(item => item.slug === skillMatch[1]) : null;
   const agentOptions = agentMatch ? agents.filter(item => item.slug.toLowerCase().includes(agentMatch[1].toLowerCase()) || item.name.toLowerCase().includes(agentMatch[1].toLowerCase())).slice(0, 7) : [];
   const skillOptions = chosenAgent && skillMatch ? (chosenAgent.skills || []).filter(skill => skill.enabled !== false && skillSlug(skill.name).includes(skillMatch[2].toLowerCase())).slice(0, 7) : [];
