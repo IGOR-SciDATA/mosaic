@@ -3552,3 +3552,36 @@ body { overflow: hidden; }
   .hie-toggle-state { font-size: 9px; }
   .composer-command-picker { left: 0; width: 100%; }
 }
+
+
+/* Normal-chat task execution: compact, collapsible live progress and artifact list. */
+.chat-task-trace { margin-top: 12px; max-width: 760px; border: 1px solid rgba(255,255,255,.10); border-radius: 12px; background: rgba(255,255,255,.025); overflow: hidden; }
+.chat-task-trace-toggle { display: flex; width: 100%; min-height: 58px; align-items: center; gap: 11px; padding: 12px 14px; text-align: left; background: transparent; }
+.chat-task-trace-toggle:hover { background: rgba(255,255,255,.035); }
+.chat-task-trace-indicator { display: grid; width: 25px; height: 25px; flex: 0 0 25px; place-items: center; border: 1px solid rgba(255,255,255,.13); border-radius: 50%; color: #b9bbc0; }
+.chat-task-trace-indicator.working { animation: chat-task-pulse 1.8s ease-in-out infinite; color: #ff7772; }
+.chat-task-trace-indicator.terminal { color: #a5d6a7; }
+.chat-task-trace.failed .chat-task-trace-indicator.terminal { color: #ff7772; }
+.chat-task-trace-heading { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
+.chat-task-trace-heading strong { color: #ededee; font-size: 12px; font-weight: 600; }
+.chat-task-trace-heading small { color: #8f9298; font-size: 11px; }
+.chat-task-trace-chevron { color: #96999f; font-size: 19px; }
+.chat-task-trace-body { padding: 0 15px 14px 50px; }
+.chat-task-trace-body ol { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; }
+.chat-task-trace-body li { position: relative; display: flex; gap: 10px; padding: 8px 0 9px; }
+.chat-task-trace-body li:not(:last-child)::after { position: absolute; top: 20px; bottom: -2px; left: 4px; width: 1px; background: rgba(255,255,255,.11); content: ""; }
+.trace-event-dot { position: relative; z-index: 1; width: 9px; height: 9px; flex: 0 0 9px; margin-top: 4px; border: 1px solid #777b82; border-radius: 50%; background: #111314; }
+.chat-task-trace-body li.trace-event-failed .trace-event-dot { border-color: #ff7772; background: #ff7772; }
+.chat-task-trace-body li > div { min-width: 0; }
+.chat-task-trace-body li strong { color: #d6d7da; font-size: 11px; font-weight: 500; line-height: 1.5; }
+.chat-task-trace-body li small { display: block; margin-top: 3px; color: #777b82; font-size: 10px; }
+.trace-event-substep { margin: 4px 0 0; color: #9fa2a8; font-size: 11px; overflow-wrap: anywhere; }
+.chat-task-artifacts { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.09); }
+.chat-task-artifacts > strong { margin-bottom: 2px; color: #bfc1c6; font-size: 11px; }
+.chat-task-artifact { display: flex; align-items: center; gap: 9px; color: #c9cbd0; font-size: 11px; }
+.chat-task-artifact > span:first-child { color: #ff7772; font-size: 17px; }
+.chat-task-artifact > span:last-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.chat-task-artifact b { overflow-wrap: anywhere; font-weight: 500; }
+.chat-task-artifact small { color: #858990; font-size: 10px; }
+@keyframes chat-task-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .chat-task-trace-indicator.working { animation: none; } }
