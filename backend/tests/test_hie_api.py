@@ -109,3 +109,13 @@ def test_hie_update_rejects_ambiguous_or_extra_scope(payload, client):
 def test_hie_status_rejects_missing_scope(client):
     response = client.get("/hie/status")
     assert response.status_code == 422
+
+
+def test_experiment_capability_is_unavailable_without_project_profile(client):
+    model = create_model("No Project HIE Test", "ollama", "qwen3:3b")
+    conversation = create_conversation("No project", model.id)
+    status = client.get(f"/hie/status?conversation_id={conversation.id}")
+    assert status.status_code == 200
+    assert status.json()["available"] is True
+    assert status.json()["experiment_execution_available"] is False
+    assert "project_scoped_agent_profile_required" in status.json()["unavailable_capabilities"]
