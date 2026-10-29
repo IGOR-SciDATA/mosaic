@@ -191,3 +191,18 @@ def test_event_failure_rolls_back_profile_and_promotion_record(client, monkeypat
     with get_connection() as connection:
         count = connection.execute("SELECT COUNT(*) FROM hie_promotions WHERE experiment_id = ?", (experiment["id"],)).fetchone()[0]
     assert count == 0
+
+
+def test_tampered_candidate_content_cannot_be_approved_with_old_hash(client):
+    project, experiment = _completed_experiment(client)
+    profile = get_project_agent(project.id, "qa-agent")
+    with get_connection() as connection:
+        row = connection.execute("SELECT candidate FROM hie_experiments WHERE id = ?", (experiment["id"],)).fetchone()
+        candidate = json.loads(row["candidate"])
+        candidate["content"] = "Tampered after candidate hash was sealed."
+        connection.execute("UPDATE hie_experiments SET candidate = ? WHERE id = ?", (json.dumps(candidate), experiment["id"]))
+        connection.commit()
+
+    response = client.post(f"/hie/experiments/{experiment['id']}/approve", json=_approval_payload(experiment, profile))
+    assert response.status_code == 409
+    assert "integrity validation failed" in response.json()["detail"]
