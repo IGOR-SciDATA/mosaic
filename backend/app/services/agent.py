@@ -1103,7 +1103,11 @@ def _prepare_task_sources(
                     native_protocol=False,
                     execution_budget=execution_budget,
                 )
+        except HIERuntimeCancelled:
+            update_tool_call(call.id, status="cancelled")
+            raise
         except HIERuntimeLimitExceeded:
+            update_tool_call(call.id, status="failed")
             raise
         except Exception as exc:
             context.append({
