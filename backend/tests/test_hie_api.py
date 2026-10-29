@@ -151,3 +151,21 @@ def test_explicit_task_opt_out_overrides_conversation_opt_in(client):
     with get_connection() as connection:
         row = connection.execute("SELECT enabled FROM hie_sessions WHERE task_id = ?", (task.id,)).fetchone()
     assert row["enabled"] == 0
+
+
+def test_experiment_capability_is_unavailable_for_provider_without_enforced_budget_controls(client):
+    model = create_model("Unsupported HIE Provider", "openai", "gpt-test")
+    project = create_project("Unsupported HIE Project", "/tmp/unsupported-hie-project")
+    create_project_agent(project.id, {
+        "slug": "qa-agent",
+        "name": "QA Agent",
+        "description": "Test profile",
+        "instructions": "Answer concisely.",
+        "skills": [],
+    })
+    conversation = create_conversation("Unsupported provider", model.id, project_id=project.id)
+    status = client.get(f"/hie/status?conversation_id={conversation.id}")
+    assert status.status_code == 200
+    assert status.json()["experiment_execution_available"] is False
+    assert "provider_budget_controls_required" in status.json()["unavailable_capabilities"]
+    assert set(status.json()["supported_capabilities"]).isdisjoint(status.json()["unavailable_capabilities"])
