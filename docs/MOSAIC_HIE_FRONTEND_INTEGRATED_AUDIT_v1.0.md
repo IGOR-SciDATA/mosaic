@@ -50,16 +50,16 @@ A rota `backend/app/api/hie.py` não foi encontrada na `main` consultada; existe
 |---|---|---|---|
 | Capabilities consistentes | `backend/app/api/hie.py` | `backend/tests/test_hie_api.py` | Implementado; aguarda CI do head atual. |
 | Budget de entrada antes da chamada | `backend/app/services/hie_experiments.py` | Teste que baixa limite e verifica zero chamadas | Implementado; aguarda CI do head atual. |
-| Output cap de provider e evidência | Mesmo serviço; tokens via Ollama/Remote Inference | Saída excessiva rejeitada, sem truncamento pós-geração | Implementado; aguarda CI do head atual. |
+| Output cap de provider e evidência | Mesmo serviço; tokens via Ollama/Remote Inference | Saída excessiva rejeitada, sem truncamento pós-geração | CI no commit 4929c34: backend passou. |
 | Timeout | `request_timeout_seconds` nos adapters existentes | Configuração passada ao provider | Limitação: timeout de rede não garante cancelamento rígido de wall-clock. |
 | Recovery queued/running | `recover_interrupted_experiments` no startup existente | `backend/tests/test_hie_recovery.py` | Implementado sem replay; aguarda CI do head atual. |
 | Aprovação/promoção/rollback | `hie_lifecycle.py` com transação SQLite e hash/versão | Concorrência, edição posterior e falha de auditoria | Implementado; aguarda CI do head atual. |
 | Eventos de lifecycle | Reuso de `create_task_event(connection=...)` | Falha de evento durante promoção | Implementado; aguarda CI do head atual. |
-| Conversa sem projeto | API de conversa existente e navegação do frontend | Build pendente no head atual; falta teste de interface dedicado | Parcial até validação funcional. |
-| Seletor de modelo | API de conversas existente; bloqueado durante streaming | Build pendente no head atual | Parcial até validação funcional. |
+| Conversa sem projeto | API de conversa existente e navegação do frontend | Teste backend de Task avulsa e build no commit 4929c34 | Backend e build passaram; teste de interface dedicado não existe. |
+| Seletor de modelo | API de conversas existente; bloqueado durante streaming | Build no commit 4929c34 | Build passou; comportamento em navegador não foi testado. |
 | Espaço de trabalho separado | Sidebar + componentes existentes de Biblioteca/Arquivos | Build pendente no head atual | Parcial; CRUD continua restrito ao que APIs existentes suportam. |
 | Inspetor de contexto | Eventos de Task reais pela API existente | Build pendente no head atual | Parcial; payload exato não é registrado. |
-| Dependência vulnerável | Vite atualizado para 7.3.7 no package e lockfile | npm ci/audit/build pendentes no head atual | Correção aplicada; precisa confirmar no CI atual. |
+| Dependência vulnerável | Vite 7.3.7 no package e lockfile | Run 40932800057: npm ci auditou 67 pacotes, 0 vulnerabilidades; build passou | Corrigida e verificada no commit 4929c34. |
 
 ## Limitações intencionais e riscos remanescentes
 
@@ -75,4 +75,6 @@ A rota `backend/app/api/hie.py` não foi encontrada na `main` consultada; existe
 ## Referências de CI
 
 - CI histórico com falha na #119: https://github.com/IGOR-SciDATA/mosaic/actions/runs/40918780150
-- CI observado durante a fase integrada: confirmar commit e jobs do head final antes de marcar a PR pronta.
+- CI integrado no commit `4929c34c4c5ebc8d96a38298f4459eca2aaccf5d`: https://github.com/IGOR-SciDATA/mosaic/actions/runs/40932800057
+- Resultado observado: `frontend-build` passou; `backend-tests` passou com 331 testes aprovados e 1 aviso. O job frontend instalou Vite 7.3.7 e reportou 0 vulnerabilidades npm.
+- Este run valida o commit citado; mudanças de código posteriores exigem nova execução.
