@@ -322,6 +322,7 @@ def _budget_for_experiment(experiment: dict[str, Any]) -> dict[str, Any]:
         "max_output_chars_per_call": MAX_OUTPUT_CHARS,
         "max_output_tokens_per_call": MAX_OUTPUT_TOKENS,
         "max_request_timeout_seconds": 90,
+        "max_duration_seconds": MAX_EXPERIMENT_DURATION_SECONDS,
         "max_candidate_chars": 12_000,
     }
 
