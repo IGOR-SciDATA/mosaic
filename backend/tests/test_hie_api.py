@@ -6,6 +6,8 @@ from app.main import app
 from app.api.tasks import _inherit_conversation_hie_mode
 from app.models.conversation_repository import create_conversation
 from app.models.repository import create_model
+from app.models.project_repository import create_project
+from app.services.agent_library import create_project_agent
 from app.models.task_event_repository import list_task_events
 from app.models.task_repository import create_task
 
@@ -24,7 +26,15 @@ def client():
 
 def _conversation():
     model = create_model("HIE Test", "ollama", "qwen3:3b")
-    return create_conversation("HIE scope", model.id)
+    project = create_project("HIE Project", "/tmp/hie-project")
+    create_project_agent(project.id, {
+        "slug": "qa-agent",
+        "name": "QA Agent",
+        "description": "Test profile",
+        "instructions": "Answer concisely.",
+        "skills": [],
+    })
+    return create_conversation("HIE scope", model.id, project_id=project.id)
 
 
 def test_conversation_hie_is_disabled_by_default_and_persisted(client):
