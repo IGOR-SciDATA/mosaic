@@ -434,8 +434,7 @@ def run_experiment(experiment_id: int) -> None:
                 message="Task status changed from executing to completed", status="completed",
                 metadata={"previous_status": "executing", "status": "completed"}, connection=connection,
             )
-            completed_experiment = get_experiment(experiment_id)
-            _emit(completed_experiment, "hie.experiment_completed", "Baseline/candidate probes and deterministic fixture checks completed; no candidate was promoted.", "completed", {
+            _emit(experiment, "hie.experiment_completed", "Baseline/candidate probes and deterministic fixture checks completed; no candidate was promoted.", "completed", {
                 "assessment": results["assessment"],
                 "baseline_pass_rate": results["baseline_pass_rate"],
                 "candidate_pass_rate": results["candidate_pass_rate"],
