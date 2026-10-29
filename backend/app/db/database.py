@@ -135,6 +135,23 @@ def init_db() -> None:
         """)
 
         connection.execute("""
+            CREATE TABLE IF NOT EXISTS hie_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NULL,
+                task_id INTEGER NULL,
+                enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                CHECK ((conversation_id IS NOT NULL AND task_id IS NULL) OR
+                       (conversation_id IS NULL AND task_id IS NOT NULL)),
+                UNIQUE (conversation_id),
+                UNIQUE (task_id),
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 task_id INTEGER NOT NULL,
