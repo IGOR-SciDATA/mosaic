@@ -97,6 +97,11 @@ def parse_claude_plugin_config(manifest_text: str, mcp_text: str) -> dict[str, A
         url = raw.get("url")
         if not isinstance(url, str) or not url:
             raise ValueError(f"HTTP MCP server '{server_name}' requires url")
+        parsed_url = urlsplit(url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname or parsed_url.username or parsed_url.password or parsed_url.query or parsed_url.fragment:
+            raise ValueError(f"Invalid MCP URL for server '{server_name}'")
+        if parsed_url.scheme != "https" and parsed_url.hostname not in {"localhost", "127.0.0.1", "::1"}:
+            raise ValueError(f"Remote MCP server '{server_name}' must use HTTPS")
         headers = raw.get("headers", {})
         if not isinstance(headers, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in headers.items()):
             raise ValueError(f"Invalid headers for MCP server '{server_name}'")
