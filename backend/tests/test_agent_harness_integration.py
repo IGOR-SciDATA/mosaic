@@ -107,8 +107,14 @@ def test_provider_decision_tool_result_observation_and_completion_use_selected_m
     assert results[0].status == "completed"
     assert results[0].data == {"result": 4}
 
-    event_names = [event.event_name for event in list_task_events(task.id)]
+    task_events = list_task_events(task.id)
+    event_names = [event.event_name for event in task_events]
     assert "model_request_started" in event_names
     assert "model_request_completed" in event_names
     assert "tool.completed" in event_names
     assert "task.status_changed" in event_names
+    request_started = next(event for event in task_events if event.event_name == "model_request_started")
+    assert "filesystem" in request_started.metadata["registered_tools"]
+    assert "calculator" in request_started.metadata["available_tools"]
+    assert "calculator" in request_started.metadata["delivered_tools"]
+    assert request_started.metadata["tool_execution_policy"].startswith("validated by Core")
