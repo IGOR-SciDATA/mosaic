@@ -942,6 +942,7 @@ function HieExperimentModal({scope,onClose}) {
   const [promotion,setPromotion]=useState(null);
   const [activeProfile,setActiveProfile]=useState(null);
   const [modeStatus,setModeStatus]=useState(null);
+  const [modeBusy,setModeBusy]=useState(false);
 
   const scopeKey=scope?.taskId ? "task_id="+scope.taskId : "conversation_id="+scope?.conversationId;
   const canExecute=modeStatus?.enabled===true && modeStatus?.experiment_execution_available===true;
@@ -968,6 +969,21 @@ function HieExperimentModal({scope,onClose}) {
     },1200);
     return ()=>{active=false;clearInterval(timer);};
   },[experiment?.id,experiment?.status]);
+
+  async function toggleScopeHie(){
+    if(!modeStatus?.available||modeBusy)return;
+    if(!modeStatus.enabled&&!window.confirm("Ativar o HIE experimental neste escopo? Isso não inicia um experimento nem promove alterações."))return;
+    setModeBusy(true);setError("");setNotice("");
+    try{
+      const payload=scope?.taskId
+        ? {task_id:scope.taskId,enabled:!modeStatus.enabled}
+        : {conversation_id:scope?.conversationId,enabled:!modeStatus.enabled};
+      const updated=await api.hie.setEnabled(payload);
+      setModeStatus(updated);
+      setNotice(updated.enabled?"HIE ativado explicitamente neste escopo. Nenhum experimento foi iniciado.":"HIE desativado neste escopo.");
+    }catch(err){setError(err.message);}
+    finally{setModeBusy(false);}
+  }
 
   async function createAndRun(event){
     event.preventDefault();
@@ -1058,7 +1074,8 @@ function HieExperimentModal({scope,onClose}) {
   return <Modal title="HIE Experimental · Experimentos" onClose={onClose}>
     <div className="hie-experiment-modal">
       <p className="modal-hint">O HIE compara instruções declarativas em probes isolados, sem ferramentas nem ações externas. Aprovação, promoção e rollback dependem das capacidades informadas pelo backend e exigem confirmação explícita.</p>
-      {modeStatus&&!canExecute&&<div className="modal-hint" role="status">{modeStatus.message || "Experimentos HIE indisponíveis neste escopo. O chat e as Tasks normais continuam funcionando."}</div>}
+      {modeStatus&&<div className="hie-experiment-actions"><span className="modal-hint">{modeStatus.message || "Status HIE do escopo atual."}</span><button type="button" className={modeStatus.enabled?"secondary-action":"primary-action"} onClick={toggleScopeHie} disabled={modeBusy||!modeStatus.available}>{modeBusy?"Salvando…":modeStatus.enabled?"Desativar HIE neste escopo":"Ativar HIE experimental"}</button></div>}
+      {modeStatus&&!canExecute&&<div className="modal-hint" role="status">A execução de experimentos está indisponível neste escopo. O chat e as Tasks normais continuam funcionando; um projeto com perfil elegível é necessário para executar HIE.</div>}
       {history.length>0&&<div className="hie-history"><strong>Experimentos anteriores</strong>{history.slice(0,5).map(item=><button type="button" key={item.id} className={experiment?.id===item.id?"active":""} onClick={()=>openHistory(item)}>#{item.id} · {item.profile_slug} · {item.status}</button>)}</div>}
       {canExecute&&<form className="modal-form" onSubmit={createAndRun}>
         <label>Slug do perfil <input value={profileSlug} onChange={event=>setProfileSlug(event.target.value.toLowerCase())} required maxLength={80} pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="ex.: qa-agent"/></label>
