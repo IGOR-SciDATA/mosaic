@@ -1,15 +1,124 @@
-"""Deterministic startup recovery for persisted Tasks interrupted by a process restart."""
+"""Deterministic startup recovery for persisted Tasks and HIE experiments."""
 
+import json
+from datetime import datetime, timezone
 from typing import Any
 
+from app.db.database import get_connection
 from app.models.action_repository import list_actions, update_action
-from app.models.task_event_repository import create_task_event
-from app.models.task_repository import list_tasks, update_task
+from app.models.task_event_repository import create_task_event, _redact
+from app.models.task_repository import get_task, list_tasks, update_task
 from app.models.tool_call_repository import list_tool_calls, update_tool_call
 from app.models.tool_result_repository import create_tool_result, list_tool_results
 
 
 _INTERRUPTED_STATUSES = {"planning", "executing", "validating"}
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _insert_hie_recovery_event(connection, experiment: dict[str, Any], message: str) -> None:
+    metadata = _redact({
+        "experiment_id": experiment["id"],
+        "error_type": "InterruptedByRestart",
+        "previous_status": experiment["status"],
+        "automatic_retry": False,
+        "resume_requires_user": True,
+        "preserved_partial_evidence": True,
+    })
+    encoded = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
+    connection.execute(
+        """INSERT INTO task_events (
+            task_id, conversation_id, project_id, tool_call_id, action_id,
+            timestamp, level, component, event_name, message, duration_ms, status, metadata
+        ) VALUES (?, ?, ?, NULL, NULL, ?, 'warning', 'recovery',
+                  'hie.experiment_interrupted_by_restart', ?, NULL, 'failed', ?)""",
+        (
+            experiment["task_id"], experiment["conversation_id"], experiment["project_id"],
+            _now(), message[:500], encoded,
+        ),
+    )
+
+
+def recover_interrupted_hie_experiments() -> dict[str, Any]:
+    """Fail closed on experiments interrupted by restart; preserve evidence and never replay."""
+    recovered: list[int] = []
+    with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        rows = connection.execute(
+            "SELECT * FROM hie_experiments WHERE status IN ('queued', 'running') ORDER BY id"
+        ).fetchall()
+        for row in rows:
+            experiment = dict(row)
+            try:
+                previous_results = json.loads(experiment["results"]) if experiment["results"] else {}
+            except (TypeError, json.JSONDecodeError):
+                previous_results = {}
+            if not isinstance(previous_results, dict):
+                previous_results = {"previous_results_preview": str(previous_results)[:500]}
+            results = {
+                **previous_results,
+                "error": "HIE experiment interrupted by Mosaic Core restart; retry requires an explicit user action.",
+                "error_type": "InterruptedByRestart",
+                "assessment_scope": "submitted_deterministic_fixtures_only",
+                "automatic_promotion": False,
+                "automatic_retry": False,
+                "recovery_requires_user": True,
+            }
+            cursor = connection.execute(
+                """UPDATE hie_experiments SET status = 'failed', results = ?, updated_at = ?
+                   WHERE id = ? AND status IN ('queued', 'running')""",
+                (json.dumps(results, ensure_ascii=False), _now(), experiment["id"]),
+            )
+            if cursor.rowcount != 1:
+                continue
+            _insert_hie_recovery_event(
+                connection,
+                experiment,
+                "HIE experiment was interrupted by restart; partial fixture evidence was kept and no automatic replay occurred.",
+            )
+            recovered.append(experiment["id"])
+        connection.commit()
+
+    recovered_tasks: list[int] = []
+    for experiment_id in recovered:
+        experiment = None
+        with get_connection() as connection:
+            row = connection.execute(
+                "SELECT task_id, conversation_id, project_id FROM hie_experiments WHERE id = ?",
+                (experiment_id,),
+            ).fetchone()
+        if row is None:
+            continue
+        task = get_task(row["task_id"])
+        if task is None or task.status not in {"pending", "planning", "executing", "validating"}:
+            continue
+        try:
+            updated = update_task(
+                task.id,
+                status="failed",
+                result={
+                    **dict(task.result or {}),
+                    "hie_experiment_id": experiment_id,
+                    "recovery": {
+                        "status": "interrupted_by_restart",
+                        "automatic_retry": False,
+                        "resume_requires_user": True,
+                    },
+                },
+            )
+        except ValueError:
+            continue
+        if updated is not None:
+            recovered_tasks.append(task.id)
+
+    return {
+        "recovered_experiments": recovered,
+        "recovered_tasks": recovered_tasks,
+        "automatic_retry": False,
+    }
 
 
 def recover_interrupted_tasks() -> dict[str, Any]:
@@ -33,7 +142,6 @@ def recover_interrupted_tasks() -> dict[str, Any]:
                 try:
                     update_tool_call(call.id, status="failed")
                 except ValueError:
-                    # A concurrent state transition is authoritative.
                     continue
                 recovered_tool_call_ids.append(call.id)
                 if not list_tool_results(call.id):
@@ -74,7 +182,6 @@ def recover_interrupted_tasks() -> dict[str, Any]:
                 )
                 recovered_action_ids.append(action.id)
             except ValueError:
-                # Do not overwrite a newer authoritative action state.
                 continue
 
         result = dict(task.result or {})
