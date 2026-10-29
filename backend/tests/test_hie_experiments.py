@@ -205,3 +205,33 @@ def test_excessive_provider_output_fails_without_truncating_and_persisting_it(cl
     assert failed["status"] == "failed"
     assert "output exceeded" in failed["results"]["error"]
     assert "evidence" not in failed["results"]
+
+
+def test_completion_event_failure_does_not_report_success(client, monkeypatch):
+    from app.services import hie_experiments
+
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: FakeProvider())
+    original_emit = hie_experiments._emit
+    def fail_completion_event(experiment, event_name, message, status, metadata=None, connection=None):
+        if event_name == "hie.experiment_completed":
+            raise RuntimeError("completion event store unavailable")
+        return original_emit(experiment, event_name, message, status, metadata, connection)
+
+    monkeypatch.setattr(hie_experiments, "_emit", fail_completion_event)
+    project, conversation = _scope()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    created = client.post("/hie/experiments", json={
+        "conversation_id": conversation.id,
+        "profile_slug": "qa-agent",
+        "candidate_content": "Always include the word approved.",
+        "fixtures": [{"prompt": "Return the test response.", "expected_contains": ["approved"]}],
+    })
+    assert created.status_code == 201
+    assert client.post(f"/hie/experiments/{created.json()['id']}/run").status_code == 202
+    failed = client.get(f"/hie/experiments/{created.json()['id']}").json()
+    assert failed["status"] == "failed"
+    assert failed["results"]["automatic_promotion"] is False
+    task = get_task(failed["task_id"])
+    assert task.status == "failed"
+    active = get_project_agent(project.id, "qa-agent")
+    assert active["instructions"] == "Answer concisely."
