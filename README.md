@@ -362,6 +362,7 @@ O Mosaic continua em desenvolvimento ativo. CI verde comprova a suíte automatiz
 - [Contrato da fase HIE — observabilidade e autoaperfeiçoamento](docs/MOSAIC_HIE_OBSERVABILITY_AND_SELF_IMPROVEMENT_PHASE_v1.0.md)
 - [Mapa visual dos fluxos HIE, UML e execução simulada](docs/MOSAIC_HIE_VISUAL_FLOWS_UML_v1.0.md)
 - [Prompt mestre de implementação HIE](docs/MOSAIC_HIE_COMPLETION_IMPLEMENTATION_PROMPT_v1.0.md)
+- [Prompt integrado de implementação HIE + frontend](docs/MOSAIC_HIE_FRONTEND_INTEGRATED_IMPLEMENTATION_PROMPT_v1.0.md)
 - [Arquitetura do Harness Improvement Engine](docs/MOSAIC_HARNESS_IMPROVEMENT_ENGINE_ARCHITECTURE_v1.0.md)
 - [Prompt de implementação HIE anterior / auditoria inicial](docs/MOSAIC_HARNESS_IMPROVEMENT_ENGINE_IMPLEMENTATION_PROMPT_v1.0.md)
 
