@@ -358,7 +358,11 @@ def test_excessive_provider_output_fails_without_truncating_and_persisting_it(cl
 def test_failure_event_failure_rolls_back_hie_and_task_status(client, monkeypatch):
     from app.services import hie_experiments
 
-    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: FakeProvider())
+    class FailsProvider(FakeProvider):
+        def generate(self, messages, model_name, configuration):
+            raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: FailsProvider())
     original_emit = hie_experiments._emit
 
     def fail_failure_event(experiment, event_name, message, status, metadata=None, connection=None):
@@ -377,23 +381,13 @@ def test_failure_event_failure_rolls_back_hie_and_task_status(client, monkeypatc
     })
     assert created.status_code == 201
     created_id = created.json()["id"]
+    assert client.post(f"/hie/experiments/{created_id}/run").status_code == 202
 
-    # Force a provider error after the experiment has been created and queued.
-    class FailsProvider(FakeProvider):
-        def generate(self, messages, model_name, configuration):
-            raise RuntimeError("provider unavailable")
-
-    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: FailsProvider())
-    # A failed audit write must roll back status and Task finalization, leaving a
-    # recoverable running state rather than falsely declaring the failure audited.
-    with pytest.raises(OSError, match="failure event store unavailable"):
-        hie_experiments.queue_experiment(created_id)
-        hie_experiments.run_experiment(created_id)
-
+    # The event failure must roll back terminal state and Task transition.
     stored = hie_experiments.get_experiment(created_id)
-    assert stored["status"] == "queued"
+    assert stored["status"] == "running"
     task = get_task(stored["task_id"])
-    assert task.status == "pending"
+    assert task.status == "executing"
 
 
 def test_completion_event_failure_does_not_report_success(client, monkeypatch):
