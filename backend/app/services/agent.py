@@ -1196,6 +1196,7 @@ def _prepare_workspace_exploration(
                 "bytes_read": data.get("bytes_read", 0),
                 "limits_reached": data.get("limits_reached", []),
                 "files_passed_to_model": len(passed_to_model),
+                "files_partially_passed_to_model": len(partially_passed),
                 "files_not_passed_to_model": len(summary["files_not_passed_to_model"]),
                 "ignored_reasons": {
                     reason: sum(1 for item in data.get("ignored", []) if item.get("reason") == reason)
