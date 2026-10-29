@@ -355,6 +355,47 @@ def test_excessive_provider_output_fails_without_truncating_and_persisting_it(cl
     assert "evidence" not in failed["results"]
 
 
+def test_failure_event_failure_rolls_back_hie_and_task_status(client, monkeypatch):
+    from app.services import hie_experiments
+
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: FakeProvider())
+    original_emit = hie_experiments._emit
+
+    def fail_failure_event(experiment, event_name, message, status, metadata=None, connection=None):
+        if event_name == "hie.experiment_failed":
+            raise OSError("failure event store unavailable")
+        return original_emit(experiment, event_name, message, status, metadata, connection)
+
+    monkeypatch.setattr(hie_experiments, "_emit", fail_failure_event)
+    project, conversation = _scope()
+    assert client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": True}).status_code == 200
+    created = client.post("/hie/experiments", json={
+        "conversation_id": conversation.id,
+        "profile_slug": "qa-agent",
+        "candidate_content": "Always include the word approved.",
+        "fixtures": [{"prompt": "Return the test response.", "expected_contains": ["approved"]}],
+    })
+    assert created.status_code == 201
+    created_id = created.json()["id"]
+
+    # Force a provider error after the experiment has been created and queued.
+    class FailsProvider(FakeProvider):
+        def generate(self, messages, model_name, configuration):
+            raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda model: FailsProvider())
+    # A failed audit write must roll back status and Task finalization, leaving a
+    # recoverable running state rather than falsely declaring the failure audited.
+    with pytest.raises(OSError, match="failure event store unavailable"):
+        hie_experiments.queue_experiment(created_id)
+        hie_experiments.run_experiment(created_id)
+
+    stored = hie_experiments.get_experiment(created_id)
+    assert stored["status"] == "queued"
+    task = get_task(stored["task_id"])
+    assert task.status == "pending"
+
+
 def test_completion_event_failure_does_not_report_success(client, monkeypatch):
     from app.services import hie_experiments
 
