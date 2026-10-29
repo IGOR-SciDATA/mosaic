@@ -62,3 +62,20 @@ def test_rejects_invalid_limits_and_non_directory_source(tmp_path):
     file_path.write_text("x", encoding="utf-8")
     with pytest.raises(HIEFixtureError, match="directory"):
         create_disposable_workspace(file_path)
+
+
+
+def test_rejects_total_size_limit(tmp_path):
+    source = tmp_path / "fixture"
+    source.mkdir()
+    (source / "one.md").write_text("123456", encoding="utf-8")
+    (source / "two.md").write_text("abcdef", encoding="utf-8")
+    with pytest.raises(HIEFixtureError, match="total size"):
+        create_disposable_workspace(source, max_total_bytes=10)
+
+
+def test_rejects_malformed_allowed_suffixes(tmp_path):
+    source = tmp_path / "fixture"
+    source.mkdir()
+    with pytest.raises(HIEFixtureError, match="Allowed suffixes"):
+        create_disposable_workspace(source, allowed_suffixes=("md",))
