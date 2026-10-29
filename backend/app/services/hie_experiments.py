@@ -121,7 +121,12 @@ def create_experiment(
     project_id = conversation.project_id if conversation.project_id is not None else (source_task.project_id if source_task else None)
     if project_id is None:
         raise HieExperimentError("HIE experiments require a project-scoped conversation and agent profile")
-    if not _hie_enabled("task", task_id) if task_id is not None else not _hie_enabled("conversation", resolved_conversation_id):
+    hie_is_enabled = (
+        _hie_enabled("task", task_id)
+        if task_id is not None
+        else _hie_enabled("conversation", resolved_conversation_id)
+    )
+    if not hie_is_enabled:
         raise HieExperimentError("HIE must be explicitly enabled for this scope before starting an experiment")
 
     project = get_project(project_id)
