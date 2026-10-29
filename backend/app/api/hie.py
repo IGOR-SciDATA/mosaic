@@ -124,7 +124,7 @@ def set_hie_status(payload: HieModeUpdate) -> dict:
                 metadata={
                     "scope": "task",
                     "scope_id": scope_id,
-                    "experiment_execution_available": False,
+                    "experiment_execution_available": True,
                 },
             )
     return _payload(scope, scope_id, payload.enabled)
