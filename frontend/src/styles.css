@@ -3451,3 +3451,104 @@ body { overflow: hidden; }
  .composer-tools .hie-toggle { max-width:135px; }
  .chat-task-trace-body { padding-left:17px; }
 }
+
+
+/* Chat composer fixes: keep HIE as a single pill and expose slash commands in normal chat. */
+.composer { isolation: isolate; }
+.composer-tools { min-width: 0; flex-wrap: wrap; }
+.composer-tools .hie-toggle {
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 0;
+  height: 30px;
+  min-height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 8px;
+  line-height: 1;
+  white-space: nowrap;
+  background: rgba(255,255,255,.035);
+  color: #b9bbc0;
+}
+.composer-tools .hie-toggle.active {
+  color: #fff;
+  border-color: rgba(239,48,43,.55);
+  background: rgba(239,48,43,.12);
+}
+.hie-toggle-state { color: #888b91; font-size: 10px; font-weight: 500; }
+.hie-toggle.active .hie-toggle-state { color: #ff7772; }
+.composer-tools .hie-experiment-trigger {
+  display: inline-flex;
+  width: auto;
+  height: 30px;
+  min-height: 30px;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,.035);
+  color: #c9cbd0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.composer { overflow: visible; }
+.composer-command-picker {
+  position: absolute;
+  z-index: 30;
+  left: 12px;
+  bottom: calc(100% + 9px);
+  width: min(420px, calc(100% - 24px));
+  max-height: min(340px, 45vh);
+  overflow: auto;
+  padding: 7px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 12px;
+  background: #111314;
+  box-shadow: 0 18px 55px rgba(0,0,0,.55);
+}
+.composer-picker-heading {
+  padding: 8px 9px 5px;
+  color: #858990;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.composer-command-picker button {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 9px;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+}
+.composer-command-picker button:hover,
+.composer-command-picker button:focus-visible { background: rgba(255,255,255,.07); outline: none; }
+.composer-picker-command {
+  flex: 0 0 auto;
+  color: #ff7772;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.composer-picker-description {
+  overflow: hidden;
+  color: #c3c5ca;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-picker-empty { padding: 10px; color: #9b9ea4; font-size: 12px; }
+@media (max-width: 620px) {
+  .composer { left: 10px; right: 10px; padding: 9px; }
+  .composer-tools { gap: 4px; }
+  .composer-tools .hie-toggle { padding: 0 7px; gap: 4px; }
+  .hie-toggle-state { font-size: 9px; }
+  .composer-command-picker { left: 0; width: 100%; }
+}
