@@ -498,12 +498,16 @@ def test_filesystem_explore_handles_empty_directories_and_oversized_files(tmp_pa
     assert result["files_read"] == 0
 
     (empty / "large.txt").write_text("x" * 20, encoding="utf-8")
-    result = FilesystemTool().execute(
+    result = FilesystemTool().execute({"operation": "explore", "path": "."}, workspace=empty)
+    assert result["files_read"] == 1
+    assert result["files"][0]["content"] == "x" * 20
+
+    limited = FilesystemTool().execute(
         {"operation": "explore", "path": ".", "max_file_bytes": 10},
         workspace=empty,
     )
-    assert result["files_read"] == 0
-    assert any(item["path"] == "large.txt" and item["reason"] == "file_size_limit" for item in result["ignored"])
+    assert limited["files_read"] == 0
+    assert any(item["path"] == "large.txt" and item["reason"] == "file_size_limit" for item in limited["ignored"])
 
 
 def test_filesystem_search_matches_relative_names_and_content_without_approval(tmp_path: Path) -> None:
@@ -526,3 +530,16 @@ def test_filesystem_search_matches_relative_names_and_content_without_approval(t
         workspace=workspace,
     )
     assert name_result["matches"][0]["path"] == "src/engine.py"
+
+
+def test_filesystem_explore_has_no_default_file_count_or_byte_caps(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    for index in range(205):
+        (workspace / f"file_{index:03}.txt").write_text("x" * 40_000, encoding="utf-8")
+    result = FilesystemTool().execute({"operation": "explore", "path": "."}, workspace=workspace)
+    assert result["status"] == "success"
+    assert result["files_found"] == 205
+    assert result["files_read"] == 205
+    assert result["bytes_read"] == 205 * 40_000
+    assert result["limits_reached"] == []
