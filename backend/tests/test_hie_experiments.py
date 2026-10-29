@@ -68,6 +68,10 @@ def test_experiment_runs_isolated_baseline_candidate_and_persists_evidence(clien
     assert experiment["provider"] == "ollama"
     assert experiment["model_name"] == "qwen3:3b"
     assert experiment["budget"]["estimated_provider_calls"] == 2
+    assert experiment["budget"]["max_provider_calls"] == 2
+    assert experiment["budget"]["max_output_tokens_per_call"] == 1500
+    assert experiment["budget"]["max_output_chars_per_call"] == 6000
+    assert experiment["budget"]["max_request_timeout_seconds"] == 90
     assert "candidate/profile-instructions" in experiment["candidate_diff"]
 
     run = client.post(f"/hie/experiments/{experiment['id']}/run")
@@ -79,6 +83,7 @@ def test_experiment_runs_isolated_baseline_candidate_and_persists_evidence(clien
     assert result["results"]["baseline_passed"] == 0
     assert result["results"]["candidate_passed"] == 1
     assert result["results"]["assessment"] == "candidate_better"
+    assert result["results"]["assessment_scope"] == "submitted_deterministic_fixtures_only"
     assert result["results"]["provider_calls"] == 2
     assert result["results"]["duration_ms"] >= 0
     assert result["results"]["execution_mode"] == "isolated_prompt_probe_no_tools"
