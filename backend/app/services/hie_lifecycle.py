@@ -13,7 +13,7 @@ from typing import Any
 from app.db.database import get_connection
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import get_task
-from app.services.agent_library import _seal_profile, _normalize_skills, get_project_agent
+from app.services.agent_library import _seal_profile, _normalize_skills
 from app.services.hie_experiments import get_experiment
 
 
