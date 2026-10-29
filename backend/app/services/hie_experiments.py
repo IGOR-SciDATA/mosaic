@@ -423,14 +423,31 @@ def run_experiment(experiment_id: int) -> None:
                 "fixture_count": len(partial_evidence),
                 "provider_calls": provider_calls,
                 "execution_mode": "isolated_prompt_probe_no_tools",
+                "assessment_scope": "submitted_deterministic_fixtures_only",
                 "automatic_promotion": False,
                 "partial": True,
                 "evidence": partial_evidence,
             }
+            # Evidence and its event are one durable unit: if event insertion fails,
+            # the checkpoint is rolled back and the outer handler records failure.
             with get_connection() as connection:
-                connection.execute(
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
                     "UPDATE hie_experiments SET results = ?, updated_at = ? WHERE id = ? AND status = 'running'",
                     (json.dumps(checkpoint, ensure_ascii=False), _now(), experiment_id),
+                )
+                if cursor.rowcount != 1:
+                    raise HieExperimentError("Experiment state changed before evidence checkpoint")
+                _insert_experiment_event(
+                    connection, experiment, "hie.fixture_evaluated",
+                    f"Fixture {fixture['id']} completed for baseline and candidate.", "completed", {
+                        "fixture_id": fixture["id"],
+                        "baseline_passed": case_result["baseline"]["evaluation"]["passed"],
+                        "candidate_passed": case_result["candidate"]["evaluation"]["passed"],
+                        "baseline_output_sha256": case_result["baseline"]["output_sha256"],
+                        "candidate_output_sha256": case_result["candidate"]["output_sha256"],
+                        "provider_calls": provider_calls,
+                    },
                 )
                 connection.commit()
             _emit(experiment, "hie.fixture_evaluated", f"Fixture {fixture['id']} completed for baseline and candidate.", "completed", {
