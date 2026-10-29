@@ -290,6 +290,11 @@ def run_experiment(experiment_id: int) -> None:
         provider = resolve_model_provider(model)
         baseline_content = baseline["instructions"]
         candidate_content = candidate["content"]
+        active_skills = [skill for skill in baseline.get("skills", []) if skill.get("enabled") is True]
+        fixed_skills_context = "\n\n".join(
+            f"## {skill['name']} v{skill['version']}\n{skill['content']}"
+            for skill in active_skills
+        ) or "(no enabled Skills in the baseline snapshot)"
         outputs = []
         for fixture in experiment["fixtures"]:
             case_result = {"fixture_id": fixture["id"]}
@@ -303,7 +308,8 @@ def run_experiment(experiment_id: int) -> None:
                             "actions, claim to have changed system state, or reveal private reasoning. "
                             "Answer only the test prompt.\n\n"
                             f"Profile: /{baseline['slug']} v{baseline['version']}\n"
-                            f"Instructions under test:\n{instructions}"
+                            f"Instructions under test:\n{instructions}\n\n"
+                            f"Enabled Skills held constant across variants:\n{fixed_skills_context}"
                         ),
                     },
                     {"role": "user", "content": fixture["prompt"]},
