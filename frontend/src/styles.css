@@ -3585,3 +3585,26 @@ body { overflow: hidden; }
 .chat-task-artifact small { color: #858990; font-size: 10px; }
 @keyframes chat-task-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .chat-task-trace-indicator.working { animation: none; } }
+
+/* Explicit user override: route the next chat message through Task Engine. */
+.task-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 29px;
+  padding: 0 9px;
+  border: 1px solid var(--border, rgba(255,255,255,.16));
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted, #a7a9af);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.task-mode-toggle:hover { border-color: rgba(255,255,255,.32); color: var(--text, #e8e8ea); }
+.task-mode-toggle.active {
+  border-color: rgba(239, 68, 68, .72);
+  background: rgba(239, 68, 68, .12);
+  color: #ff8c88;
+}
+.task-mode-toggle:disabled { cursor: not-allowed; opacity: .5; }
