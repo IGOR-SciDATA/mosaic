@@ -3608,3 +3608,18 @@ body { overflow: hidden; }
   color: #ff8c88;
 }
 .task-mode-toggle:disabled { cursor: not-allowed; opacity: .5; }
+
+/* Keep the composer toolbar stable when HIE and task mode are enabled. */
+.composer { min-width: 0; }
+.composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.composer-tools { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+.composer-tools > button { flex: 0 0 auto; }
+.composer-submit { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
+.hie-toggle, .task-mode-toggle, .hie-experiment-trigger { min-height: 30px; box-sizing: border-box; }
+.task-mode-toggle { width: auto; display: inline-flex; justify-content: center; }
+@media (max-width: 620px) {
+  .composer-toolbar { align-items: flex-end; }
+  .composer-tools { max-width: 100%; }
+  .composer-submit { gap: 5px; }
+  .composer-model-select { max-width: 130px; }
+}
