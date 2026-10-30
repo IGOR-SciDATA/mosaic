@@ -313,7 +313,7 @@ function Composer({ disabled, onSubmit, model, models, conversation, projectId, 
       <button type="button" className={hieEnabled ? "hie-toggle active" : "hie-toggle"} disabled={disabled || hieBusy} onClick={onToggleHie} aria-pressed={!!hieEnabled} title={hieEnabled ? "Desativar HIE nesta conversa" : "Ativar HIE experimental nesta conversa"}><Icon name="sun" size={14}/><span>HIE</span><span className="hie-toggle-state">{hieBusy ? "…" : hieEnabled ? "ON" : "Experimental"}</span></button>
       <div className="task-mode-menu-wrap">
         <button type="button" className={forceTask ? "task-mode-trigger active" : "task-mode-trigger"} disabled={disabled} onClick={()=>setTaskMenuOpen(open=>!open)} aria-expanded={taskMenuOpen} aria-haspopup="menu" title="Opções de execução">
-          <Icon name="layers" size={14}/><span>{forceTask ? "Tarefa" : "Modo"}</span><Icon name="chevronDown" size={12}/>
+          <Icon name="layers" size={14}/><span>{forceTask ? "Tarefa" : "Modo"}</span><Icon name="chevron" size={12}/>
         </button>
         {taskMenuOpen && <div className="task-mode-menu" role="menu" aria-label="Modo de envio">
           <button type="button" role="menuitem" className={!forceTask ? "selected" : ""} onClick={()=>{setForceTask(false);setTaskMenuOpen(false);}}>
