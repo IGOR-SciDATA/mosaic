@@ -282,6 +282,7 @@ function TaskTrace({ trace, onToggle }) {
 
 function Composer({ disabled, onSubmit, model, models, conversation, projectId, onModelChange, onModelSettings, onFiles, onAgent, text, setText, hieEnabled, onToggleHie, onOpenHieExperiment, hieExperimentAvailable, hieBusy }) {
   const [agents, setAgents] = useState([]);
+  const [forceTask, setForceTask] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   useEffect(() => {
     let active = true;
@@ -297,7 +298,7 @@ function Composer({ disabled, onSubmit, model, models, conversation, projectId, 
   const agentOptions = agentMatch ? agents.filter(item => item.slug.toLowerCase().includes(agentMatch[1].toLowerCase()) || item.name.toLowerCase().includes(agentMatch[1].toLowerCase())).slice(0, 7) : [];
   const skillOptions = chosenAgent && skillMatch ? (chosenAgent.skills || []).filter(skill => skill.enabled !== false && skillSlug(skill.name).includes(skillMatch[2].toLowerCase())).slice(0, 7) : [];
   const showPicker = !disabled && (agentOptions.length > 0 || skillOptions.length > 0) && (agentMatch || skillMatch);
-  const submit=e=>{e.preventDefault();if(!text.trim()||disabled)return;onSubmit(text.trim());setText("");setPickerOpen(false);};
+  const submit=e=>{e.preventDefault();if(!text.trim()||disabled)return;onSubmit(text.trim(), { forceTask });setText("");setPickerOpen(false);setForceTask(false);};
   function chooseAgent(agent) { setText("/" + agent.slug + " @"); setPickerOpen(true); }
   function chooseSkill(skill) { setText("/" + chosenAgent.slug + " @" + skillSlug(skill.name) + " "); setPickerOpen(false); }
   return <form className="composer" onSubmit={submit}>
@@ -309,6 +310,7 @@ function Composer({ disabled, onSubmit, model, models, conversation, projectId, 
     </div>}
     <div className="composer-toolbar"><div className="composer-tools">
       <button type="button" className={hieEnabled ? "hie-toggle active" : "hie-toggle"} disabled={disabled || hieBusy} onClick={onToggleHie} aria-pressed={!!hieEnabled} title={hieEnabled ? "Desativar HIE nesta conversa" : "Ativar HIE experimental nesta conversa"}><Icon name="sun" size={14}/><span>HIE</span><span className="hie-toggle-state">{hieBusy ? "…" : hieEnabled ? "ON" : "Experimental"}</span></button>
+      <button type="button" className={forceTask ? "task-mode-toggle active" : "task-mode-toggle"} disabled={disabled} onClick={()=>setForceTask(value=>!value)} aria-pressed={forceTask} title={forceTask ? "Desativar execução como tarefa" : "Forçar a próxima mensagem a ser executada como tarefa"}><Icon name="layers" size={14}/><span>{forceTask ? "Tarefa ativada" : "Executar como tarefa"}</span></button>
       {hieEnabled && hieExperimentAvailable && <button type="button" className="hie-experiment-trigger" disabled={disabled} onClick={onOpenHieExperiment}>Experimento</button>}
       <button type="button" disabled={disabled} onClick={onFiles} aria-label="Explorar arquivos do projeto" title="Arquivos do projeto"><Icon name="plus"/></button><button type="button" disabled={disabled} onClick={onAgent} aria-label="Configurar instruções do agente" title="Instruções e skills do agente"><Icon name="book"/></button>
     </div><div className="composer-submit"><button type="button" className="composer-model-settings" onClick={onModelSettings} title="Configurar provedores e modelos"><Icon name="settings" size={15}/></button><select className="composer-model-select" aria-label="Selecionar modelo" value={conversation?.model_id ?? ""} disabled={!conversation || !models?.length || disabled} onChange={e=>onModelChange(Number(e.target.value))}>{(models||[]).filter(m=>m.enabled || m.id===conversation?.model_id).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select><button className="send-button" type="submit" disabled={disabled}><Icon name="send" size={19}/></button></div></div></form>;
@@ -1253,11 +1255,11 @@ export default function App(){
     finally{setSaving(false);}
   }
 
-  async function sendMessage(content){
+  async function sendMessage(content, options = {}){
     if(!conversation||sending)return; setError("");setSending(true);
     const localUser={localId:`user-${Date.now()}`,role:"user",content,created_at:new Date().toISOString()};
     const localAssistant={localId:`assistant-${Date.now()}`,role:"assistant",content:"",created_at:new Date().toISOString()};
-    const taskIntent = (() => {
+    const taskIntent = options.forceTask === true || (() => {
       const text = content.trim();
       if (/^\/[a-z0-9-]+(?:\s|$)/i.test(text)) return true;
 
