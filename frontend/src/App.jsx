@@ -1257,7 +1257,25 @@ export default function App(){
     if(!conversation||sending)return; setError("");setSending(true);
     const localUser={localId:`user-${Date.now()}`,role:"user",content,created_at:new Date().toISOString()};
     const localAssistant={localId:`assistant-${Date.now()}`,role:"assistant",content:"",created_at:new Date().toISOString()};
-    const taskIntent = /^\/[a-z0-9-]+(?:\s|$)/i.test(content.trim()) || /\b(implemente|implementar|desenvolva|desenvolver|crie|criar|gere|gerar|construa|construir|edite|editar|altere|alterar|modifique|modificar|corrija|corrigir|execute|executar|implementar|refatore|refatorar|instale|instalar|configure|configurar|adicione|adicionar|remova|remover|salve|salvar|escreva|escrever)\b.{0,100}\b(arquivo|arquivos|código|codigo|função|funcao|componente|frontend|backend|projeto|implementação|implementacao|bug|erro|teste|feature|funcionalidade|documento|relatório|relatorio|script|página|pagina|classe|endpoint|rota|módulo|modulo)\b/i.test(content) || /\b(implemente|implementar|desenvolva|desenvolver|corrija o (bug|erro)|execute essa tarefa|faça essa tarefa|como tarefa|gere um projeto|construa o aplicativo|crie uma funcionalidade|altere o (frontend|backend|código))\b/i.test(content) || /^\s*(faça|faca|realize|execute|implemente|desenvolva|crie|criar|gere|construa|corrija|refatore|edite|modifique|altere|adicione|remova|instale|configure|salve|escreva)\b.{0,120}\b(no projeto|neste projeto|no repositório|no repositorio|no código|no codigo|para mim|por favor)\b/i.test(content);
+    const taskIntent = (() => {
+      const text = content.trim();
+      if (/^\/[a-z0-9-]+(?:\s|$)/i.test(text)) return true;
+
+      // Requests that name a file/path or ask to inspect existing files and
+      // produce an artifact must use the Task Engine, not ordinary chat.
+      const hasFileName = /(?:^|[\s\`'"/])[\w.-]+\.(?:md|txt|json|ya?ml|toml|py|js|jsx|ts|tsx|css|html|sql|pdf|docx?|xlsx?|csv)(?:$|[\s\`'",.;:])/i.test(text);
+      const hasWorkspaceTarget = /\b(arquivo|arquivos|pasta|diretório|diretorio|repositório|repositorio|documento|documentos|script|código|codigo|frontend|backend|endpoint|componente|relatório|relatorio|resumo|teste|testes|\/docs)\b/i.test(text);
+      const hasAction = /\b(leia|ler|analise|analisar|inspecione|inspecionar|verifique|verificar|crie|criar|gere|gerar|construa|construir|edite|editar|altere|alterar|modifique|modificar|corrija|corrigir|execute|executar|implemente|implementar|desenvolva|desenvolver|refatore|refatorar|instale|instalar|configure|configurar|adicione|adicionar|remova|remover|salve|salvar|escreva|escrever|atualize|atualizar|organize|organizar|extraia|extrair|converta|converter)\b/i.test(text);
+      const explicitArtifactRequest = /\b(crie|criar|gere|gerar|salve|salvar|escreva|escrever|produza|produzir)\b.{0,100}\b(resumo|arquivo|documento|relatório|relatorio|artefato|chamado|chamada|como)\b/i.test(text)
+        || /\b(chamado|chamada|salve como|gere um arquivo|crie um arquivo)\b/i.test(text);
+      const refersToExistingFiles = /\b(leia|ler|analise|analisar|inspecione|inspecionar|resuma|resumir)\b.{0,100}\b(todos os arquivos|arquivos existentes|arquivos já existentes|arquivos ja existentes|diretório|diretorio|pasta|\/docs)\b/i.test(text);
+
+      if (hasAction && ((hasFileName && hasWorkspaceTarget) || explicitArtifactRequest || refersToExistingFiles)) return true;
+      if (hasAction && hasWorkspaceTarget && /\b(no projeto|neste projeto|no repositório|no repositorio|na pasta|no diretório|no diretorio|em \/|dos arquivos)\b/i.test(text)) return true;
+
+      return /\b(implemente|implementar|desenvolva|desenvolver|corrija o (bug|erro)|execute essa tarefa|faça essa tarefa|como tarefa|gere um projeto|construa o aplicativo|crie uma funcionalidade|altere o (frontend|backend|código))\b/i.test(text)
+        || /^\s*(faça|faca|realize|execute|implemente|desenvolva|crie|criar|gere|construa|corrija|refatore|edite|modifique|altere|adicione|remova|instale|configure|salve|escreva)\b.{0,120}\b(no projeto|neste projeto|no repositório|no repositorio|no código|no codigo|para mim|por favor)\b/i.test(text);
+    })();
     setMessages(items=>[...items,localUser,localAssistant]);
     try{
       if(taskIntent){
