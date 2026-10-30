@@ -283,6 +283,7 @@ function TaskTrace({ trace, onToggle }) {
 function Composer({ disabled, onSubmit, model, models, conversation, projectId, onModelChange, onModelSettings, onFiles, onAgent, text, setText, hieEnabled, onToggleHie, onOpenHieExperiment, hieExperimentAvailable, hieBusy }) {
   const [agents, setAgents] = useState([]);
   const [forceTask, setForceTask] = useState(false);
+  const [taskMenuOpen, setTaskMenuOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   useEffect(() => {
     let active = true;
@@ -310,9 +311,15 @@ function Composer({ disabled, onSubmit, model, models, conversation, projectId, 
     </div>}
     <div className="composer-toolbar"><div className="composer-tools">
       <button type="button" className={hieEnabled ? "hie-toggle active" : "hie-toggle"} disabled={disabled || hieBusy} onClick={onToggleHie} aria-pressed={!!hieEnabled} title={hieEnabled ? "Desativar HIE nesta conversa" : "Ativar HIE experimental nesta conversa"}><Icon name="sun" size={14}/><span>HIE</span><span className="hie-toggle-state">{hieBusy ? "…" : hieEnabled ? "ON" : "Experimental"}</span></button>
-      <button type="button" className={forceTask ? "task-mode-toggle active" : "task-mode-toggle"} disabled={disabled} onClick={()=>setForceTask(value=>!value)} aria-pressed={forceTask} title={forceTask ? "Desativar execução como tarefa" : "Forçar a próxima mensagem a ser executada como tarefa"}><Icon name="layers" size={14}/><span>{forceTask ? "Tarefa ativada" : "Executar como tarefa"}</span></button>
+      <div className="task-mode-menu-wrap">
+        <button type="button" className={forceTask ? "task-mode-trigger active" : "task-mode-trigger"} disabled={disabled} onClick={()=>setTaskMenuOpen(open=>!open)} aria-expanded={taskMenuOpen} aria-haspopup="menu" title="Escolher modo de envio"><Icon name="layers" size={14}/><span>{forceTask ? "Tarefa" : "Modo"}</span><Icon name="chevron" size={12}/></button>
+        {taskMenuOpen && <div className="task-mode-menu" role="menu" aria-label="Modo de envio">
+          <button type="button" role="menuitem" className={!forceTask ? "selected" : ""} onClick={()=>{setForceTask(false);setTaskMenuOpen(false);}}><span className="task-mode-menu-icon">◉</span><span><strong>Chat normal</strong><small>O Mosaic responde normalmente</small></span>{!forceTask && <span className="task-mode-check">✓</span>}</button>
+          <button type="button" role="menuitem" className={forceTask ? "selected" : ""} onClick={()=>{setForceTask(true);setTaskMenuOpen(false);}}><span className="task-mode-menu-icon">▤</span><span><strong>Executar como tarefa</strong><small>Encaminha a próxima mensagem ao Task Engine</small></span>{forceTask && <span className="task-mode-check">✓</span>}</button>
+        </div>}
+      </div>
       {hieEnabled && hieExperimentAvailable && <button type="button" className="hie-experiment-trigger" disabled={disabled} onClick={onOpenHieExperiment}>Experimento</button>}
-      <button type="button" disabled={disabled} onClick={onFiles} aria-label="Explorar arquivos do projeto" title="Arquivos do projeto"><Icon name="plus"/></button><button type="button" disabled={disabled} onClick={onAgent} aria-label="Configurar instruções do agente" title="Instruções e skills do agente"><Icon name="book"/></button>
+      
     </div><div className="composer-submit"><button type="button" className="composer-model-settings" onClick={onModelSettings} title="Configurar provedores e modelos"><Icon name="settings" size={15}/></button><select className="composer-model-select" aria-label="Selecionar modelo" value={conversation?.model_id ?? ""} disabled={!conversation || !models?.length || disabled} onChange={e=>onModelChange(Number(e.target.value))}>{(models||[]).filter(m=>m.enabled || m.id===conversation?.model_id).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select><button className="send-button" type="submit" disabled={disabled}><Icon name="send" size={19}/></button></div></div></form>;
 }
 
