@@ -124,6 +124,29 @@ def test_confirmation_schedules_only_the_validated_plan(monkeypatch):
     assert len(background.tasks) == 1
 
 
+def test_stale_plan_version_cannot_be_edited_or_confirmed(monkeypatch):
+    conversation = _conversation()
+    monkeypatch.setattr("app.api.tasks.generate_coordinator_plan", lambda _conversation_id, goal: _valid_plan(goal))
+    task = start_agent_task_endpoint(
+        TaskStart(conversation_id=conversation.id, goal="Analise o projeto"), BackgroundTasks()
+    )
+    with pytest.raises(HTTPException) as edit_exc:
+        edit_task_plan_endpoint(
+            task.id,
+            TaskPlanUpdate(plan=_valid_plan(), expected_plan_version=task.plan["plan_version"] + 1),
+        )
+    assert edit_exc.value.status_code == 409
+
+    with pytest.raises(HTTPException) as confirm_exc:
+        confirm_task_plan_endpoint(
+            task.id,
+            TaskPlanConfirm(plan_version=task.plan["plan_version"] + 1),
+            BackgroundTasks(),
+        )
+    assert confirm_exc.value.status_code == 409
+    assert get_task(task.id).status == "awaiting_approval"
+
+
 def test_start_agent_rejects_blank_goal():
     conversation = _conversation()
     with pytest.raises(HTTPException) as exc:
