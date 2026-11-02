@@ -21,7 +21,7 @@ from app.services.agent import run_agent
 from app.services.tools import approve_tool_call, execute_tool_call, resolve_tool_workspace
 from app.models.tool_call_repository import get_tool_call, list_tool_calls, update_tool_call
 from app.services.agent_decision import create_provider_decider
-from app.services.task_coordinator import run_coordinated_task, validate_coordinator_plan
+from app.services.task_coordinator import generate_coordinator_plan, run_coordinated_task, validate_coordinator_plan
 from app.services.agent_library import parse_agent_invocation
 from app.db.database import get_connection
 from app.models.task_repository import (
@@ -322,10 +322,11 @@ def coordinate_task_endpoint(task_id: int, background_tasks: BackgroundTasks) ->
         raise HTTPException(status_code=404, detail="Task not found")
     if task.mode != "agent" or task.conversation_id is None:
         raise HTTPException(status_code=422, detail="Coordinated Tasks require agent mode and a conversation")
-    if task.status != "pending":
-        raise HTTPException(status_code=409, detail="Only a pending Task can start coordination")
+    plan = task.plan if isinstance(task.plan, dict) else {}
+    if task.status != "awaiting_approval" or plan.get("plan_confirmed") is not True:
+        raise HTTPException(status_code=409, detail="A plan must be reviewed and explicitly confirmed before coordination")
     try:
-        validate_coordinator_plan(task.plan)
+        validate_coordinator_plan(plan)
         planning = update_task(task_id, status="planning")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -429,7 +430,7 @@ def _run_provider_agent(task_id: int) -> None:
 
 @router.post("/start", response_model=Task, status_code=202)
 def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTasks) -> Task:
-    """Persist the user's goal, create an agent Task, and start the provider-backed loop."""
+    """Create a Task and return a validated, editable plan; execution requires explicit confirmation."""
     raw_goal = payload.goal.strip()
     if not raw_goal:
         raise HTTPException(status_code=422, detail="Task goal must not be empty")
@@ -442,27 +443,106 @@ def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTa
         goal, agent_snapshot = parse_agent_invocation(conversation.project_id, raw_goal)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    # Persist the resolved goal as a normal conversation message and freeze the selected profile in Task.plan.
     create_message(conversation.id, "user", goal)
     try:
-        task_plan = {"goal": goal}
+        initial_plan: dict[str, Any] = {"goal": goal, "plan_version": 0, "plan_confirmed": False}
         if agent_snapshot is not None:
-            task_plan["agent_library_snapshot"] = agent_snapshot
+            initial_plan["agent_library_snapshot"] = agent_snapshot
         task = create_task(
             type=payload.type,
             mode="agent",
             conversation_id=conversation.id,
             project_id=conversation.project_id,
-            plan=task_plan,
+            plan=initial_plan,
         )
         _inherit_conversation_hie_mode(task)
-        claimed = update_task(task.id, status="executing")
+        task = update_task(task.id, status="planning")
+        proposed = generate_coordinator_plan(conversation.id, goal)
+        plan = {**proposed, **{key: value for key, value in initial_plan.items() if key == "agent_library_snapshot"}}
+        plan["plan_version"] = 1
+        plan["plan_confirmed"] = False
+        validate_coordinator_plan(plan)
+        task = update_task(task.id, plan=plan, status="awaiting_approval")
+        if task is None:
+            raise ValueError("Could not persist generated Task plan")
+        create_task_event(
+            task_id=task.id, conversation_id=task.conversation_id, project_id=task.project_id,
+            component="planner", event_name="task.plan_proposed",
+            message="A validated plan is ready for user review.", status="awaiting_approval",
+            metadata={"plan_version": 1, "subtask_count": len(plan["subtasks"])},
+        )
+        return task
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if claimed is None:
-        raise HTTPException(status_code=500, detail="Could not claim newly created Task")
-    background_tasks.add_task(_run_provider_agent, task.id)
-    return claimed
+        current = get_task(task.id) if "task" in locals() else None
+        if current is not None and current.status in {"pending", "planning"}:
+            try:
+                update_task(current.id, status="failed", result={"error": "Task planning failed", "error_type": type(exc).__name__})
+            except ValueError:
+                pass
+        raise HTTPException(status_code=502, detail=f"Could not generate a valid Task plan: {type(exc).__name__}") from exc
+
+
+class TaskPlanUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plan: dict[str, Any]
+
+
+@router.patch("/{task_id}/plan", response_model=Task)
+def edit_task_plan_endpoint(task_id: int, payload: TaskPlanUpdate) -> Task:
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status != "awaiting_approval":
+        raise HTTPException(status_code=409, detail="Only a proposed plan can be edited")
+    current = task.plan if isinstance(task.plan, dict) else {}
+    if payload.plan.get("goal") != current.get("goal"):
+        raise HTTPException(status_code=422, detail="Plan edits must preserve the original Task objective")
+    proposed = dict(payload.plan)
+    proposed["plan_version"] = int(current.get("plan_version", 0)) + 1
+    proposed["plan_confirmed"] = False
+    try:
+        validate_coordinator_plan(proposed)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # Revalidate tool availability and authorization at confirmation/execution boundaries;
+    # coordinator subtasks themselves only use the existing profile/tool permission path.
+    updated = update_task(task_id, plan=proposed)
+    create_task_event(
+        task_id=task_id, conversation_id=task.conversation_id, project_id=task.project_id,
+        component="planner", event_name="task.plan_edited",
+        message="User-edited plan passed structural validation.", status="awaiting_approval",
+        metadata={"plan_version": proposed["plan_version"], "subtask_count": len(proposed["subtasks"])},
+    )
+    return updated
+
+
+@router.post("/{task_id}/confirm", response_model=Task, status_code=202)
+def confirm_task_plan_endpoint(task_id: int, background_tasks: BackgroundTasks) -> Task:
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status != "awaiting_approval":
+        raise HTTPException(status_code=409, detail="Task is not awaiting plan confirmation")
+    plan = dict(task.plan or {})
+    try:
+        validate_coordinator_plan(plan)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Plan is invalid: {exc}") from exc
+    plan["plan_confirmed"] = True
+    version = int(plan.get("plan_version", 0))
+    updated = update_task(task_id, plan=plan, status="executing")
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    create_task_event(
+        task_id=task_id, conversation_id=task.conversation_id, project_id=task.project_id,
+        component="planner", event_name="task.plan_confirmed",
+        message="User confirmed this exact plan version for execution.", status="executing",
+        metadata={"plan_version": version, "subtask_count": len(plan["subtasks"])},
+    )
+    background_tasks.add_task(run_coordinated_task, task_id)
+    return updated
 
 
 @router.post("/{task_id}/run", response_model=Task, status_code=202)
@@ -479,6 +559,8 @@ def run_task_endpoint(task_id: int, background_tasks: BackgroundTasks) -> Task:
     if task.status != "pending":
         raise HTTPException(status_code=409, detail=f"Task cannot start from status: {task.status}")
     plan = dict(task.plan or {})
+    if plan.get("plan_confirmed") is not True or not isinstance(plan.get("subtasks"), list):
+        raise HTTPException(status_code=409, detail="A validated Task plan must be confirmed before execution")
     raw_goal = plan.get("goal")
     if isinstance(raw_goal, str) and raw_goal.strip().startswith("/") and "agent_library_snapshot" not in plan:
         scope_project_id = conversation.project_id if conversation.project_id is not None else task.project_id
