@@ -69,7 +69,7 @@ def test_task_allowlist_blocks_undeclared_tool_before_approval() -> None:
     )
     with pytest.raises(ValueError, match="outside this Task's declared tool scope"):
         approve_tool_call(call)
-    assert get_tool_call(call.id).status == "failed"
+    assert get_tool_call(call.id).status == "rejected"
 
 
 def test_task_allowlist_is_rechecked_at_execution_boundary() -> None:
