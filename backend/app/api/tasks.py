@@ -628,6 +628,7 @@ def decide_tool_call_endpoint(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         if updated is None:
             raise HTTPException(status_code=404, detail="Task not found")
+        _resume_coordinator_for_child(task_id)
         return updated
 
     try:
