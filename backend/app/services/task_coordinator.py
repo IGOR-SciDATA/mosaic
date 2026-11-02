@@ -1,7 +1,13 @@
 """Sequential coordination using the existing Task Engine and persisted Task.plan JSON."""
 
 import hashlib
+import json
 from typing import Any, Callable
+
+from app.models.conversation_repository import get_conversation
+from app.models.repository import get_model
+from app.providers.factory import resolve_model_provider
+from app.tools import registry
 
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import create_task, get_task, list_tasks, update_task
@@ -15,7 +21,7 @@ MAX_INTEGRATED_OUTPUT_CHARS = 20_000
 ACCEPTANCE_TYPES = {"non_empty", "contains", "not_contains", "min_chars"}
 
 
-def validate_coordinator_plan(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
+def validate_coordinator_plan(plan: dict[str, Any] | None, *, require_tool_declarations: bool = False) -> list[dict[str, Any]]:
     if not isinstance(plan, dict):
         raise ValueError("Coordinator plan must be an object")
     raw = plan.get("subtasks")
@@ -51,6 +57,21 @@ def validate_coordinator_plan(plan: dict[str, Any] | None) -> list[dict[str, Any
             raise ValueError(f"Subtask {key} inputs must be a list of strings")
         if len(inputs) > 20 or any(len(item) > 2_000 for item in inputs):
             raise ValueError(f"Subtask {key} inputs exceed the supported bounds")
+        allowed_tools = raw_spec.get("allowed_tools")
+        if allowed_tools is None and require_tool_declarations:
+            raise ValueError(f"Subtask {key} must declare allowed_tools before confirmation")
+        if allowed_tools is not None:
+            if (
+                not isinstance(allowed_tools, list)
+                or any(not isinstance(name, str) or not name.strip() for name in allowed_tools)
+                or len(set(allowed_tools)) != len(allowed_tools)
+                or len(allowed_tools) > 20
+            ):
+                raise ValueError(f"Subtask {key} has an invalid allowed_tools list")
+            registered_tools = {tool.name for tool in registry.list()}
+            unknown_tools = set(allowed_tools) - registered_tools
+            if unknown_tools:
+                raise ValueError(f"Subtask {key} declares unknown tools: {', '.join(sorted(unknown_tools))}")
         criteria = raw_spec.get("acceptance_criteria")
         if not isinstance(criteria, list) or not criteria:
             raise ValueError(f"Subtask {key} requires acceptance_criteria")
@@ -75,6 +96,7 @@ def validate_coordinator_plan(plan: dict[str, Any] | None) -> list[dict[str, Any
             "depends_on": dependencies,
             "inputs": inputs,
             "acceptance_criteria": normalized_criteria,
+            **({"allowed_tools": list(allowed_tools)} if allowed_tools is not None else {}),
         })
 
     known = {spec["id"] for spec in specs}
@@ -169,6 +191,59 @@ def _fail_parent(parent: Any, *, reason: str, child_id: int | None = None) -> An
     return parent
 
 
+def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]:
+    """Generate a proposal in the existing Coordinator subtask contract; never execute tools."""
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        raise ValueError("Conversation not found")
+    model = get_model(conversation.model_id)
+    if model is None or not model.enabled:
+        raise ValueError("Selected model is unavailable")
+    provider = resolve_model_provider(model)
+    profiles = sorted(PROFILE_NAMES)
+    available_tools = sorted(tool.name for tool in registry.list())
+    prompt = (
+        "Create a concise, executable plan for the user's Task using the Mosaic Coordinator contract. "
+        "Optimize for reliable execution by a small local model: prefer the fewest sufficient subtasks, "
+        "use one subtask for a simple task, avoid speculative steps and redundant summaries, and make "
+        "each goal concrete with a checkable deliverable. Order dependencies explicitly; do not make "
+        "independent steps depend on one another. Keep inputs short and pass only necessary prior outputs. "
+        "Return only a JSON object with a 'subtasks' array. Each subtask must contain "
+        "id (unique short string), goal, profile (one of the supplied profiles), "
+        "depends_on (array of prior subtask ids), inputs (array of strings), and "
+        "allowed_tools (array of registered tool names; use [] when no tools are needed), "
+        "acceptance_criteria (non-empty array of objects using only types non_empty, "
+        "contains, not_contains, min_chars; contains/not_contains require string value, "
+        "min_chars requires positive integer value). Use 1-10 subtasks, no unknown tools, "
+        "Map tool needs conservatively: filesystem for project file reads/writes/exploration; "
+        "artifact for durable file generation; search and web_fetch for web research; terminal "
+        "for commands; calculator for arithmetic; weather for weather data. Declare every tool "
+        "needed by Core-owned workspace preparation or by the subtask, but no unrelated tools. "
+        "No invented permissions, and include verification in the goals/criteria. "
+        "The plan is a proposal, not authorization or evidence of execution.\n"
+        f"Allowed profiles: {', '.join(profiles)}\n"
+        f"Registered tools: {', '.join(available_tools)}\n"
+        f"User objective: {goal}"
+    )
+    raw = provider.generate(
+        messages=[
+            {"role": "system", "content": "You are Mosaic's Task Planner. Do not reveal private reasoning. Return only the requested JSON."},
+            {"role": "user", "content": prompt},
+        ],
+        model_name=model.model_name,
+        configuration={**model.configuration, "format": "json", "temperature": 0, "think": False},
+    )
+    try:
+        proposed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("Planner returned invalid JSON") from exc
+    if not isinstance(proposed, dict):
+        raise ValueError("Planner output must be a JSON object")
+    plan = {"goal": goal, "subtasks": proposed.get("subtasks")}
+    validate_coordinator_plan(plan, require_tool_declarations=True)
+    return plan
+
+
 def run_coordinated_task(
     task_id: int,
     decider_factory: Callable[[Any], Callable[[list[dict[str, str]]], dict[str, Any]]] | None = None,
@@ -183,7 +258,9 @@ def run_coordinated_task(
         raise ValueError(f"Coordinator Task cannot run from state {parent.status}")
 
     plan = dict(parent.plan or {})
-    ordered_specs = validate_coordinator_plan(plan)
+    if plan.get("plan_confirmed") is not True:
+        raise ValueError("Coordinator Task cannot execute before explicit plan confirmation")
+    ordered_specs = validate_coordinator_plan(plan, require_tool_declarations=True)
     if parent.status == "pending":
         parent = update_task(parent.id, status="planning")
 
@@ -207,9 +284,12 @@ def run_coordinated_task(
                 "subtask_key": spec["id"],
                 "depends_on_keys": list(spec["depends_on"]),
                 "acceptance_criteria": spec["acceptance_criteria"],
+                "allowed_tools": list(spec.get("allowed_tools", [])),
                 "inputs": list(spec["inputs"]),
                 "dependency_results": {},
             }
+            if isinstance(plan.get("agent_library_snapshot"), dict):
+                child_plan["agent_library_snapshot"] = plan["agent_library_snapshot"]
             child = create_task(
                 type=parent.type,
                 mode="agent",

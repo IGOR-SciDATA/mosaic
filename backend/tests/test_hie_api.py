@@ -174,7 +174,22 @@ def test_experiment_capability_is_unavailable_for_provider_without_enforced_budg
 def test_task_start_supports_standalone_conversation_without_project(client, monkeypatch):
     from app.api import tasks as tasks_api
 
-    monkeypatch.setattr(tasks_api, "_run_provider_agent", lambda task_id: None)
+    monkeypatch.setattr(
+        tasks_api,
+        "generate_coordinator_plan",
+        lambda _conversation_id, goal: {
+            "goal": goal,
+            "subtasks": [{
+                "id": "report",
+                "goal": "Create a simple report",
+                "profile": "documentation",
+                "depends_on": [],
+                "inputs": [],
+                "allowed_tools": [],
+                "acceptance_criteria": [{"type": "non_empty"}],
+            }],
+        },
+    )
     model = create_model("Standalone Task Start Model", "ollama", "qwen3:3b")
     conversation = create_conversation("Standalone Task Start", model.id)
     response = client.post("/tasks/start", json={
@@ -186,4 +201,6 @@ def test_task_start_supports_standalone_conversation_without_project(client, mon
     task = response.json()
     assert task["conversation_id"] == conversation.id
     assert task["project_id"] is None
-    assert task["status"] == "executing"
+    assert task["status"] == "awaiting_approval"
+    assert task["plan"]["plan_confirmed"] is False
+    assert task["plan"]["subtasks"][0]["allowed_tools"] == []

@@ -140,7 +140,7 @@ def test_agent_library_is_stored_in_project_state_without_schema_changes():
     assert stored.state["agent_library"]["backend-reviewer"]["version"] == 1
 
 
-def test_task_start_persists_snapshot_and_strips_command_from_goal():
+def test_task_start_persists_snapshot_and_strips_command_from_goal(monkeypatch):
     from fastapi import BackgroundTasks
     from app.api.tasks import TaskStart, start_agent_task_endpoint
     from app.models.task_repository import get_task
@@ -149,12 +149,29 @@ def test_task_start_persists_snapshot_and_strips_command_from_goal():
     model = create_model("Test", "ollama", "test:model")
     conversation = create_conversation("Task conversation", model.id, project_id=project.id)
     create_project_agent(project.id, _payload())
+    monkeypatch.setattr(
+        "app.api.tasks.generate_coordinator_plan",
+        lambda _conversation_id, goal: {
+            "goal": goal,
+            "subtasks": [{
+                "id": "inspect",
+                "goal": goal,
+                "profile": "backend",
+                "depends_on": [],
+                "inputs": [],
+                "allowed_tools": [],
+                "acceptance_criteria": [{"type": "non_empty"}],
+            }],
+        },
+    )
     started = start_agent_task_endpoint(
         TaskStart(conversation_id=conversation.id, goal="/backend-reviewer Inspect this API"),
         BackgroundTasks(),
     )
     task = get_task(started.id)
     assert task.plan["goal"] == "Inspect this API"
+    assert task.status == "awaiting_approval"
+    assert task.plan["plan_confirmed"] is False
     assert task.plan["agent_library_snapshot"]["slug"] == "backend-reviewer"
     assert validate_agent_snapshot(task.plan["agent_library_snapshot"])
     original_snapshot = task.plan["agent_library_snapshot"]
@@ -220,8 +237,8 @@ def test_inactive_agent_library_is_not_injected_into_general_project_context():
     assert "Check status codes and schemas." not in flattened
 
 
-def test_existing_pending_task_resolves_agent_command_on_run():
-    from fastapi import BackgroundTasks
+def test_existing_pending_task_requires_explicit_plan_confirmation():
+    from fastapi import BackgroundTasks, HTTPException
     from app.api.tasks import run_task_endpoint
     from app.models.task_repository import create_task, get_task
 
@@ -233,11 +250,10 @@ def test_existing_pending_task_resolves_agent_command_on_run():
         type="generic", mode="agent", conversation_id=conversation.id, project_id=project.id,
         plan={"goal": "/backend-reviewer Check this service"},
     )
-    started = run_task_endpoint(task.id, BackgroundTasks())
-    persisted = get_task(task.id)
-    assert started.status == "executing"
-    assert persisted.plan["goal"] == "Check this service"
-    assert persisted.plan["agent_library_snapshot"]["slug"] == "backend-reviewer"
+    with pytest.raises(HTTPException) as exc:
+        run_task_endpoint(task.id, BackgroundTasks())
+    assert exc.value.status_code == 409
+    assert get_task(task.id).status == "pending"
 
 
 def test_agent_invocation_can_freeze_one_selected_skill_by_slug():

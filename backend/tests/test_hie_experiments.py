@@ -62,6 +62,116 @@ def _create_ready_experiment(client):
     return project, experiment
 
 
+def test_queued_experiment_can_be_cancelled_with_task_and_event_consistency(client):
+    from app.services.hie_experiments import cancel_experiment, queue_experiment, get_experiment
+
+    _, experiment = _create_ready_experiment(client)
+    queue_experiment(experiment["id"])
+    cancelled = cancel_experiment(experiment["id"])
+
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["results"]["cancelled_by_user"] is True
+    assert cancelled["results"]["automatic_retry"] is False
+    assert cancelled["results"]["automatic_promotion"] is False
+    task = get_task(cancelled["task_id"])
+    assert task.status == "cancelled"
+    events = list_task_events(task.id)
+    assert any(event.event_name == "hie.experiment_cancelled" for event in events)
+    assert any(event.event_name == "task.status_changed" and event.status == "cancelled" for event in events)
+
+
+def test_cancellation_during_provider_call_prevents_next_call(client, monkeypatch):
+    from app.services import hie_experiments
+
+    _, experiment = _create_ready_experiment(client)
+    hie_experiments.queue_experiment(experiment["id"])
+    calls = []
+
+    class CancellingProvider:
+        def generate(self, messages, model_name, configuration):
+            calls.append(messages[-1]["content"])
+            hie_experiments.cancel_experiment(experiment["id"])
+            return "baseline result"
+
+    monkeypatch.setattr(hie_experiments, "resolve_model_provider", lambda _model: CancellingProvider())
+    hie_experiments.run_experiment(experiment["id"])
+
+    cancelled = hie_experiments.get_experiment(experiment["id"])
+    assert cancelled["status"] == "cancelled"
+    assert len(calls) == 1, "Cancellation must stop before the candidate provider call."
+    assert get_task(cancelled["task_id"]).status == "cancelled"
+
+
+def test_completed_experiment_cannot_be_cancelled(client):
+    from app.services.hie_experiments import cancel_experiment, HieExperimentError
+
+    _, experiment = _create_ready_experiment(client)
+    with pytest.raises(HieExperimentError, match="cannot be cancelled"):
+        # Drafts can be cancelled; completed states are terminal. Mark this record completed
+        # to exercise the terminal-state guard without making provider calls.
+        from app.db.database import get_connection
+        with get_connection() as connection:
+            connection.execute("UPDATE hie_experiments SET status = 'completed' WHERE id = ?", (experiment["id"],))
+            connection.commit()
+        cancel_experiment(experiment["id"])
+
+
+def test_cancelled_status_migration_preserves_existing_experiment_rows(client):
+    from app.db.database import get_connection, init_db
+
+    _, experiment = _create_ready_experiment(client)
+    # Simulate a database created before the cancelled status was added.
+    with get_connection() as connection:
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("""
+            CREATE TABLE hie_experiments_legacy (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                source_task_id INTEGER NULL,
+                conversation_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
+                profile_slug TEXT NOT NULL,
+                candidate_origin TEXT NOT NULL DEFAULT 'user_supplied',
+                provider TEXT NOT NULL DEFAULT '',
+                model_name TEXT NOT NULL DEFAULT '',
+                budget_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (
+                    status IN ('draft', 'queued', 'running', 'completed', 'failed', 'rejected')
+                ),
+                baseline_snapshot TEXT NOT NULL,
+                candidate TEXT NOT NULL,
+                fixtures TEXT NOT NULL,
+                candidate_diff TEXT NOT NULL,
+                results TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        connection.execute("""
+            INSERT INTO hie_experiments_legacy (
+                id, task_id, source_task_id, conversation_id, project_id, profile_slug,
+                candidate_origin, provider, model_name, budget_json, status,
+                baseline_snapshot, candidate, fixtures, candidate_diff, results, created_at, updated_at
+            )
+            SELECT id, task_id, source_task_id, conversation_id, project_id, profile_slug,
+                   candidate_origin, provider, model_name, budget_json, status,
+                   baseline_snapshot, candidate, fixtures, candidate_diff, results, created_at, updated_at
+            FROM hie_experiments
+        """)
+        connection.execute("DROP TABLE hie_experiments")
+        connection.execute("ALTER TABLE hie_experiments_legacy RENAME TO hie_experiments")
+        connection.commit()
+        connection.execute("PRAGMA foreign_keys = ON")
+
+    init_db()
+    from app.services.hie_experiments import get_experiment
+    with get_connection() as connection:
+        connection.execute("UPDATE hie_experiments SET status = 'cancelled' WHERE id = ?", (experiment["id"],))
+        connection.commit()
+    assert get_experiment(experiment["id"])["status"] == "cancelled"
+
+
 def test_queue_event_failure_rolls_back_queued_state(client, monkeypatch):
     from app.services import hie_experiments
 

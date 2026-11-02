@@ -17,9 +17,13 @@ from app.services.agent_library import list_project_agents
 from app.services.hie_lifecycle import (
     HieLifecycleError, approve_candidate, promote_candidate, rollback_promotion,
 )
+from app.services.hie_experience import (
+    HieExperienceError, create_experience, deactivate_experience, delete_experience,
+    get_experience, list_experiences,
+)
 from app.services.hie_experiments import (
     HieExperimentError, create_experiment, get_experiment, list_experiments,
-    queue_experiment, reject_experiment, run_experiment,
+    cancel_experiment, queue_experiment, reject_experiment, run_experiment,
 )
 
 router = APIRouter(prefix="/hie", tags=["hie"])
@@ -269,6 +273,16 @@ def run_hie_experiment(experiment_id: int, background_tasks: BackgroundTasks) ->
     return experiment
 
 
+@router.post("/experiments/{experiment_id}/cancel")
+def cancel_hie_experiment(experiment_id: int) -> dict:
+    try:
+        return cancel_experiment(experiment_id)
+    except HieExperimentError as exc:
+        message = str(exc)
+        status = 404 if message == "Experiment not found" else 409
+        raise HTTPException(status_code=status, detail=message) from exc
+
+
 @router.post("/experiments/{experiment_id}/reject")
 def reject_hie_experiment(experiment_id: int) -> dict:
     try:
@@ -277,6 +291,73 @@ def reject_hie_experiment(experiment_id: int) -> dict:
         message = str(exc)
         status = 404 if message == "Experiment not found" else 409
         raise HTTPException(status_code=status, detail=message) from exc
+
+
+class HieExperienceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_id: int = Field(ge=1)
+    experiment_id: int = Field(ge=1)
+    cue: str = Field(min_length=1, max_length=1200)
+    lesson: str = Field(min_length=1, max_length=2400)
+    limitations: str = Field(default="Evidence is limited to the recorded deterministic fixtures and provider/model snapshot.", max_length=1200)
+
+
+@router.post("/experiences", status_code=201)
+def create_hie_experience(payload: HieExperienceCreate) -> dict:
+    try:
+        return create_experience(
+            project_id=payload.project_id,
+            experiment_id=payload.experiment_id,
+            cue=payload.cue,
+            lesson=payload.lesson,
+            limitations=payload.limitations,
+        )
+    except HieExperienceError as exc:
+        message = str(exc)
+        status = 404 if message in {"Experiment not found"} else 409 if "promoted" in message or "project" in message else 422
+        raise HTTPException(status_code=status, detail=message) from exc
+
+
+@router.get("/experiences")
+def list_hie_experiences(
+    project_id: int = Query(ge=1),
+    query: str | None = Query(default=None, max_length=1200),
+    profile_slug: str | None = Query(default=None, max_length=80),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[dict]:
+    try:
+        return list_experiences(project_id, query=query, profile_slug=profile_slug, limit=limit)
+    except HieExperienceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/experiences/{experience_id}")
+def get_hie_experience(experience_id: str, project_id: int = Query(ge=1)) -> dict:
+    try:
+        experience = get_experience(project_id, experience_id)
+    except HieExperienceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if experience is None or experience.get("project_id") != project_id:
+        raise HTTPException(status_code=404, detail="Experience not found")
+    return experience
+
+
+@router.post("/experiences/{experience_id}/deactivate")
+def deactivate_hie_experience(experience_id: str, project_id: int = Query(ge=1)) -> dict:
+    try:
+        return deactivate_experience(project_id, experience_id)
+    except HieExperienceError as exc:
+        status = 404 if "not found" in str(exc) else 409
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
+@router.delete("/experiences/{experience_id}")
+def delete_hie_experience(experience_id: str, project_id: int = Query(ge=1)) -> dict:
+    try:
+        return delete_experience(project_id, experience_id)
+    except HieExperienceError as exc:
+        status = 404 if "not found" in str(exc) else 409
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
 class HieApprovalRequest(BaseModel):

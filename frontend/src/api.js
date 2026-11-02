@@ -118,6 +118,8 @@ export const api = {
     get: (id) => request(`/tasks/${id}`),
     artifacts: (id) => request(`/tasks/${id}/artifacts`),
     start: (payload) => request("/tasks/start", { method: "POST", body: JSON.stringify(payload) }),
+    updatePlan: (id, plan, version) => request(`/tasks/${id}/plan`, { method: "PATCH", body: JSON.stringify({ plan, expected_plan_version: version }) }),
+    confirmPlan: (id, version) => request(`/tasks/${id}/confirm`, { method: "POST", body: JSON.stringify({ plan_version: version }) }),
     events: (id, afterId = 0) => request(`/tasks/${id}/events?after_id=${afterId}&limit=100`),
     decideToolCall: (taskId, toolCallId, decision) => request(`/tasks/${taskId}/tool-calls/${toolCallId}/decision`, { method: "POST", body: JSON.stringify({ decision }) }),
     streamEvents: (id, afterId = 0, onEvent, onState) => {
@@ -144,10 +146,20 @@ export const api = {
     },
     getExperiment: (id) => request(`/hie/experiments/${id}`),
     runExperiment: (id) => request(`/hie/experiments/${id}/run`, { method: "POST" }),
+    cancelExperiment: (id) => request(`/hie/experiments/${id}/cancel`, { method: "POST" }),
     rejectExperiment: (id) => request(`/hie/experiments/${id}/reject`, { method: "POST" }),
     approveCandidate: (id, payload) => request(`/hie/experiments/${id}/approve`, { method: "POST", body: JSON.stringify(payload) }),
     promoteCandidate: (id, payload) => request(`/hie/experiments/${id}/promote`, { method: "POST", body: JSON.stringify(payload) }),
     rollbackPromotion: (id, payload) => request(`/hie/promotions/${id}/rollback`, { method: "POST", body: JSON.stringify(payload) }),
+    listExperiences: ({ projectId, query, profileSlug, limit = 20 }) => {
+      const params = new URLSearchParams({ project_id: String(projectId), limit: String(limit) });
+      if (query) params.set("query", query);
+      if (profileSlug) params.set("profile_slug", profileSlug);
+      return request(`/hie/experiences?${params.toString()}`);
+    },
+    createExperience: (payload) => request("/hie/experiences", { method: "POST", body: JSON.stringify(payload) }),
+    deactivateExperience: (id, projectId) => request(`/hie/experiences/${id}/deactivate?project_id=${projectId}`, { method: "POST" }),
+    deleteExperience: (id, projectId) => request(`/hie/experiences/${id}?project_id=${projectId}`, { method: "DELETE" }),
   },
   toolCalls: {
     list: (conversationId, taskId) => request(`/tool-calls?conversation_id=${conversationId}${taskId ? `&task_id=${taskId}` : ""}`),

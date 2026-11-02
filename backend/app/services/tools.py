@@ -75,14 +75,52 @@ def resolve_tool_policy(tool_name: str, arguments: dict[str, Any]) -> dict[str, 
     }
 
 
+def _validate_task_tool_allowlist(task_id: int | None, tool_name: str) -> None:
+    """Enforce Core-owned task/subtask tool declarations at approval and execution boundaries."""
+    if task_id is None:
+        return
+    task = get_task(task_id)
+    if task is None:
+        raise ValueError("ToolCall references a missing task")
+    plan = task.plan if isinstance(task.plan, dict) else {}
+    if "allowed_tools" in plan:
+        allowed = plan.get("allowed_tools")
+        if not isinstance(allowed, list) or tool_name not in allowed:
+            raise ValueError(f"Tool {tool_name} is outside this Task's declared tool scope")
+
+    steps = plan.get("steps", [])
+    current_id = plan.get("current_step")
+    current_step = next(
+        (step for step in steps if isinstance(step, dict) and step.get("id") == current_id),
+        None,
+    ) if isinstance(steps, list) else None
+    if current_step is None:
+        return
+    if "allowed_tools" in current_step:
+        allowed = current_step.get("allowed_tools")
+        if not isinstance(allowed, list) or tool_name not in allowed:
+            raise ValueError(f"Tool {tool_name} is outside the current step's declared tool scope")
+    # The agent decision layer already suppresses model-proposed tool calls for
+    # content-only steps. Core-owned harness operations (e.g. artifact persistence)
+    # must still run; only explicit step allowlists are enforced at this boundary.
+
+
 def validate_tool_call(tool_call: ToolCall) -> None:
     resolve_tool_policy(tool_call.tool_name, tool_call.arguments)
+    _validate_task_tool_allowlist(tool_call.task_id, tool_call.tool_name)
 
 
 def approve_tool_call(tool_call: ToolCall) -> ToolCall:
     if tool_call.status != "pending":
         raise ValueError(f"Invalid tool call transition: {tool_call.status} -> approved")
-    validate_tool_call(tool_call)
+    try:
+        validate_tool_call(tool_call)
+    except Exception:
+        try:
+            update_tool_call(tool_call.id, status="rejected")
+        except ValueError:
+            pass
+        raise
     updated = update_tool_call(tool_call.id, status="approved")
     if updated is None:
         raise ValueError("ToolCall no longer exists")
@@ -158,6 +196,7 @@ def execute_tool_call(tool_call: ToolCall) -> ToolResult:
         _record_tool_result_event(current, result, started_at, error_type="UnknownTool")
         return result
     try:
+        _validate_task_tool_allowlist(current.task_id, current.tool_name)
         tool.validate(current.arguments)
     except Exception as exc:
         update_tool_call(current.id, status="failed")

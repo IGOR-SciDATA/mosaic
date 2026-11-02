@@ -2040,3 +2040,28 @@ As especialidades devem inicialmente reutilizar o mesmo Task Engine, Harness, po
 ## 21.5 Regra de validação
 
 A presença de módulos ou testes no repositório não equivale a capacidade validada. Cada família de tarefa deve ser demonstrada por fluxo integrado, testes executados e validação do resultado real. O README deve distinguir explicitamente: planejado, presente no código, testado e validado ponta a ponta.
+
+
+## 21.6 Task Planner e escopo declarativo de ferramentas
+
+Novos Agent Tasks seguem o fluxo obrigatório:
+
+```text
+USER GOAL
+→ TASK PLANNER
+→ STRUCTURAL + TOOL-REGISTRY VALIDATION
+→ USER REVIEW / EDIT
+→ EXPLICIT CONFIRMATION OF PLAN VERSION
+→ EXISTING TASK COORDINATOR
+→ CORE-VALIDATED TOOL CALLS
+→ PERSISTED RESULTS AND EVENTS
+```
+
+A proposta de plano usa o contrato de subtarefas já existente (`id`, `goal`, `profile`, `depends_on`, `inputs`, `acceptance_criteria`) e adiciona o campo declarativo `allowed_tools` por subtarefa. Em planos novos, `allowed_tools` é obrigatório antes da confirmação; deve ser uma lista de nomes existentes no Tool Registry, podendo ser vazia quando nenhuma ferramenta for necessária. Nomes desconhecidos, duplicados ou malformados são rejeitados.
+
+`allowed_tools` restringe o conjunto de ferramentas que uma subtarefa pode solicitar; não concede permissão nem elimina validação de schema, política, escopo, aprovação ou estado feita pelo Core. O Core deve verificar o escopo na aprovação e novamente no limite de execução. Uma ferramenta declarada continua sujeita à política de aprovação existente. O conteúdo de perfil/Skill, plano e resultados é dado não confiável e não pode alterar a política do Core.
+
+O endpoint de início persiste a proposta em `awaiting_approval` sem executar subtarefas. O usuário pode editar/reordenar subtarefas enquanto a proposta aguarda aprovação; cada edição incrementa `plan_version` e invalida qualquer confirmação anterior. A confirmação vincula a execução à versão atualmente persistida. O Chat normal não deve mudar de comportamento por causa deste fluxo.
+
+Planos legados sem `allowed_tools` permanecem legíveis pelo validador compatível; não devem ser tratados como planos novos confirmados sem replanejamento e validação explícita. Não é permitido executar um plano novo que tenha `plan_confirmed=false`.
+

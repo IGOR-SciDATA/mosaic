@@ -255,15 +255,17 @@ function MessageList({ messages, streaming, taskTraces, onToggleTrace }) {
 
 function TaskTrace({ trace, onToggle }) {
   const expanded = !!trace.expanded;
-  const labels = { executing: "Pensando e executando", pending: "Na fila", planning: "Planejando tarefa", validating: "Validando resultado", awaiting_approval: "Aguardando sua aprovação", completed: "Tarefa concluída", failed: "Tarefa falhou", cancelled: "Tarefa cancelada" };
+  const labels = { executing: "Executando", pending: "Na fila", planning: "Planejando tarefa", validating: "Validando resultado", awaiting_approval: "Revisão necessária", completed: "Tarefa concluída", failed: "Tarefa falhou", cancelled: "Tarefa cancelada" };
   const terminal = ["completed", "failed", "cancelled"].includes(trace.status);
   return <section className={`chat-task-trace ${trace.status || "executing"}`}>
     <button type="button" className="chat-task-trace-toggle" onClick={onToggle} aria-expanded={expanded}>
       <span className={`chat-task-trace-indicator ${terminal ? "terminal" : "working"}`}>{terminal ? (trace.status === "completed" ? "✓" : "!") : "◌"}</span>
-      <span className="chat-task-trace-heading"><strong>{labels[trace.status] || trace.status || "Pensando e executando"}</strong><small>{trace.events?.length ? `${trace.events.length} atualizações · tarefa #${trace.taskId}` : "Preparando as primeiras etapas…"}</small></span>
+      <span className="chat-task-trace-heading"><strong>{labels[trace.status] || trace.status || "Preparando tarefa"}</strong><small>{trace.events?.length ? `${trace.events.length} atualizações · tarefa #${trace.taskId}` : "Aguardando as etapas do Core…"}</small></span>
       <span className="chat-task-trace-chevron">{expanded ? "−" : "+"}</span>
     </button>
     {expanded && <div className="chat-task-trace-body">
+      {trace.status === "awaiting_approval" && trace.plan?.subtasks?.length > 0 && !trace.plan?.plan_confirmed &&
+        <TaskPlanReview task={{ id: trace.taskId, status: trace.status, plan: trace.plan }}  />}
       {trace.events?.length ? <ol>{trace.events.map((event, index) => {
         const details = event.metadata && (event.metadata.step || event.metadata.substep || event.metadata.detail);
         return <li className={event.status === "failed" ? "trace-event-failed" : ""} key={event.id || index}>
@@ -277,6 +279,85 @@ function TaskTrace({ trace, onToggle }) {
       {trace.artifacts?.length > 0 && <div className="chat-task-artifacts"><strong>Arquivos produzidos</strong>{trace.artifacts.map(item => <div key={item.id} className="chat-task-artifact"><span>▧</span><span><b>{item.path}</b><small>{item.type || "artifact"}{item.current_verification ? " · " + item.current_verification : ""}</small></span></div>)}</div>}
       {trace.error && <p className="trace-error">{trace.error}</p>}
     </div>}
+  </section>;
+}
+
+const TASK_TOOL_OPTIONS = ["filesystem", "terminal", "calculator", "search", "web_fetch", "weather", "artifact"];
+const TASK_PROFILE_OPTIONS = ["architecture", "backend", "documentation", "frontend", "qa", "research"];
+
+function TaskPlanReview({ task, onUpdated }) {
+  const [plan, setPlan] = useState(task?.plan || null);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    setPlan(task?.plan || null);
+    setDirty(false);
+    setError("");
+  }, [task?.id, task?.plan?.plan_version]);
+  if (!plan?.subtasks || task?.status !== "awaiting_approval" || plan.plan_confirmed) return null;
+
+  function updateSubtask(index, patch) {
+    setPlan(current => ({ ...current, subtasks: current.subtasks.map((item, i) => i === index ? { ...item, ...patch } : item) }));
+    setDirty(true); setNotice(""); setError("");
+  }
+  function moveSubtask(index, delta) {
+    const target = index + delta;
+    if (target < 0 || target >= plan.subtasks.length) return;
+    const subtasks = [...plan.subtasks];
+    [subtasks[index], subtasks[target]] = [subtasks[target], subtasks[index]];
+    setPlan(current => ({ ...current, subtasks }));
+    setDirty(true); setNotice(""); setError("");
+  }
+  function addSubtask() {
+    if (plan.subtasks.length >= 10) return;
+    let n = plan.subtasks.length + 1;
+    let id = `step-${n}`;
+    while (plan.subtasks.some(item => item.id === id)) { n += 1; id = `step-${n}`; }
+    setPlan(current => ({ ...current, subtasks: [...current.subtasks, { id, goal: "", profile: "research", depends_on: [], inputs: [], allowed_tools: [], acceptance_criteria: [{ type: "non_empty" }] }] }));
+    setDirty(true); setNotice(""); setError("");
+  }
+  function removeSubtask(index) {
+    if (plan.subtasks.length <= 1) return;
+    const removedId = plan.subtasks[index].id;
+    setPlan(current => ({ ...current, subtasks: current.subtasks.filter((_, i) => i !== index).map(item => ({ ...item, depends_on: (item.depends_on || []).filter(dep => dep !== removedId) })) }));
+    setDirty(true); setNotice(""); setError("");
+  }
+  async function savePlan() {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const updated = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks }, plan.plan_version);
+      setPlan(updated.plan); setDirty(false); setNotice("Plano salvo e validado pelo Core."); onUpdated?.(updated);
+      return updated;
+    } catch (err) { setError(err.message || "Não foi possível salvar o plano."); return null; }
+    finally { setBusy(false); }
+  }
+  async function confirmPlan() {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      let versionToConfirm = plan.plan_version;
+      if (dirty) {
+        const latest = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks }, plan.plan_version);
+        versionToConfirm = latest.plan.plan_version;
+        setPlan(latest.plan); setDirty(false); onUpdated?.(latest);
+      }
+      const confirmed = await api.tasks.confirmPlan(task.id, versionToConfirm);
+      setNotice("Plano confirmado. O Core iniciou a execução."); onUpdated?.(confirmed);
+    } catch (err) { setError(err.message || "Não foi possível confirmar o plano."); }
+    finally { setBusy(false); }
+  }
+  return <section className="task-plan-review" aria-label="Revisão do plano da tarefa">
+    <div className="task-plan-review-heading"><div><span className="eyebrow">ANTES DE EXECUTAR</span><h4>Revise o plano do Mosaic</h4><p>Reformule etapas, ajuste dependências e declare as ferramentas necessárias. Nada será executado até você confirmar.</p></div><span className="task-plan-version">v{plan.plan_version || 1}</span></div>
+    <label className="task-plan-goal-label">Objetivo original da tarefa</label><p className="task-plan-goal">{plan.goal}</p>
+    <div className="task-plan-subtasks">{plan.subtasks.map((subtask, index) => <article className="task-plan-subtask" key={subtask.id || index}>
+      <div className="task-plan-subtask-top"><span className="task-plan-number">{index + 1}</span><strong>Etapa {index + 1}</strong><div className="task-plan-reorder"><button type="button" title="Mover para cima" aria-label="Mover etapa para cima" disabled={busy || index === 0} onClick={() => moveSubtask(index, -1)}>↑</button><button type="button" title="Mover para baixo" aria-label="Mover etapa para baixo" disabled={busy || index === plan.subtasks.length - 1} onClick={() => moveSubtask(index, 1)}>↓</button><button type="button" title="Remover etapa" aria-label="Remover etapa" disabled={busy || plan.subtasks.length <= 1} onClick={() => removeSubtask(index)}>×</button></div></div>
+      <label>Objetivo desta etapa<textarea value={subtask.goal || ""} maxLength={2000} rows={2} onChange={e => updateSubtask(index, { goal: e.target.value })} disabled={busy}/></label>
+      <div className="task-plan-fields"><label>Especialidade<select value={subtask.profile} onChange={e => updateSubtask(index, { profile: e.target.value })} disabled={busy}>{TASK_PROFILE_OPTIONS.map(profile => <option key={profile} value={profile}>{profile}</option>)}</select></label><label>Depende das etapas (IDs separados por vírgula)<input value={(subtask.depends_on || []).join(", ")} onChange={e => updateSubtask(index, { depends_on: e.target.value.split(",").map(v => v.trim()).filter(Boolean) })} placeholder="ex.: step-1" disabled={busy}/></label></div>
+      <fieldset className="task-plan-tools"><legend>Ferramentas permitidas para esta etapa</legend><p>Isso limita o escopo; não concede permissões nem substitui aprovações do Core.</p><div>{TASK_TOOL_OPTIONS.map(tool => <label key={tool}><input type="checkbox" checked={(subtask.allowed_tools || []).includes(tool)} onChange={e => updateSubtask(index, { allowed_tools: e.target.checked ? [...new Set([...(subtask.allowed_tools || []), tool])] : (subtask.allowed_tools || []).filter(item => item !== tool) })} disabled={busy}/>{tool}</label>)}</div></fieldset>
+    </article>)}</div>
+    <div className="task-plan-actions"><button type="button" className="secondary-action" onClick={addSubtask} disabled={busy || plan.subtasks.length >= 10}>+ Adicionar etapa</button><span>{plan.subtasks.length}/10 etapas</span><div><button type="button" className="secondary-action" onClick={savePlan} disabled={busy || !dirty}>{busy ? "Salvando…" : "Salvar alterações"}</button><button type="button" className="primary-action" onClick={confirmPlan} disabled={busy}>{busy ? "Processando…" : "Confirmar e executar"}</button></div></div>
+    {notice && <p className="task-plan-notice" role="status">{notice}</p>}{error && <p className="task-inline-error" role="alert">{error}</p>}
   </section>;
 }
 
@@ -570,7 +651,8 @@ function TaskWorkspace({ conversationId, projectId, onOpenHieExperiment }) {
           <div className="hie-mode-card"><div><strong>HIE Experimental</strong><small>{hieStatus?.message || "Consultando disponibilidade no Core…"}</small></div><button type="button" className={hieStatus?.enabled ? "hie-toggle active" : "hie-toggle"} disabled={hieBusy || !hieStatus?.available} aria-pressed={!!hieStatus?.enabled} onClick={toggleTaskHie}>{hieBusy ? "Salvando…" : hieStatus?.enabled ? "Desativar" : "Ativar modo"}</button>{hieStatus?.enabled && hieStatus?.experiment_execution_available && <button type="button" className="secondary-action" onClick={() => onOpenHieExperiment?.(selectedId)}>Experimento</button>}</div>
           <div className="task-progress-meta"><span>Estado atual</span><strong>{TASK_STATUS_LABELS[selected.status] || selected.status}</strong></div>
           {active && selected.status !== "awaiting_approval" && <div className="task-progress-track"><span/></div>}
-          {selected.status === "awaiting_approval" && <div className="approval-stack"><div className="task-notice"><Icon name="check" size={17}/>O Mosaic precisa da sua autorização antes de executar esta operação.</div>{toolCalls.filter(call => call.status === "pending").map(call => <article className="approval-card" key={call.id}><span className="eyebrow">AÇÃO #{call.id} · AGUARDANDO</span><h4>Permitir {call.tool_name}?</h4><p>O agente solicitou esta ferramenta. Revise os argumentos antes de autorizar a execução.</p><details><summary>Ver operação e argumentos</summary><pre>{JSON.stringify(call.arguments, null, 2)}</pre></details><div className="approval-actions"><button type="button" className="danger-action" disabled={busy} onClick={() => decideCall(call.id, "reject")}>Recusar</button><button type="button" className="primary-action" disabled={busy} onClick={() => decideCall(call.id, "approve")}>{busy ? "Registrando…" : "Aprovar e continuar"}</button></div></article>)}</div>}
+          {selected.status === "awaiting_approval" && !selected.plan?.plan_confirmed && selected.plan?.subtasks?.length > 0 && <TaskPlanReview task={selected} onUpdated={() => refreshTasks(selected.id)}/>}
+          {selected.status === "awaiting_approval" && selected.plan?.plan_confirmed && <div className="approval-stack"><div className="task-notice"><Icon name="check" size={17}/>O Mosaic precisa da sua autorização antes de executar esta operação.</div>{toolCalls.filter(call => call.status === "pending").map(call => <article className="approval-card" key={call.id}><span className="eyebrow">AÇÃO #{call.id} · AGUARDANDO</span><h4>Permitir {call.tool_name}?</h4><p>O agente solicitou esta ferramenta. Revise os argumentos antes de autorizar a execução.</p><details><summary>Ver operação e argumentos</summary><pre>{JSON.stringify(call.arguments, null, 2)}</pre></details><div className="approval-actions"><button type="button" className="danger-action" disabled={busy} onClick={() => decideCall(call.id, "reject")}>Recusar</button><button type="button" className="primary-action" disabled={busy} onClick={() => decideCall(call.id, "approve")}>{busy ? "Registrando…" : "Aprovar e continuar"}</button></div></article>)}</div>}
           {latestModelResponse && <section className="model-response-panel"><div className="model-response-heading"><span className="eyebrow">RESPOSTA DO MODELO</span><small>{latestModelResponse.metadata?.model || "Modelo ativo"} · {new Date(latestModelResponse.timestamp).toLocaleTimeString("pt-BR", {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</small></div><p>{latestModelResponse.metadata.output_preview}</p><small>Prévia da decisão final validada pelo Core. O raciocínio interno do modelo não é exibido.</small></section>}
           <div className="task-timeline-heading"><strong>Linha do tempo</strong><span>{events.length} eventos · {connectionState === "connected" ? "ao vivo" : connectionState === "reconnecting" ? "reconectando" : "conectando"}</span></div>
           {!events.length ? <div className="task-muted">Aguardando eventos do Core…</div> : <ol className="task-timeline">{events.map(event => <li key={event.id}><span className={"timeline-marker level-" + event.level}/><div><div className="timeline-event-head"><strong>{event.message}</strong><time>{new Date(event.timestamp).toLocaleTimeString("pt-BR", {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</time></div><small>{event.component} · {event.event_name}{event.status ? " · " + event.status : ""}{event.duration_ms != null ? " · " + event.duration_ms + " ms" : ""}</small>{event.component === "model" && event.metadata && <details className="model-event-details"><summary>Detalhes operacionais</summary><div className="model-event-metadata">{event.metadata.model && <span>Modelo: {event.metadata.model}</span>}{event.metadata.attempt && <span>Tentativa: {event.metadata.attempt}</span>}{event.metadata.decision_type && <span>Decisão: {event.metadata.decision_type}</span>}{event.metadata.tool && <span>Ferramenta: {event.metadata.tool}</span>}{event.metadata.response_chars != null && <span>Tamanho da resposta: {event.metadata.response_chars} caracteres</span>}{event.metadata.error && <span>Validação: {event.metadata.error}</span>}{event.metadata.error_type && <span>Tipo de falha: {event.metadata.error_type}</span>}{event.metadata.output_preview && <div className="model-event-preview"><strong>Prévia da resposta final</strong><p>{event.metadata.output_preview}</p></div>}</div></details>}</div></li>)}</ol>}
@@ -965,6 +1047,7 @@ function HieExperimentModal({scope,onClose}) {
   const [profileSlug,setProfileSlug]=useState("");
   const [candidateContent,setCandidateContent]=useState("");
   const [prompt,setPrompt]=useState("");
+  const [additionalPrompts,setAdditionalPrompts]=useState("");
   const [expectedContains,setExpectedContains]=useState("");
   const [experiment,setExperiment]=useState(null);
   const [history,setHistory]=useState([]);
@@ -974,6 +1057,9 @@ function HieExperimentModal({scope,onClose}) {
   const [approved,setApproved]=useState(false);
   const [promotion,setPromotion]=useState(null);
   const [activeProfile,setActiveProfile]=useState(null);
+  const [experiences,setExperiences]=useState([]);
+  const [experienceCue,setExperienceCue]=useState("");
+  const [experienceLesson,setExperienceLesson]=useState("");
 
   const scopeKey=scope?.taskId ? "task_id="+scope.taskId : "conversation_id="+scope?.conversationId;
   useEffect(()=>{
@@ -983,6 +1069,15 @@ function HieExperimentModal({scope,onClose}) {
       .catch(err=>{if(active)setError("Não foi possível carregar os experimentos: "+err.message);});
     return ()=>{active=false;};
   },[scopeKey]);
+
+  useEffect(()=>{
+    let active=true;
+    if(!scope?.projectId){setExperiences([]);return ()=>{active=false;};}
+    api.hie.listExperiences({projectId:scope.projectId}).then(items=>{
+      if(active)setExperiences(Array.isArray(items)?items:[]);
+    }).catch(err=>{if(active)setError("Não foi possível carregar experiências HIE: "+err.message);});
+    return ()=>{active=false;};
+  },[scope?.projectId]);
 
   useEffect(()=>{
     if(!experiment || !["queued","running"].includes(experiment.status))return undefined;
@@ -998,22 +1093,35 @@ function HieExperimentModal({scope,onClose}) {
   async function createAndRun(event){
     event.preventDefault();
     if(busy)return;
+    const fixturePrompts=[prompt.trim(),...additionalPrompts.split(/\r?\n/).map(item=>item.trim()).filter(Boolean)];
+    if(fixturePrompts.length>8){setError("Use no máximo 8 prompts por experimento.");return;}
     setBusy(true);setError("");setNotice("");
     try{
+      const expected=expectedContains.split(",").map(item=>item.trim()).filter(Boolean);
       const payload={
         ...(scope?.taskId ? {task_id:scope.taskId} : {conversation_id:scope?.conversationId}),
         profile_slug:profileSlug.trim(),
         candidate_content:candidateContent,
-        fixtures:[{
-          prompt:prompt.trim(),
-          expected_contains:expectedContains.split(",").map(item=>item.trim()).filter(Boolean)
-        }]
+        fixtures:fixturePrompts.map(fixturePrompt=>({prompt:fixturePrompt,expected_contains:expected}))
       };
       const created=await api.hie.createExperiment(payload);
       setExperiment(created);setHistory(items=>[created,...items]);
       const queued=await api.hie.runExperiment(created.id);
       setExperiment(queued);setHistory(items=>items.map(item=>item.id===queued.id?queued:item));
-      setNotice("Experimento criado. O Core está executando baseline e candidato com a mesma fixture.");
+      setNotice("Experimento criado. O Core está executando baseline e candidato nas mesmas fixtures e com os mesmos critérios determinísticos.");
+    }catch(err){setError(err.message);}
+    finally{setBusy(false);}
+  }
+
+  async function cancelRunningExperiment(){
+    if(!experiment||busy||!["queued","running"].includes(experiment.status))return;
+    if(!window.confirm("Cancelar este experimento? Uma chamada ao modelo que já esteja em andamento pode terminar, mas nenhuma próxima chamada deverá começar."))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const cancelled=await api.hie.cancelExperiment(experiment.id);
+      setExperiment(cancelled);
+      setHistory(items=>items.map(item=>item.id===cancelled.id?cancelled:item));
+      setNotice("Experimento cancelado. Evidências parciais foram preservadas; não haverá repetição ou promoção automática.");
     }catch(err){setError(err.message);}
     finally{setBusy(false);}
   }
@@ -1061,9 +1169,51 @@ function HieExperimentModal({scope,onClose}) {
       const result=await api.hie.promoteCandidate(experiment.id,{candidate_sha256:candidateHash,active_version:baseline.version,active_sha256:baseline.sha256});
       setPromotion(result);
       setActiveProfile(result.profile);
+      setExperienceCue(experiment.fixtures?.[0]?.prompt || prompt);
+      setExperienceLesson("");
       setApproved(false);
       setNotice(`Candidato promovido como versão v${result.profile.version}. O conteúdo anterior foi preservado para rollback.`);
     }catch(err){setError(err.message);setApproved(false);}
+    finally{setBusy(false);}
+  }
+
+  async function saveExperience(){
+    if(!experiment||!promotion||!scope?.projectId||busy)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const created=await api.hie.createExperience({
+        project_id:scope.projectId,
+        experiment_id:experiment.id,
+        cue:experienceCue.trim(),
+        lesson:experienceLesson.trim(),
+      });
+      setExperiences(items=>[created,...items.filter(item=>item.id!==created.id)]);
+      setExperienceLesson("");
+      setNotice("Experiência registrada com proveniência e hashes. Ela só será recuperada quando o HIE estiver ativado neste escopo.");
+    }catch(err){setError(err.message);}
+    finally{setBusy(false);}
+  }
+
+  async function deactivateExperienceItem(item){
+    if(!scope?.projectId||busy)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      await api.hie.deactivateExperience(item.id,scope.projectId);
+      setExperiences(items=>items.filter(existing=>existing.id!==item.id));
+      setNotice("Experiência desativada. As evidências originais foram preservadas.");
+    }catch(err){setError(err.message);}
+    finally{setBusy(false);}
+  }
+
+  async function deleteExperienceItem(item){
+    if(!scope?.projectId||busy)return;
+    if(!window.confirm("Excluir esta experiência da biblioteca? Os experimentos e artefatos originais serão preservados."))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      await api.hie.deleteExperience(item.id,scope.projectId);
+      setExperiences(items=>items.filter(existing=>existing.id!==item.id));
+      setNotice("Registro de experiência excluído. Os artefatos de origem continuam preservados.");
+    }catch(err){setError(err.message);}
     finally{setBusy(false);}
   }
 
@@ -1088,14 +1238,17 @@ function HieExperimentModal({scope,onClose}) {
       <form className="modal-form" onSubmit={createAndRun}>
         <label>Slug do perfil <input value={profileSlug} onChange={event=>setProfileSlug(event.target.value.toLowerCase())} required maxLength={80} pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="ex.: qa-agent"/></label>
         <label>Instruções candidatas <textarea value={candidateContent} onChange={event=>setCandidateContent(event.target.value)} required minLength={1} maxLength={12000} rows={4} placeholder="Escreva a versão declarativa que deseja testar."/></label>
-        <label>Prompt de teste <textarea value={prompt} onChange={event=>setPrompt(event.target.value)} required maxLength={2000} rows={2} placeholder="Uma solicitação representativa para comparar baseline e candidato."/></label>
-        <label>Texto esperado (separado por vírgula) <input value={expectedContains} onChange={event=>setExpectedContains(event.target.value)} required placeholder="ex.: resumo, fonte"/></label>
+        <label>Prompt principal de teste <textarea value={prompt} onChange={event=>setPrompt(event.target.value)} required maxLength={2000} rows={2} placeholder="Uma solicitação representativa para comparar baseline e candidato."/></label>
+        <label>Prompts adicionais (opcional, um por linha) <textarea value={additionalPrompts} onChange={event=>setAdditionalPrompts(event.target.value)} maxLength={14000} rows={3} placeholder="Adicione casos diferentes para evitar conclusões baseadas em um único exemplo."/></label>
+        <p className="modal-hint">Todos os prompts usam os mesmos critérios esperados. Cada fixture acrescenta até duas chamadas ao modelo; use apenas casos relevantes (máximo 8).</p>
+        <label>Texto esperado em cada resposta (separado por vírgula) <input value={expectedContains} onChange={event=>setExpectedContains(event.target.value)} required placeholder="ex.: hipótese, verificação"/></label>
         <div className="hie-experiment-actions"><button className="primary-action" type="submit" disabled={busy||["queued","running"].includes(experiment?.status)}>{busy?"Preparando…":"Criar e executar experimento"}</button></div>
       </form>
       {error&&<div className="task-inline-error" role="alert">{error}</div>}
       {notice&&<div className="agent-config-success" role="status">{notice}</div>}
       {experiment&&<section className="hie-experiment-result">
         <div className="hie-experiment-result-head"><strong>Experimento #{experiment.id}</strong><span className={"hie-experiment-status status-"+experiment.status}>{experiment.status}</span></div>
+        {["queued","running"].includes(experiment.status)&&<button type="button" className="secondary-action" onClick={cancelRunningExperiment} disabled={busy}>Cancelar experimento</button>}
         <div className="hie-experiment-summary"><span>Modelo</span><strong>{experiment.provider} · {experiment.model_name}</strong><span>Orçamento aplicado</span><strong>{experiment.budget?.estimated_provider_calls ?? "—"} chamadas estimadas (máx. {experiment.budget?.max_provider_calls ?? "—"}) · entrada {experiment.budget?.max_input_chars_per_call ?? "—"} caracteres por chamada · saída {experiment.budget?.max_output_tokens_per_call ?? "—"} tokens e até {experiment.budget?.max_output_chars_per_call ?? "—"} caracteres aceitos · timeout de requisição {experiment.budget?.provider_request_timeout_seconds ?? "—"} s</strong><span>Fixture isolada</span><strong>{experiment.budget?.fixture_count ?? experiment.fixtures?.length ?? 0} prompts · sem ferramentas nem ações externas</strong></div>
         <div className="hie-hash-line"><span>Origem do candidato</span><strong>{experiment.candidate_origin==="user_supplied"?"Fornecido pelo usuário":experiment.candidate_origin}</strong></div>
         <div className="hie-hash-line"><span>Baseline v{experiment.baseline_snapshot?.version}</span><code>{experiment.baseline_snapshot?.sha256?.slice(0,16)}…</code></div>
@@ -1117,6 +1270,23 @@ function HieExperimentModal({scope,onClose}) {
          </div>}
          {promotion&&<div className="hie-experiment-actions"><span className="hie-hash-line">Promovido como v{promotion.profile?.version} · promoção #{promotion.promotion_id}</span><button type="button" className="secondary-action" onClick={rollbackPromotedCandidate} disabled={busy}>Rollback com confirmação</button></div>}
          <p className="modal-hint">{promotion?"A promoção foi explícita e a versão anterior está preservada. O rollback só funciona se o perfil ativo ainda corresponder exatamente à versão promovida.":"Nenhuma versão ativa é alterada até a confirmação explícita de promoção. Uma aprovação fica inválida se o hash do candidato ou a versão/hash do perfil ativo mudar."}</p>
+      </section>}
+      {promotion&&experiment?.results?.assessment==="candidate_better"&&scope?.projectId&&<section className="hie-experience-create">
+        <strong>Registrar uma experiência reutilizável</strong>
+        <p className="modal-hint">A dica deve vir do texto do candidato promovido; o contexto deve corresponder ao prompt de teste. A criação não faz novas chamadas ao modelo.</p>
+        <form className="modal-form" onSubmit={event=>{event.preventDefault();saveExperience();}}>
+          <label>Contexto / cue <textarea value={experienceCue} onChange={event=>setExperienceCue(event.target.value)} required maxLength={1200} rows={2} placeholder="Use o prompt exato de uma fixture registrada."/></label>
+          <label>Lição verificada <textarea value={experienceLesson} onChange={event=>setExperienceLesson(event.target.value)} required maxLength={2400} rows={2} placeholder="Cole uma frase exata das instruções candidatas promovidas."/></label>
+          <button type="submit" className="primary-action" disabled={busy||!experienceCue.trim()||!experienceLesson.trim()}>Salvar experiência baseada em evidências</button>
+        </form>
+      </section>}
+      {scope?.projectId&&<section className="hie-experience-library">
+        <div className="hie-experience-library-heading"><strong>Biblioteca de experiências do projeto</strong><span>{experiences.length} ativas</span></div>
+        {experiences.length===0?<p className="modal-hint">Nenhuma experiência ativa. Só experiências ligadas a candidatos promovidos, evidências verificadas e melhorias mensuradas podem entrar aqui.</p>:experiences.map(item=><article className="hie-experience-card" key={item.id}>
+          <div><strong>{item.cue}</strong><small>Perfil {item.profile_slug} · confiança heurística {item.confidence} · experimento #{item.source?.experiment_id}</small></div>
+          <p>{item.lesson}</p><small>Limitação: {item.limitations}</small>
+          <div className="hie-experience-card-actions"><button type="button" className="secondary-action" disabled={busy} onClick={()=>deactivateExperienceItem(item)}>Desativar</button><button type="button" className="secondary-action" disabled={busy} onClick={()=>deleteExperienceItem(item)}>Excluir registro</button></div>
+        </article>)}
       </section>}
     </div>
   </Modal>;
@@ -1289,7 +1459,7 @@ export default function App(){
     try{
       if(taskIntent){
         const task=await api.tasks.start({conversation_id:conversation.id,goal:content,type:/\b(relatório|relatorio|documento|texto|pdf)\b/i.test(content)?"document":/\b(análise|analise|pesquise|compare)\b/i.test(content)?"analysis":/\b(código|codigo|frontend|backend|aplicativo|app|bug|implemente|desenvolva)\b/i.test(content)?"code_project":"generic"});
-        setMessages(items=>items.map(item=>item.localId===localAssistant.localId?{...item,content:"Iniciei a execução como tarefa. Acompanhe as etapas neste painel."}:item));
+        setMessages(items=>items.map(item=>item.localId===localAssistant.localId?{...item,content:"Preparei um plano para sua revisão. Ajuste as etapas e confirme antes da execução."}:item));
         setTaskTraces(items=>({...items,[localAssistant.localId]:{taskId:task.id,status:task.status||"executing",events:[],artifacts:[],expanded:false}}));
         let lastEventId=0;
         const source=api.tasks.streamEvents(task.id,0,event=>{lastEventId=Math.max(lastEventId,Number(event.id)||0);setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),taskId:task.id,status:["completed","failed","cancelled","awaiting_approval"].includes(event.status)?event.status:(items[localAssistant.localId]?.status||task.status||"executing"),events:[...(items[localAssistant.localId]?.events||[]).filter(item=>item.id!==event.id),event].slice(-100),expanded:items[localAssistant.localId]?.expanded??false}}));},state=>{if(state==="reconnecting")api.tasks.events(task.id,lastEventId).then(events=>{if(events?.length)setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),events:[...(items[localAssistant.localId]?.events||[]),...events.filter(ev=>Number(ev.id)>lastEventId)].slice(-100)}}));}).catch(()=>{});});
@@ -1308,10 +1478,11 @@ export default function App(){
                 ...(items[localAssistant.localId] || {}),
                 taskId: task.id,
                 status: currentTask.status || items[localAssistant.localId]?.status || "executing",
+                plan: currentTask.plan || items[localAssistant.localId]?.plan,
                 artifacts,
               },
             }));
-            if (["completed", "failed", "cancelled", "awaiting_approval"].includes(currentTask.status)) {
+            if (["completed", "failed", "cancelled"].includes(currentTask.status)) {
               window.clearInterval(poll);
               source.close();
               if (currentTask.status === "completed") {
@@ -1393,7 +1564,7 @@ export default function App(){
   }
 
   return <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${contextVisible ? "" : " context-hidden"}`}><Sidebar projects={projects} conversations={conversations} projectTab={projectTab} onNavigateTab={tab=>{setProjectTab(tab);setHomeActive(false);setMobile(false);}} activeProjectId={projectId} activeConversationId={homeActive ? null : conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>{setHomeActive(false);setModal("conversation");}} onDeleteProject={item=>setModal({type:"delete-project",item})} onDeleteConversation={item=>setModal({type:"delete-conversation",item})} onModelSettings={()=>setModal({type:"models"})} onHelp={()=>setModal({type:"help"})} onHome={()=>{setHomeActive(true);setConversationId(null);setMessages([]);setProjectTab("Conversa");setMobile(false);localStorage.removeItem("mosaic.activeConversationId");}} mobileOpen={mobile} onClose={()=>setMobile(false)} collapsed={sidebarCollapsed} onToggleCollapsed={()=>setSidebarCollapsed(value=>!value)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
-    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} onContextToggle={()=>setContextVisible(value=>!value)} contextVisible={contextVisible} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab} theme={theme} onToggleTheme={()=>setTheme(current=>current==="dark"?"light":"dark")}/><div className="workspace-grid"><main className="workspace">{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null} onOpenHieExperiment={taskId => setModal({type:"hie-experiment",scope:{taskId}})}/> : projectTab === "Biblioteca" ? <AgentLibraryWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : homeActive ? <HomeWelcome/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending} taskTraces={taskTraces} onToggleTrace={toggleTrace}/>} </div><Composer disabled={!conversation||sending} model={model} models={models} conversation={conversation} projectId={project?.id ?? null} onModelChange={changeConversationModel} onModelSettings={()=>setModal({type:"models"})} onSubmit={sendMessage} onFiles={()=>setProjectTab("Arquivos")} onAgent={()=>setProjectTab("Agente")} text={draft} setText={setDraft} hieEnabled={!!hieStatus?.enabled} hieBusy={hieBusy || !hieStatus?.available} hieExperimentAvailable={!!hieStatus?.experiment_execution_available} onToggleHie={toggleConversationHie} onOpenHieExperiment={()=>setModal({type:"hie-experiment",scope:{conversationId}})}/></>}</main>{contextVisible&&<button type="button" className="context-overlay" onClick={()=>setContextVisible(false)} aria-label="Fechar painel Etapas e contexto"/>}{contextVisible&&<ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/>}</div></div>
+    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} onContextToggle={()=>setContextVisible(value=>!value)} contextVisible={contextVisible} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab} theme={theme} onToggleTheme={()=>setTheme(current=>current==="dark"?"light":"dark")}/><div className="workspace-grid"><main className="workspace">{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null} onOpenHieExperiment={taskId => setModal({type:"hie-experiment",scope:{taskId,projectId:project?.id ?? null}})}/> : projectTab === "Biblioteca" ? <AgentLibraryWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : homeActive ? <HomeWelcome/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending} taskTraces={taskTraces} onToggleTrace={toggleTrace}/>} </div><Composer disabled={!conversation||sending} model={model} models={models} conversation={conversation} projectId={project?.id ?? null} onModelChange={changeConversationModel} onModelSettings={()=>setModal({type:"models"})} onSubmit={sendMessage} onFiles={()=>setProjectTab("Arquivos")} onAgent={()=>setProjectTab("Agente")} text={draft} setText={setDraft} hieEnabled={!!hieStatus?.enabled} hieBusy={hieBusy || !hieStatus?.available} hieExperimentAvailable={!!hieStatus?.experiment_execution_available} onToggleHie={toggleConversationHie} onOpenHieExperiment={()=>setModal({type:"hie-experiment",scope:{conversationId,projectId:project?.id ?? null}})}/></>}</main>{contextVisible&&<button type="button" className="context-overlay" onClick={()=>setContextVisible(false)} aria-label="Fechar painel Etapas e contexto"/>}{contextVisible&&<ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/>}</div></div>
     {modal?.type==="delete-conversation"&&<Modal title="Excluir conversa" onClose={()=>!saving&&setModal(null)}><div className="modal-form delete-confirm-content"><span className="delete-confirm-icon"><Icon name="trash-2" size={22}/></span><h3>Excluir “{modal.item?.title || "Nova conversa"}”?</h3><p>Esta ação remove permanentemente a conversa, suas mensagens e as Tasks vinculadas no banco de dados. Não é possível desfazer.</p><div className="delete-confirm-actions"><button type="button" className="secondary-button" onClick={()=>setModal(null)} disabled={saving}>Cancelar</button><button type="button" className="danger-button" onClick={()=>deleteConversationConfirmed(modal.item)} disabled={saving}>{saving?"Excluindo…":"Excluir conversa"}</button></div></div></Modal>}
     {modal?.type==="delete-project"&&<Modal title="Excluir projeto" onClose={()=>!saving&&setModal(null)}><div className="modal-form delete-confirm-content"><span className="delete-confirm-icon"><Icon name="trash-2" size={22}/></span><h3>Excluir o projeto “{modal.item?.name}”?</h3><p>Esta ação remove o projeto do banco. As conversas e memórias serão preservadas e desvinculadas dele. Tasks ativas precisam ser canceladas ou concluídas antes. Não é possível desfazer.</p><div className="delete-confirm-actions"><button type="button" className="secondary-button" onClick={()=>setModal(null)} disabled={saving}>Cancelar</button><button type="button" className="danger-button" onClick={()=>deleteProjectConfirmed(modal.item)} disabled={saving}>{saving?"Excluindo…":"Excluir projeto"}</button></div></div></Modal>}
     {modal?.type==="help"&&<Modal title="Ajuda" onClose={()=>setModal(null)}><div className="modal-form"><p className="modal-hint">O Mosaic é uma interface conectada ao Mosaic Core. O estado persistente vem do backend; esta interface apresenta e controla esse estado.</p><div className="help-block"><strong>Começando</strong><span>Crie um projeto, depois crie uma conversa e selecione um modelo registrado no Core.</span></div><div className="help-block"><strong>Modelos</strong><span>Use Configurações para cadastrar e ajustar modelos. O status consulta o Ollama local ou verifica se OPENAI_API_KEY está configurada no backend para a OpenAI.</span></div><div className="help-block"><strong>Contexto</strong><span>O painel lateral mostra projeto, modelo, memória e histórico reais da conversa ativa.</span></div></div></Modal>}

@@ -153,6 +153,7 @@ def update_task(
     status: str | None = None,
     plan: dict[str, Any] | None = None,
     result: dict[str, Any] | None = None,
+    expected_plan_version: int | None = None,
 ) -> Task | None:
     current = get_task(task_id)
     if current is None:
@@ -166,6 +167,11 @@ def update_task(
     new_plan = current.plan if plan is None else plan
     new_result = current.result if result is None else result
 
+    if expected_plan_version is not None:
+        current_plan_version = current.plan.get("plan_version", 0) if isinstance(current.plan, dict) else 0
+        if current_plan_version != expected_plan_version:
+            raise ValueError("Concurrent Task plan version change detected")
+
     if status is not None and new_status != current.status:
         validate_transition("task", current.status, new_status, TASK_TRANSITIONS)
     _validate_task(
@@ -178,12 +184,17 @@ def update_task(
     updated_at = _utc_now()
 
     with get_connection() as connection:
+        where_clause = "WHERE id = ? AND status = ?"
+        where_values: tuple[Any, ...] = (task_id, current.status)
+        if expected_plan_version is not None:
+            where_clause += " AND json_extract(plan, '$.plan_version') = ?"
+            where_values += (expected_plan_version,)
         cursor = connection.execute(
-            """
+            f"""
             UPDATE tasks
             SET conversation_id = ?, project_id = ?, type = ?, mode = ?,
                 status = ?, plan = ?, result = ?, updated_at = ?
-            WHERE id = ? AND status = ?
+            {where_clause}
             """,
             (
                 new_conversation_id,
@@ -194,8 +205,7 @@ def update_task(
                 json.dumps(new_plan) if new_plan is not None else None,
                 json.dumps(new_result) if new_result is not None else None,
                 updated_at,
-                task_id,
-                current.status,
+                *where_values,
             ),
         )
         if cursor.rowcount != 1:
