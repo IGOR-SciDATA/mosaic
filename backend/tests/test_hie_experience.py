@@ -141,6 +141,8 @@ def test_ragnes_experience_retrieval_is_disabled_when_hie_is_off(client):
     assert created.status_code == 201
     disabled = client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": False})
     assert disabled.status_code == 200
+    task_disabled = client.put("/hie/status", json={"task_id": experiment["task_id"], "enabled": False})
+    assert task_disabled.status_code == 200
     from app.context.manager import _hie_experience_context
     assert _hie_experience_context(conversation.id, project.id, "Python import errors") == []
 
