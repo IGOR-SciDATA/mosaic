@@ -15,7 +15,7 @@ from app.models.conversation_repository import create_conversation
 from app.models.message_repository import list_messages
 from app.models.repository import create_model
 from app.models.task_event_repository import list_task_events
-from app.models.task_repository import create_task, get_task
+from app.models.task_repository import create_task, get_task, list_tasks
 from app.services.task_coordinator import validate_coordinator_plan
 
 
@@ -199,7 +199,7 @@ def test_planner_failure_persists_sanitized_diagnostic_and_event(monkeypatch):
     assert exc.value.status_code == 502
     assert "stage: plan_generation" in exc.value.detail
     failed_tasks = [
-        task for task in __import__("app.models.task_repository", fromlist=["list_tasks"]).list_tasks(conversation_id=conversation.id)
+        task for task in list_tasks(conversation_id=conversation.id)
         if task.status == "failed"
     ]
     assert len(failed_tasks) == 1
