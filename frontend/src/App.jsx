@@ -1047,6 +1047,7 @@ function HieExperimentModal({scope,onClose}) {
   const [profileSlug,setProfileSlug]=useState("");
   const [candidateContent,setCandidateContent]=useState("");
   const [prompt,setPrompt]=useState("");
+  const [additionalPrompts,setAdditionalPrompts]=useState("");
   const [expectedContains,setExpectedContains]=useState("");
   const [experiment,setExperiment]=useState(null);
   const [history,setHistory]=useState([]);
@@ -1092,16 +1093,16 @@ function HieExperimentModal({scope,onClose}) {
   async function createAndRun(event){
     event.preventDefault();
     if(busy)return;
+    const fixturePrompts=[prompt.trim(),...additionalPrompts.split(/\r?\n/).map(item=>item.trim()).filter(Boolean)];
+    if(fixturePrompts.length>8){setError("Use no máximo 8 prompts por experimento.");return;}
     setBusy(true);setError("");setNotice("");
     try{
+      const expected=expectedContains.split(",").map(item=>item.trim()).filter(Boolean);
       const payload={
         ...(scope?.taskId ? {task_id:scope.taskId} : {conversation_id:scope?.conversationId}),
         profile_slug:profileSlug.trim(),
         candidate_content:candidateContent,
-        fixtures:[{
-          prompt:prompt.trim(),
-          expected_contains:expectedContains.split(",").map(item=>item.trim()).filter(Boolean)
-        }]
+        fixtures:fixturePrompts.map(fixturePrompt=>({prompt:fixturePrompt,expected_contains:expected}))
       };
       const created=await api.hie.createExperiment(payload);
       setExperiment(created);setHistory(items=>[created,...items]);
@@ -1237,8 +1238,10 @@ function HieExperimentModal({scope,onClose}) {
       <form className="modal-form" onSubmit={createAndRun}>
         <label>Slug do perfil <input value={profileSlug} onChange={event=>setProfileSlug(event.target.value.toLowerCase())} required maxLength={80} pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="ex.: qa-agent"/></label>
         <label>Instruções candidatas <textarea value={candidateContent} onChange={event=>setCandidateContent(event.target.value)} required minLength={1} maxLength={12000} rows={4} placeholder="Escreva a versão declarativa que deseja testar."/></label>
-        <label>Prompt de teste <textarea value={prompt} onChange={event=>setPrompt(event.target.value)} required maxLength={2000} rows={2} placeholder="Uma solicitação representativa para comparar baseline e candidato."/></label>
-        <label>Texto esperado (separado por vírgula) <input value={expectedContains} onChange={event=>setExpectedContains(event.target.value)} required placeholder="ex.: resumo, fonte"/></label>
+        <label>Prompt principal de teste <textarea value={prompt} onChange={event=>setPrompt(event.target.value)} required maxLength={2000} rows={2} placeholder="Uma solicitação representativa para comparar baseline e candidato."/></label>
+        <label>Prompts adicionais (opcional, um por linha) <textarea value={additionalPrompts} onChange={event=>setAdditionalPrompts(event.target.value)} maxLength={14000} rows={3} placeholder="Adicione casos diferentes para evitar conclusões baseadas em um único exemplo."/></label>
+        <p className="modal-hint">Todos os prompts usam os mesmos critérios esperados. Cada fixture acrescenta até duas chamadas ao modelo; use apenas casos relevantes (máximo 8).</p>
+        <label>Texto esperado em cada resposta (separado por vírgula) <input value={expectedContains} onChange={event=>setExpectedContains(event.target.value)} required placeholder="ex.: hipótese, verificação"/></label>
         <div className="hie-experiment-actions"><button className="primary-action" type="submit" disabled={busy||["queued","running"].includes(experiment?.status)}>{busy?"Preparando…":"Criar e executar experimento"}</button></div>
       </form>
       {error&&<div className="task-inline-error" role="alert">{error}</div>}
