@@ -97,8 +97,8 @@ def test_only_promoted_evidence_bound_experiences_enter_project_retrieval(client
     created = client.post("/hie/experiences", json={
         "project_id": project.id,
         "experiment_id": experiment["id"],
-        "cue": "Python import errors when running a project",
-        "lesson": "Inspect the package root and selected interpreter before changing import paths.",
+        "cue": "How do I debug a Python import error?",
+        "lesson": "Inspect the package root and selected interpreter before changing Python imports.",
         "limitations": "Verified only on the recorded Python import fixture.",
     })
     assert created.status_code == 201, created.text
@@ -150,8 +150,8 @@ def test_experiences_are_project_scoped_and_deactivation_removes_them_from_retri
     created = client.post("/hie/experiences", json={
         "project_id": project.id,
         "experiment_id": experiment["id"],
-        "cue": "Python import errors in a project",
-        "lesson": "Inspect the package root and selected interpreter.",
+        "cue": "How do I debug a Python import error?",
+        "lesson": "Inspect the package root and selected interpreter before changing Python imports.",
     })
     assert created.status_code == 201, created.text
     record = created.json()
@@ -184,8 +184,8 @@ def test_experience_creation_rejects_unpromoted_or_unverified_experiment(client)
     response = client.post("/hie/experiences", json={
         "project_id": project.id,
         "experiment_id": experiment["id"],
-        "cue": "Python import errors",
-        "lesson": "Inspect the package root.",
+        "cue": "How do I debug a Python import error?",
+        "lesson": "Inspect the package root and selected interpreter before changing Python imports.",
     })
     assert response.status_code == 409
     assert "active, explicitly promoted" in response.json()["detail"]
