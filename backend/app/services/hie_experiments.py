@@ -36,6 +36,21 @@ class HieExperimentError(ValueError):
     pass
 
 
+class HieExperimentCancelled(HieExperimentError):
+    pass
+
+
+def _ensure_not_cancelled(experiment_id: int) -> None:
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT status FROM hie_experiments WHERE id = ?", (experiment_id,)
+        ).fetchone()
+    if row is None:
+        raise HieExperimentError("Experiment not found")
+    if row["status"] == "cancelled":
+        raise HieExperimentCancelled("HIE experiment was cancelled by the user")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -383,6 +398,7 @@ def run_experiment(experiment_id: int) -> None:
             wall_seconds=PROVIDER_TIMEOUT_SECONDS * 2,
         )
         for fixture in experiment["fixtures"]:
+            _ensure_not_cancelled(experiment_id)
             case_result = {"fixture_id": fixture["id"]}
             captured: dict[str, dict[str, Any]] = {}
             with tempfile.TemporaryDirectory(prefix="mosaic-hie-source-") as source_dir:
@@ -429,6 +445,7 @@ def run_experiment(experiment_id: int) -> None:
                         float(configuration.get("request_timeout_seconds", PROVIDER_TIMEOUT_SECONDS)),
                         PROVIDER_TIMEOUT_SECONDS,
                     )
+                    _ensure_not_cancelled(experiment_id)
                     bounded_configuration = runtime_budget.before_provider_call(messages, configuration)
                     started = time.monotonic()
                     output = provider.generate(
@@ -641,6 +658,82 @@ def run_experiment(experiment_id: int) -> None:
                         connection=connection,
                     )
                     connection.commit()
+
+
+def cancel_experiment(experiment_id: int) -> dict[str, Any]:
+    """Cancel a queued/running experiment; an in-flight provider call may finish but no next call starts."""
+    with get_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT * FROM hie_experiments WHERE id = ?", (experiment_id,)
+        ).fetchone()
+        if row is None:
+            raise HieExperimentError("Experiment not found")
+        if row["status"] not in {"draft", "queued", "running"}:
+            raise HieExperimentError(f"Experiment cannot be cancelled from status {row['status']}")
+        experiment = _row_to_experiment(row)
+        results = experiment.get("results") or {}
+        results.update({
+            "cancelled_by_user": True,
+            "cancelled_at": _now(),
+            "automatic_retry": False,
+            "automatic_promotion": False,
+            "preserved_partial_evidence": bool(results.get("evidence")),
+        })
+        cursor = connection.execute(
+            "UPDATE hie_experiments SET status = 'cancelled', results = ?, updated_at = ? WHERE id = ? AND status = ?",
+            (json.dumps(results, ensure_ascii=False), _now(), experiment_id, row["status"]),
+        )
+        if cursor.rowcount != 1:
+            raise HieExperimentError("Experiment state changed; refresh and try again")
+        task_row = connection.execute(
+            "SELECT id, conversation_id, project_id, status, result FROM tasks WHERE id = ?",
+            (experiment["task_id"],),
+        ).fetchone()
+        if task_row is not None and task_row["status"] in {"pending", "planning", "executing", "validating"}:
+            try:
+                task_result = json.loads(task_row["result"]) if task_row["result"] else {}
+            except (TypeError, json.JSONDecodeError):
+                task_result = {}
+            if not isinstance(task_result, dict):
+                task_result = {}
+            task_result.update({
+                "hie_experiment_id": experiment_id,
+                "cancelled_by_user": True,
+                "automatic_retry": False,
+                "preserved_partial_evidence": bool(results.get("preserved_partial_evidence")),
+            })
+            task_cursor = connection.execute(
+                "UPDATE tasks SET status = 'cancelled', result = ?, updated_at = ? WHERE id = ? AND status = ?",
+                (json.dumps(task_result, ensure_ascii=False), _now(), experiment["task_id"], task_row["status"]),
+            )
+            if task_cursor.rowcount != 1:
+                raise HieExperimentError("Experiment Task changed during cancellation")
+            create_task_event(
+                task_id=experiment["task_id"],
+                conversation_id=task_row["conversation_id"],
+                project_id=task_row["project_id"],
+                component="task",
+                event_name="task.status_changed",
+                message="Task status changed to cancelled by explicit HIE experiment cancellation",
+                status="cancelled",
+                metadata={"previous_status": task_row["status"], "status": "cancelled", "hie_experiment_id": experiment_id},
+                connection=connection,
+            )
+        _emit(
+            experiment, "hie.experiment_cancelled",
+            "HIE experiment cancelled explicitly; no automatic retry or promotion will occur.",
+            "cancelled",
+            {
+                "candidate_sha256": experiment["candidate"]["sha256"],
+                "automatic_promotion": False,
+                "automatic_retry": False,
+                "preserved_partial_evidence": bool(results.get("preserved_partial_evidence")),
+            },
+            connection=connection,
+        )
+        connection.commit()
+    return get_experiment(experiment_id)
 
 
 def reject_experiment(experiment_id: int) -> dict[str, Any]:
