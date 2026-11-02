@@ -265,7 +265,7 @@ function TaskTrace({ trace, onToggle }) {
     </button>
     {expanded && <div className="chat-task-trace-body">
       {trace.status === "awaiting_approval" && trace.plan?.subtasks?.length > 0 && !trace.plan?.plan_confirmed &&
-        <TaskPlanReview task={{ id: trace.taskId, status: trace.status, plan: trace.plan }} onUpdated={updated => window.dispatchEvent(new CustomEvent("mosaic-task-updated", { detail: updated }))} />}
+        <TaskPlanReview task={{ id: trace.taskId, status: trace.status, plan: trace.plan }}  />}
       {trace.events?.length ? <ol>{trace.events.map((event, index) => {
         const details = event.metadata && (event.metadata.step || event.metadata.substep || event.metadata.detail);
         return <li className={event.status === "failed" ? "trace-event-failed" : ""} key={event.id || index}>
@@ -330,15 +330,14 @@ function TaskPlanReview({ task, onUpdated }) {
       const updated = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks });
       setPlan(updated.plan); setDirty(false); setNotice("Plano salvo e validado pelo Core."); onUpdated?.(updated);
       return updated;
-    } catch (err) { setError(err.message || "Não foi possível salvar o plano."); throw err; }
+    } catch (err) { setError(err.message || "Não foi possível salvar o plano."); return null; }
     finally { setBusy(false); }
   }
   async function confirmPlan() {
     setBusy(true); setError(""); setNotice("");
     try {
-      let latest = { plan };
       if (dirty) {
-        latest = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks });
+        const latest = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks });
         setPlan(latest.plan); setDirty(false); onUpdated?.(latest);
       }
       const confirmed = await api.tasks.confirmPlan(task.id);
