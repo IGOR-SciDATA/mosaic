@@ -247,8 +247,7 @@ def _auto_paginate_read(
         and result.data.get("operation") == "read"
         and result.data.get("truncated") is True
     ):
-        if chunks >= MAX_AUTOMATIC_READ_CHUNKS:
-            context.append({
+        if chunks >= MAX_AUTOMATIC_READ_CHUNKS:            context.append({
                 "role": "system",
                 "content": "Mosaic read guard: automatic pagination limit reached; source may be incomplete. Do not summarize it as complete.",
             })
@@ -497,8 +496,7 @@ def _source_read_evidence(task_id: int, conversation_id: int, source: str) -> di
             content = data.get("content")
             start_line = data.get("start_line")
             lines = data.get("total_lines")
-            if not isinstance(content, str) or not isinstance(start_line, int) or not isinstance(lines, int):
-                continue
+            if not isinstance(content, str) or not isinstance(start_line, int) or not isinstance(lines, int):                continue
             if total_lines is not None and total_lines != lines:
                 continue
             total_lines = lines
@@ -747,8 +745,7 @@ def _verified_file_artifact(task_id: int, conversation_id: int, goal: str) -> di
                 and "Written file could not be verified" in result.error
                 and content_matches
             ):
-                return _artifact_verification_evidence(
-                    task_id=task_id,
+                return _artifact_verification_evidence(                    task_id=task_id,
                     conversation_id=conversation_id,
                     path=candidate.relative_to(root).as_posix(),
                     actual_bytes=actual_bytes,
@@ -997,8 +994,7 @@ def _build_task_steps(goal: str) -> list[dict[str, Any]]:
                 "instruction": content_instruction,
             },
             {
-                "id": "create_artifact",
-                "kind": "create_artifact",
+                "id": "create_artifact",                "kind": "create_artifact",
                 "path": _artifact_output_path(goal),
                 "status": "pending",
                 "depends_on": ["draft_content"],
@@ -1114,7 +1110,7 @@ def _set_all_task_steps_completed(task_id: int, artifact: dict[str, Any] | None 
 def _requested_workspace_scope(goal: str) -> str | None:
     """Resolve an explicitly named directory as a path relative to the active workspace."""
     patterns = (
-        r"\b(?:arquivos|files|documentos|documents)\b.{0,100}?\b(?:em|no|na|dentro\s+de|in|inside|under|within)\s+(?:(?:diret[oó]rio|pasta|folder|directory)\s+)?['" ]*/?([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)",
+        r"\b(?:arquivos|files|documentos|documents)\b.{0,100}?\b(?:em|no|na|dentro\s+de|in|inside|under|within)\s+(?:(?:diret[oó]rio|pasta|folder|directory)\s+)?[\x22\x27 ]*/?([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)",
         r"\b(?:diret[oó]rio|pasta|folder|directory)\s+['\" ]*/?([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)",
     )
     for pattern in patterns:
@@ -1247,8 +1243,7 @@ def _prepare_workspace_exploration(
         "files_read": data.get("files_read", 0),
         "files_ignored": data.get("files_ignored", 0),
         "files_failed": data.get("files_failed", 0),
-        "bytes_read": data.get("bytes_read", 0),
-        "duration_ms": data.get("duration_ms", 0),
+        "bytes_read": data.get("bytes_read", 0),        "duration_ms": data.get("duration_ms", 0),
         "limits_reached": data.get("limits_reached", []),
         "files_passed_to_model": list(passed_to_model),
         "files_partially_passed_to_model": list(partially_passed),
@@ -1497,8 +1492,7 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
 
     # Resuming a generic task after an approved tool should continue its current step.
     current_step = _current_task_step(plan)
-    if current_step is not None and current_step.get("status") in {"pending", "awaiting_approval"}:
-        plan = _set_task_step_status(task_id, str(current_step["id"]), "in_progress")
+    if current_step is not None and current_step.get("status") in {"pending", "awaiting_approval"}:        plan = _set_task_step_status(task_id, str(current_step["id"]), "in_progress")
 
     # Rebuild only the stable project guidance and this Task's persisted observations.
     # No prior user/assistant turns are copied into the model prompt.
@@ -1747,8 +1741,7 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
         except Exception as exc:
             context.append({
                 "role": "system",
-                "content": (
-                    f"Mosaic tool observation: ToolCall {call.id} failed with "
+                "content": (                    f"Mosaic tool observation: ToolCall {call.id} failed with "
                     f"{type(exc).__name__}: {exc}. Treat this as an execution failure, "
                     "do not claim success, and choose a corrected next step or explain the blocker."
                 ),
@@ -1771,4 +1764,3 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
     result = {"error": "Agent iteration limit reached", "iterations": iteration_limit}
     update_task(task_id, status="failed", result=result)
     return {"status": "failed", **result}
-
