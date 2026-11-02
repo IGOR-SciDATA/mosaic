@@ -96,6 +96,7 @@ def validate_coordinator_plan(plan: dict[str, Any] | None, *, require_tool_decla
             "depends_on": dependencies,
             "inputs": inputs,
             "acceptance_criteria": normalized_criteria,
+            **({"allowed_tools": list(allowed_tools)} if allowed_tools is not None else {}),
         })
 
     known = {spec["id"] for spec in specs}
@@ -200,6 +201,7 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
         raise ValueError("Selected model is unavailable")
     provider = resolve_model_provider(model)
     profiles = sorted(PROFILE_NAMES)
+    available_tools = sorted(tool.name for tool in registry.list())
     prompt = (
         "Create a plan for the user's Task using the Mosaic Coordinator contract. "
         "Return only a JSON object with a 'subtasks' array. Each subtask must contain "
@@ -212,6 +214,7 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
         "no invented permissions, and include verification in the goals/criteria. "
         "The plan is a proposal, not authorization or evidence of execution.\n"
         f"Allowed profiles: {', '.join(profiles)}\n"
+        f"Registered tools: {', '.join(available_tools)}\n"
         f"User objective: {goal}"
     )
     raw = provider.generate(
@@ -271,6 +274,7 @@ def run_coordinated_task(
                 "subtask_key": spec["id"],
                 "depends_on_keys": list(spec["depends_on"]),
                 "acceptance_criteria": spec["acceptance_criteria"],
+                "allowed_tools": list(spec.get("allowed_tools", [])),
                 "inputs": list(spec["inputs"]),
                 "dependency_results": {},
             }
