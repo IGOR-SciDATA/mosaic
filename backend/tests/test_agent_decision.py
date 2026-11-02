@@ -177,7 +177,7 @@ def test_diagnostic_preview_keeps_response_tail_and_redacts_thinking_and_secrets
 
 
 
-def test_content_only_workspace_summary_uses_compact_prompt_and_bounded_ollama_generation(monkeypatch):
+def test_content_only_workspace_summary_uses_compact_prompt_without_generation_caps(monkeypatch):
     from types import SimpleNamespace
 
     import app.services.agent_decision as adapter
@@ -252,5 +252,5 @@ def test_content_only_workspace_summary_uses_compact_prompt_and_bounded_ollama_g
     assert "Mosaic workspace exploration result:" not in system_prompt
     assert "Você é o agente executor do Mosaic" not in system_prompt
     assert provider.request["messages"][-1]["content"] == context[-1]["content"]
-    assert provider.request["configuration"]["num_predict"] == 768
-    assert provider.request["configuration"]["request_timeout_seconds"] == 180
+    assert "num_predict" not in provider.request["configuration"]
+    assert "request_timeout_seconds" not in provider.request["configuration"]

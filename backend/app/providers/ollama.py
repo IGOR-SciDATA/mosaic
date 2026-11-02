@@ -6,7 +6,6 @@ from urllib import error, request
 from app.providers.base import ModelProvider
 
 
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 600
 
 
 class OllamaProvider(ModelProvider):
@@ -22,8 +21,7 @@ class OllamaProvider(ModelProvider):
         configuration: dict[str, Any],
     ) -> str:
         payload = self._request_payload(messages, model_name, configuration, stream=False)
-        timeout_seconds = self._request_timeout(configuration)
-        response = self._post("/api/chat", payload, timeout_seconds=timeout_seconds)
+        response = self._post("/api/chat", payload)
 
         try:
             content = response["message"]["content"]
@@ -43,10 +41,7 @@ class OllamaProvider(ModelProvider):
         tool_configuration = {key: value for key, value in configuration.items() if key != "format"}
         payload = self._request_payload(messages, model_name, tool_configuration, stream=False)
         payload["tools"] = tools
-        response = self._post(
-            "/api/chat", payload,
-            timeout_seconds=self._request_timeout(configuration),
-        )
+        response = self._post("/api/chat", payload)
         message = response.get("message")
         if not isinstance(message, dict):
             raise RuntimeError("Invalid Ollama tool-call response: missing message")
@@ -105,7 +100,7 @@ class OllamaProvider(ModelProvider):
         pending = ""
 
         try:
-            with request.urlopen(req, timeout=self._request_timeout(configuration)) as response:
+            with request.urlopen(req) as response:
                 for raw_line in response:
                     if not raw_line.strip():
                         continue
@@ -144,21 +139,6 @@ class OllamaProvider(ModelProvider):
         except error.URLError as exc:
             raise RuntimeError(f"Could not connect to Ollama: {exc.reason}") from exc
 
-    @staticmethod
-    def _request_timeout(configuration: dict[str, Any]) -> float:
-        """Resolve a bounded per-request network timeout from model configuration."""
-        raw_timeout = configuration.get(
-            "request_timeout_seconds",
-            DEFAULT_REQUEST_TIMEOUT_SECONDS,
-        )
-        try:
-            timeout = float(raw_timeout)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("request_timeout_seconds must be a number between 1 and 600") from exc
-        if not 1 <= timeout <= 600:
-            raise ValueError("request_timeout_seconds must be between 1 and 600")
-        return timeout
-
     @classmethod
     def _normalize_answer(cls, content: str, model_name: str) -> str:
         # Thinking tags are an output-format detail, not a model identity.
@@ -191,18 +171,18 @@ class OllamaProvider(ModelProvider):
         options = {
             key: value
             for key, value in configuration.items()
-            if key in {"temperature", "top_p", "top_k", "num_ctx", "num_predict"}
+            if key in {"temperature", "top_p", "top_k", "num_ctx"}
         }
-        if options:
-            payload["options"] = options
+        # Ollama interprets -1 as unlimited output generation. Never inherit
+        # num_predict from a saved model configuration: local models may be slow.
+        options["num_predict"] = -1
+        payload["options"] = options
         return payload
 
     def _post(
         self,
         path: str,
         payload: dict[str, Any],
-        *,
-        timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ) -> dict[str, Any]:
         req = request.Request(
             f"{self.base_url}{path}",
@@ -212,7 +192,7 @@ class OllamaProvider(ModelProvider):
         )
 
         try:
-            with request.urlopen(req, timeout=timeout_seconds) as response:
+            with request.urlopen(req) as response:
                 return json.loads(response.read().decode("utf-8"))
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")

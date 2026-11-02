@@ -34,10 +34,9 @@ def test_generate_with_tools_uses_native_ollama_tool_calls():
         }],
     }
 
-    def fake_post(path, payload, *, timeout_seconds):
+    def fake_post(path, payload):
         observed["path"] = path
         observed["payload"] = payload
-        observed["timeout_seconds"] = timeout_seconds
         return {"message": assistant_message}
 
     provider._post = fake_post
@@ -61,7 +60,7 @@ def test_generate_with_tools_uses_native_ollama_tool_calls():
     result = provider.generate_with_tools(
         messages=[{"role": "user", "content": "Leia Documento.md"}],
         model_name="qwen2.5:3b",
-        configuration={"request_timeout_seconds": 45, "format": "json"},
+        configuration={"request_timeout_seconds": 45, "num_predict": 128, "format": "json"},
         tools=tools,
     )
 
@@ -70,7 +69,8 @@ def test_generate_with_tools_uses_native_ollama_tool_calls():
     assert result["arguments"] == {"operation": "read", "path": "Documento.md"}
     assert result["_native_message"] == assistant_message
     assert observed["path"] == "/api/chat"
-    assert observed["timeout_seconds"] == 45.0
+    assert observed["payload"]["options"]["num_predict"] == -1
+    assert "request_timeout_seconds" not in observed["payload"]["options"]
     assert observed["payload"]["tools"] == tools
     assert "format" not in observed["payload"]
 
@@ -218,52 +218,34 @@ def test_generate_does_not_expose_truncated_tagged_thinking():
 
 
 
-def test_generate_passes_configured_request_timeout():
+def test_generate_does_not_pass_request_timeout_and_ignores_configured_output_cap():
     provider = OllamaProvider()
     observed = {}
 
-    def fake_post(path, payload, *, timeout_seconds):
+    def fake_post(path, payload):
         observed["path"] = path
-        observed["timeout_seconds"] = timeout_seconds
+        observed["payload"] = payload
         return {"message": {"role": "assistant", "content": "ok"}}
 
     provider._post = fake_post
     result = provider.generate(
         messages=[{"role": "user", "content": "Responda"}],
         model_name="qwen2.5:3b",
-        configuration={"request_timeout_seconds": 45},
+        configuration={"request_timeout_seconds": 1, "num_predict": 64},
     )
 
     assert result == "ok"
-    assert observed == {"path": "/api/chat", "timeout_seconds": 45.0}
+    assert observed["path"] == "/api/chat"
+    assert observed["payload"]["options"]["num_predict"] == -1
 
 
-def test_generate_uses_bounded_six_hundred_second_default_timeout():
+def test_post_opens_response_without_a_timeout_argument():
     provider = OllamaProvider()
-    observed = {}
+    response = io.BytesIO(b'{"message":{"content":"ok"}}')
 
-    def fake_post(path, payload, *, timeout_seconds):
-        observed["timeout_seconds"] = timeout_seconds
-        return {"message": {"role": "assistant", "content": "ok"}}
+    with patch("app.providers.ollama.request.urlopen", return_value=response) as urlopen:
+        assert provider._post("/api/chat", {"model": "test"}) == {"message": {"content": "ok"}}
 
-    provider._post = fake_post
-    provider.generate(
-        messages=[{"role": "user", "content": "Responda"}],
-        model_name="qwen2.5:3b",
-        configuration={},
-    )
-    assert observed["timeout_seconds"] == 600.0
+    assert urlopen.call_count == 1
+    assert len(urlopen.call_args.args) == 1
 
-
-def test_request_timeout_rejects_out_of_range_values():
-    provider = OllamaProvider()
-    try:
-        provider.generate(
-            messages=[{"role": "user", "content": "Responda"}],
-            model_name="qwen2.5:3b",
-            configuration={"request_timeout_seconds": 0},
-        )
-    except ValueError as exc:
-        assert "between 1 and 600" in str(exc)
-    else:
-        raise AssertionError("Expected invalid request timeout to be rejected")

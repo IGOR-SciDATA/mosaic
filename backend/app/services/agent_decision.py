@@ -18,11 +18,6 @@ Use as evidências dos arquivos fornecidas no contexto para executar a transform
 O Core, não você, salvará e verificará o arquivo na etapa seguinte.
 Comece diretamente pelo título ou pelo primeiro parágrafo do conteúdo final."""
 
-_WORKSPACE_SUMMARY_MAX_OUTPUT_TOKENS = 768
-_CONTENT_ONLY_MAX_OUTPUT_TOKENS = 2_048
-_WORKSPACE_SUMMARY_TIMEOUT_SECONDS = 180
-
-
 def _content_only_messages(context: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Build a compact content-generation prompt without the contradictory tool-agent contract."""
     system_parts = [_CONTENT_ONLY_INSTRUCTIONS]
@@ -46,46 +41,12 @@ def _content_only_messages(context: list[dict[str, Any]]) -> list[dict[str, Any]
     return compact + remaining_messages
 
 
-def _content_only_configuration(
-    configuration: dict[str, Any],
-    context: list[dict[str, Any]],
-    provider_name: str,
-) -> dict[str, Any]:
-    """Bound local content generation so small models don't spend minutes overproducing."""
+def _content_only_configuration(configuration: dict[str, Any]) -> dict[str, Any]:
+    """Keep model generation unbounded; time and output length are controlled by the user/runtime."""
     result = {**configuration, "temperature": 0, "think": False}
-    if provider_name.strip().lower() != "ollama":
-        return result
-
-    workspace_summary = any(
-        message.get("role") == "system"
-        and "Mosaic current subtask:" in str(message.get("content", ""))
-        and "kind=summarize_workspace" in str(message.get("content", ""))
-        for message in context
-    )
-    output_limit = (
-        _WORKSPACE_SUMMARY_MAX_OUTPUT_TOKENS
-        if workspace_summary
-        else _CONTENT_ONLY_MAX_OUTPUT_TOKENS
-    )
-    try:
-        configured_limit = int(result.get("num_predict", output_limit))
-    except (TypeError, ValueError):
-        configured_limit = output_limit
-    if configured_limit < 1:
-        configured_limit = output_limit
-    result["num_predict"] = min(configured_limit, output_limit)
-
-    if workspace_summary:
-        raw_timeout = result.get("request_timeout_seconds", _WORKSPACE_SUMMARY_TIMEOUT_SECONDS)
-        try:
-            timeout = float(raw_timeout)
-        except (TypeError, ValueError):
-            # Leave invalid explicit configuration intact so the provider rejects it clearly.
-            return result
-        if 1 <= timeout <= 600:
-            result["request_timeout_seconds"] = min(timeout, _WORKSPACE_SUMMARY_TIMEOUT_SECONDS)
+    result.pop("num_predict", None)
+    result.pop("request_timeout_seconds", None)
     return result
-
 
 _DECISION_INSTRUCTIONS = """Você é o agente executor do Mosaic. Use as ferramentas nativas disponibilizadas pela API quando precisar agir.
 O Core executa as ferramentas, valida os argumentos, controla permissões e devolve os resultados. Você nunca executa ferramentas diretamente.
@@ -347,9 +308,7 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                     raw = provider.generate(
                         messages=messages,
                         model_name=model.model_name,
-                        configuration=_content_only_configuration(
-                            model.configuration, context, model.provider
-                        ),
+                        configuration=_content_only_configuration(model.configuration),
                     )
                 elif callable(generate_with_tools) and active_tool_catalog:
                     native_decision = generate_with_tools(
