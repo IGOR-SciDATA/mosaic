@@ -118,8 +118,8 @@ export const api = {
     get: (id) => request(`/tasks/${id}`),
     artifacts: (id) => request(`/tasks/${id}/artifacts`),
     start: (payload) => request("/tasks/start", { method: "POST", body: JSON.stringify(payload) }),
-    updatePlan: (id, plan) => request(`/tasks/${id}/plan`, { method: "PATCH", body: JSON.stringify({ plan }) }),
-    confirmPlan: (id) => request(`/tasks/${id}/confirm`, { method: "POST" }),
+    updatePlan: (id, plan, version) => request(`/tasks/${id}/plan`, { method: "PATCH", body: JSON.stringify({ plan, expected_plan_version: version }) }),
+    confirmPlan: (id, version) => request(`/tasks/${id}/confirm`, { method: "POST", body: JSON.stringify({ plan_version: version }) }),
     events: (id, afterId = 0) => request(`/tasks/${id}/events?after_id=${afterId}&limit=100`),
     decideToolCall: (taskId, toolCallId, decision) => request(`/tasks/${taskId}/tool-calls/${toolCallId}/decision`, { method: "POST", body: JSON.stringify({ decision }) }),
     streamEvents: (id, afterId = 0, onEvent, onState) => {
