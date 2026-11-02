@@ -27,6 +27,7 @@ MAX_LESSON_CHARS = 2400
 MAX_LIMITATIONS_CHARS = 1200
 MAX_EXPERIENCE_BYTES = 16_000
 MAX_RETRIEVAL_RESULTS = 3
+MAX_EXPERIENCE_FILES_SCANNED = 500
 STOP_WORDS = {
     "a", "as", "ao", "aos", "com", "da", "das", "de", "do", "dos", "e", "em",
     "for", "from", "how", "is", "na", "nas", "no", "nos", "o", "os", "para",
@@ -241,20 +242,27 @@ def list_experiences(project_id: int, *, query: str | None = None, profile_slug:
         token.casefold() for token in re.findall(r"[\w.-]+", query or "", flags=re.UNICODE)
         if len(token) >= 3 and token.casefold() not in STOP_WORDS
     }
+    with get_connection() as connection:
+        promotion_rows = connection.execute(
+            "SELECT id, experiment_id FROM hie_promotions WHERE project_id = ? AND rolled_back_at IS NULL",
+            (project_id,),
+        ).fetchall()
+    active_promotions = {(row["id"], row["experiment_id"]) for row in promotion_rows}
+    paths = list(root.glob("experience-*.json"))
+    if len(paths) > MAX_EXPERIENCE_FILES_SCANNED:
+        def _mtime(path: Path) -> float:
+            try:
+                return path.lstat().st_mtime
+            except OSError:
+                return 0.0
+        paths = sorted(paths, key=_mtime, reverse=True)[:MAX_EXPERIENCE_FILES_SCANNED]
     found: list[tuple[int, str, dict[str, Any]]] = []
-    for path in sorted(root.glob("experience-*.json")):
+    for path in paths:
         record = _read(path)
         if not record or record.get("project_id") != project_id or record.get("lifecycle") != "active":
             continue
         source = record.get("source") or {}
-        promotion_id = source.get("promotion_id")
-        with get_connection() as connection:
-            promotion = connection.execute(
-                """SELECT id FROM hie_promotions
-                   WHERE id = ? AND project_id = ? AND experiment_id = ? AND rolled_back_at IS NULL""",
-                (promotion_id, project_id, source.get("experiment_id")),
-            ).fetchone()
-        if promotion is None:
+        if (source.get("promotion_id"), source.get("experiment_id")) not in active_promotions:
             continue
         if profile_slug and record.get("profile_slug") != profile_slug:
             continue
