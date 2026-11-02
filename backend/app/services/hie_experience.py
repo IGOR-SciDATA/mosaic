@@ -119,7 +119,7 @@ def _write(project_id: int, record: dict[str, Any]) -> dict[str, Any]:
     return persisted
 
 
-def _evidence_refs(results: dict[str, Any]) -> list[dict[str, Any]]:
+def _evidence_refs(results: dict[str, Any], task_id: int) -> list[dict[str, Any]]:
     refs: list[dict[str, Any]] = []
     for case in results.get("evidence", []):
         if not isinstance(case, dict):
@@ -127,15 +127,31 @@ def _evidence_refs(results: dict[str, Any]) -> list[dict[str, Any]]:
         for role, evidence in (case.get("artifact_evidence") or {}).items():
             if not isinstance(evidence, dict) or not evidence.get("sha256"):
                 continue
+            artifact_id = evidence.get("artifact_id")
+            if isinstance(artifact_id, bool) or not isinstance(artifact_id, int):
+                continue
+            with get_connection() as connection:
+                artifact = connection.execute(
+                    "SELECT task_id, type, metadata FROM artifacts WHERE id = ?", (artifact_id,)
+                ).fetchone()
+            if artifact is None or artifact["task_id"] != task_id or not str(artifact["type"]).startswith("hie_"):
+                continue
+            try:
+                metadata = json.loads(artifact["metadata"] or "{}")
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if metadata.get("sha256") != evidence["sha256"]:
+                continue
             refs.append({
                 "fixture_id": case.get("fixture_id"),
                 "role": role,
-                "artifact_id": evidence.get("artifact_id"),
+                "artifact_id": artifact_id,
                 "sha256": evidence["sha256"],
+                "type": artifact["type"],
             })
     unique = {}
     for ref in refs:
-        unique[(ref.get("artifact_id"), ref["sha256"], ref.get("role"))] = ref
+        unique[(ref["artifact_id"], ref["sha256"], ref.get("role"))] = ref
     return list(unique.values())[:32]
 
 
@@ -166,7 +182,7 @@ def create_experience(
         ).fetchone()
     if promotion is None:
         raise HieExperienceError("Experience requires an active, explicitly promoted candidate")
-    evidence_refs = _evidence_refs(results)
+    evidence_refs = _evidence_refs(results, experiment['task_id'])
     if not evidence_refs:
         raise HieExperienceError("Experience requires persisted, hash-addressed probe evidence")
     delta = results.get("delta_pass_rate")
