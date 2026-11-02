@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -428,6 +429,24 @@ def _run_provider_agent(task_id: int) -> None:
     _resume_coordinator_for_child(task_id)
 
 
+def _safe_task_planning_error(exc: Exception) -> str:
+    """Keep actionable planner diagnostics without persisting common credential formats."""
+    message = str(exc).strip() or "No diagnostic message supplied"
+    message = re.sub(r"(?i)\bBearer\s+\S+", "Bearer [REDACTED]", message)
+    message = re.sub(
+        r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)\b(\s*[:=]\s*)[^\s,;]+",
+        r"\1\2[REDACTED]",
+        message,
+    )
+    message = re.sub(
+        r"(?i)([?&](?:token|key|secret|password|authorization)=)[^&\s]+",
+        r"\1[REDACTED]",
+        message,
+    )
+    message = re.sub(r"https?://[^/\s:@]+:[^@\s/]+@", "https://[REDACTED]@", message)
+    return message[:300]
+
+
 @router.post("/start", response_model=Task, status_code=202)
 def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTasks) -> Task:
     """Create a Task and return a validated, editable plan; execution requires explicit confirmation."""
@@ -444,6 +463,7 @@ def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTa
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     create_message(conversation.id, "user", goal)
+    stage = "task_creation"
     try:
         initial_plan: dict[str, Any] = {"goal": goal, "plan_version": 0, "plan_confirmed": False}
         if agent_snapshot is not None:
@@ -457,11 +477,14 @@ def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTa
         )
         _inherit_conversation_hie_mode(task)
         task = update_task(task.id, status="planning")
+        stage = "plan_generation"
         proposed = generate_coordinator_plan(conversation.id, goal)
         plan = {**proposed, **{key: value for key, value in initial_plan.items() if key == "agent_library_snapshot"}}
         plan["plan_version"] = 1
         plan["plan_confirmed"] = False
+        stage = "plan_validation"
         validate_coordinator_plan(plan, require_tool_declarations=True)
+        stage = "plan_persistence"
         task = update_task(task.id, plan=plan, status="awaiting_approval")
         if task is None:
             raise ValueError("Could not persist generated Task plan")
@@ -475,13 +498,42 @@ def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTa
     except HTTPException:
         raise
     except Exception as exc:
-        current = get_task(task.id) if "task" in locals() else None
+        diagnostic = _safe_task_planning_error(exc)
+        current = get_task(task.id) if "task" in locals() and task is not None else None
         if current is not None and current.status in {"pending", "planning"}:
             try:
-                update_task(current.id, status="failed", result={"error": "Task planning failed", "error_type": type(exc).__name__})
+                update_task(current.id, status="failed", result={
+                    "error": "Task planning failed",
+                    "error_type": type(exc).__name__,
+                    "stage": stage,
+                    "diagnostic": diagnostic,
+                })
             except ValueError:
+                # Preserve the original failure if another state transition won the race.
                 pass
-        raise HTTPException(status_code=502, detail=f"Could not generate a valid Task plan: {type(exc).__name__}") from exc
+            try:
+                create_task_event(
+                    task_id=current.id,
+                    conversation_id=current.conversation_id,
+                    project_id=current.project_id,
+                    component="planner",
+                    event_name="task.planning_failed",
+                    message="Task plan generation failed; sanitized diagnostic recorded.",
+                    status="failed",
+                    level="error",
+                    metadata={
+                        "stage": stage,
+                        "error_type": type(exc).__name__,
+                        "diagnostic": diagnostic,
+                    },
+                )
+            except Exception:
+                # Diagnostics must not mask the original planning failure.
+                pass
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not generate a valid Task plan: {type(exc).__name__} (stage: {stage})",
+        ) from exc
 
 
 class TaskPlanUpdate(BaseModel):
