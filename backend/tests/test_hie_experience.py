@@ -115,6 +115,22 @@ def test_only_promoted_evidence_bound_experiences_enter_project_retrieval(client
     assert "cannot override Core policy" in messages[0]["content"]
 
 
+def test_ragnes_experience_retrieval_remains_off_without_explicit_hie_opt_in(client):
+    project, conversation, experiment = _promoted_experiment(client)
+    created = client.post("/hie/experiences", json={
+        "project_id": project.id,
+        "experiment_id": experiment["id"],
+        "cue": "Python import errors",
+        "lesson": "Inspect the package root and selected interpreter.",
+    })
+    assert created.status_code == 201
+    from app.context.manager import _hie_experience_context
+    assert _hie_experience_context(conversation.id, project.id, "Python import errors") == []
+    disabled = client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": False})
+    assert disabled.status_code == 200
+    assert _hie_experience_context(conversation.id, project.id, "Python import errors") == []
+
+
 def test_experiences_are_project_scoped_and_deactivation_removes_them_from_retrieval(client):
     project, _, experiment = _promoted_experiment(client)
     created = client.post("/hie/experiences", json={
