@@ -119,7 +119,7 @@ def approve_tool_call(tool_call: ToolCall) -> ToolCall:
         validate_tool_call(tool_call)
     except Exception:
         try:
-            update_tool_call(tool_call.id, status="failed")
+            update_tool_call(tool_call.id, status="rejected")
         except ValueError:
             pass
         raise
