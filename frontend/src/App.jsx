@@ -1108,7 +1108,7 @@ function HieExperimentModal({scope,onClose}) {
       setExperiment(created);setHistory(items=>[created,...items]);
       const queued=await api.hie.runExperiment(created.id);
       setExperiment(queued);setHistory(items=>items.map(item=>item.id===queued.id?queued:item));
-      setNotice("Experimento criado. O Core está executando baseline e candidato com a mesma fixture.");
+      setNotice("Experimento criado. O Core está executando baseline e candidato nas mesmas fixtures e com os mesmos critérios determinísticos.");
     }catch(err){setError(err.message);}
     finally{setBusy(false);}
   }
