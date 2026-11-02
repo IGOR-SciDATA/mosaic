@@ -327,13 +327,13 @@ def coordinate_task_endpoint(task_id: int, background_tasks: BackgroundTasks) ->
         raise HTTPException(status_code=409, detail="A plan must be reviewed and explicitly confirmed before coordination")
     try:
         validate_coordinator_plan(plan, require_tool_declarations=True)
-        planning = update_task(task_id, status="planning")
+        running = update_task(task_id, status="executing")
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if planning is None:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if running is None:
         raise HTTPException(status_code=404, detail="Task not found")
     background_tasks.add_task(run_coordinated_task, task_id)
-    return planning
+    return running
 
 
 @router.post("/{task_id}/cancel", response_model=Task)
