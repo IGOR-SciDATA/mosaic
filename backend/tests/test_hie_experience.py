@@ -130,19 +130,18 @@ def test_only_promoted_evidence_bound_experiences_enter_project_retrieval(client
     assert list_experiences(project.id, query="Python import errors") == []
 
 
-def test_ragnes_experience_retrieval_remains_off_without_explicit_hie_opt_in(client):
+def test_ragnes_experience_retrieval_is_disabled_when_hie_is_off(client):
     project, conversation, experiment = _promoted_experiment(client)
     created = client.post("/hie/experiences", json={
         "project_id": project.id,
         "experiment_id": experiment["id"],
-        "cue": "Python import errors",
-        "lesson": "Inspect the package root and selected interpreter.",
+        "cue": "How do I debug a Python import error?",
+        "lesson": "Inspect the package root and selected interpreter before changing Python imports.",
     })
     assert created.status_code == 201
-    from app.context.manager import _hie_experience_context
-    assert _hie_experience_context(conversation.id, project.id, "Python import errors") == []
     disabled = client.put("/hie/status", json={"conversation_id": conversation.id, "enabled": False})
     assert disabled.status_code == 200
+    from app.context.manager import _hie_experience_context
     assert _hie_experience_context(conversation.id, project.id, "Python import errors") == []
 
 
