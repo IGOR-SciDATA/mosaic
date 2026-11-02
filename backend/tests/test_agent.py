@@ -928,10 +928,12 @@ def test_scoped_workspace_exploration_only_reads_requested_directory(tmp_path: P
 
     def decide(context):
         observed.append("\n".join(str(item.get("content", "")) for item in context))
+        # The local model summarizes both discovered files but omits their exact paths.
+        # The Core should add the missing path manifest and proceed to artifact creation.
         return {"type": "final", "content": (
             "# Resumo de docs\n\n"
-            "## docs/ARCHITECTURE.md\n" + ("O arquivo define responsabilidades do Core e seus limites. " * 5) + "\n\n"
-            "## docs/ROADMAP.md\n" + ("O arquivo registra os próximos marcos e a sequência de implementação. " * 5)
+            + ("O arquivo define responsabilidades do Core e seus limites. " * 5) + "\n\n"
+            + ("O arquivo registra os próximos marcos e a sequência de implementação. " * 5)
         )}
 
     result = run_agent(task.id, decide)
