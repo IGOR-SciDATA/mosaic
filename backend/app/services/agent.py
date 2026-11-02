@@ -1114,7 +1114,7 @@ def _set_all_task_steps_completed(task_id: int, artifact: dict[str, Any] | None 
 def _requested_workspace_scope(goal: str) -> str | None:
     """Resolve an explicitly named directory as a path relative to the active workspace."""
     patterns = (
-        r"\b(?:arquivos|files|documentos|documents)\b.{0,100}?\b(?:em|no|na|dentro\s+de|in|inside|under|within)\s+['\" ]*/?([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)",
+        r"""\b(?:arquivos|files|documentos|documents)\b.{0,100}?\b(?:em|no|na|dentro\s+de|in|inside|under|within)\s+(?:(?:diret[oó]rio|pasta|folder|directory)\s+)?['" ]*/?([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)""",
         r"\b(?:diret[oó]rio|pasta|folder|directory)\s+['\" ]*/?([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)",
     )
     for pattern in patterns:
@@ -1771,4 +1771,3 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
     result = {"error": "Agent iteration limit reached", "iterations": iteration_limit}
     update_task(task_id, status="failed", result=result)
     return {"status": "failed", **result}
-

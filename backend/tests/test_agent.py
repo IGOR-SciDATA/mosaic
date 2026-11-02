@@ -892,6 +892,23 @@ def test_workspace_exploration_goal_detection_is_deterministic():
     assert not _goal_requests_workspace_exploration("Leia README.md")
 
 
+@pytest.mark.parametrize(
+    ("goal", "expected"),
+    [
+        ("leia os arquivos na pasta docs", "docs"),
+        ("leia os arquivos da pasta docs", "docs"),
+        ("leia os documentos no diretório docs", "docs"),
+        ("read the files in folder docs", "docs"),
+        ("leia os arquivos na pasta docs/referencias", "docs/referencias"),
+        ("Leia todos os arquivos já existentes em '/docs'", "docs"),
+    ],
+)
+def test_requested_workspace_scope_extracts_named_directory_not_generic_word(goal: str, expected: str):
+    from app.services.agent import _requested_workspace_scope
+
+    assert _requested_workspace_scope(goal) == expected
+
+
 def test_scoped_workspace_exploration_only_reads_requested_directory(tmp_path: Path):
     from app.services.agent import _requested_workspace_scope, _goal_requests_workspace_exploration
 
