@@ -308,9 +308,7 @@ def create_provider_decider(task_id: int) -> Callable[[list[dict[str, Any]]], di
                     raw = provider.generate(
                         messages=messages,
                         model_name=model.model_name,
-                        configuration=_content_only_configuration(
-                            model.configuration, context, model.provider
-                        ),
+                        configuration=_content_only_configuration(model.configuration),
                     )
                 elif callable(generate_with_tools) and active_tool_catalog:
                     native_decision = generate_with_tools(
