@@ -38,7 +38,7 @@ Each experience records:
 - source experiment, promotion, candidate hash, provider/model;
 - baseline/candidate pass rates and deterministic delta;
 - references to persisted Core Artifacts, verified against artifact ID, owning Task, type and SHA-256;
-- confidence, limitations, lifecycle, creation/update times and a record hash.
+- a sample-size-aware heuristic confidence (explicitly not a statistical probability), limitations, lifecycle, creation/update times and a record hash.
 
 An experience may be created only from a completed experiment whose candidate was assessed as better, has positive deterministic pass-rate delta, has persisted hash-addressed evidence, and has an active explicit promotion. Rolled-back candidates cannot create new active experiences.
 
