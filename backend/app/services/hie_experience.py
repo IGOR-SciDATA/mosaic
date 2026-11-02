@@ -173,6 +173,17 @@ def create_experience(
     results = experiment.get("results") or {}
     if experiment["status"] != "completed" or results.get("assessment") != "candidate_better":
         raise HieExperienceError("Only completed, evidence-supported improvements can become experiences")
+    normalize = lambda value: " ".join(value.casefold().split())
+    fixture_prompts = [
+        normalize(fixture.get("prompt", ""))
+        for fixture in experiment.get("fixtures", [])
+        if isinstance(fixture, dict) and isinstance(fixture.get("prompt"), str)
+    ]
+    if not any(normalize(cue.strip()) in prompt for prompt in fixture_prompts):
+        raise HieExperienceError("Experience cue must be quoted from a recorded fixture prompt")
+    candidate_content = str((experiment.get("candidate") or {}).get("content", ""))
+    if normalize(lesson.strip()) not in normalize(candidate_content):
+        raise HieExperienceError("Experience lesson must be quoted from the promoted candidate instructions")
     with get_connection() as connection:
         promotion = connection.execute(
             """SELECT id FROM hie_promotions
@@ -228,6 +239,16 @@ def list_experiences(project_id: int, *, query: str | None = None, profile_slug:
     for path in sorted(root.glob("experience-*.json")):
         record = _read(path)
         if not record or record.get("project_id") != project_id or record.get("lifecycle") != "active":
+            continue
+        source = record.get("source") or {}
+        promotion_id = source.get("promotion_id")
+        with get_connection() as connection:
+            promotion = connection.execute(
+                """SELECT id FROM hie_promotions
+                   WHERE id = ? AND project_id = ? AND experiment_id = ? AND rolled_back_at IS NULL""",
+                (promotion_id, project_id, source.get("experiment_id")),
+            ).fetchone()
+        if promotion is None:
             continue
         if profile_slug and record.get("profile_slug") != profile_slug:
             continue
