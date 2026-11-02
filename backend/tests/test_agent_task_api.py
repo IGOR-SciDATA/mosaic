@@ -157,6 +157,21 @@ def test_start_agent_rejects_blank_goal():
     assert exc.value.status_code == 422
 
 
+def test_run_endpoint_routes_confirmed_plan_through_coordinator():
+    conversation = _conversation()
+    plan = _valid_plan()
+    plan["plan_version"] = 1
+    plan["plan_confirmed"] = True
+    task = create_task(
+        type="generic", mode="agent", conversation_id=conversation.id, plan=plan
+    )
+    background = BackgroundTasks()
+    started = run_task_endpoint(task.id, background)
+    assert started.status == "planning"
+    assert len(background.tasks) == 1
+    assert background.tasks[0].func.__name__ == "run_coordinated_task"
+
+
 def test_run_endpoint_rejects_non_agent_task():
     conversation = _conversation()
     task = create_task(
