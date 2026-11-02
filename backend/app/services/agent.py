@@ -807,6 +807,26 @@ def _artifact_operation(goal: str) -> str:
 
 
 
+def _ensure_workspace_summary_source_manifest(
+    content: str,
+    exploration: dict[str, Any] | None,
+) -> str:
+    """Add deterministic source-path metadata when a substantive draft omits exact paths."""
+    if not isinstance(exploration, dict):
+        return content
+    paths = exploration.get("files_passed_to_model", [])
+    if not isinstance(paths, list):
+        return content
+    missing = [
+        str(path) for path in paths
+        if isinstance(path, str) and path.casefold() not in content.casefold()
+    ]
+    if not missing:
+        return content
+    manifest = "\n".join(f"- `{path}`" for path in missing)
+    return content.rstrip() + "\n\n## Arquivos-fonte lidos pelo Core\n\n" + manifest + "\n"
+
+
 def _validate_workspace_summary_content(content: str, exploration: dict[str, Any] | None) -> str | None:
     """Reject generic tutorials and drafts that omit source paths from the manifest."""
     if not isinstance(exploration, dict):
@@ -1536,6 +1556,8 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
     else:
         context.extend(observations)
 
+    rejected_workspace_summary_hashes: set[str] = set()
+    workspace_summary_revisions = 0
     for iteration in range(1, iteration_limit + 1):
         current = get_task(task_id)
         if current is None:
@@ -1595,8 +1617,25 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
 
                 validation_step = _current_task_step(current.plan)
                 if validation_step is not None and validation_step.get("kind") == "summarize_workspace":
+                    # The Core owns the deterministic source manifest. Small local models often
+                    # summarize the right files but omit exact paths, which otherwise caused
+                    # repeated generations without ever reaching artifact persistence.
+                    artifact_content = _ensure_workspace_summary_source_manifest(artifact_content, exploration)
                     validation_error = _validate_workspace_summary_content(artifact_content, exploration)
                     if validation_error:
+                        draft_hash = hashlib.sha256(artifact_content.encode("utf-8")).hexdigest()
+                        if draft_hash in rejected_workspace_summary_hashes:
+                            validation_error = (
+                                validation_error + " The model repeated an identical rejected draft; "
+                                "stopping recovery to avoid an unproductive generation loop."
+                            )
+                            update_task(task_id, status="failed", result={"error": validation_error, "iterations": iteration})
+                            return {"status": "failed", "error": validation_error, "iterations": iteration}
+                        rejected_workspace_summary_hashes.add(draft_hash)
+                        workspace_summary_revisions += 1
+                        if workspace_summary_revisions > 2 or iteration == iteration_limit:
+                            update_task(task_id, status="failed", result={"error": validation_error, "iterations": iteration})
+                            return {"status": "failed", "error": validation_error, "iterations": iteration}
                         context.append({
                             "role": "system",
                             "content": (
@@ -1605,9 +1644,6 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
                                 "Return the complete artifact content only."
                             ),
                         })
-                        if iteration == iteration_limit:
-                            update_task(task_id, status="failed", result={"error": validation_error, "iterations": iteration})
-                            return {"status": "failed", "error": validation_error, "iterations": iteration}
                         continue
 
                 step = _current_task_step(current.plan)
