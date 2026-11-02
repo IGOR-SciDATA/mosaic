@@ -146,6 +146,7 @@ export const api = {
     },
     getExperiment: (id) => request(`/hie/experiments/${id}`),
     runExperiment: (id) => request(`/hie/experiments/${id}/run`, { method: "POST" }),
+    cancelExperiment: (id) => request(`/hie/experiments/${id}/cancel`, { method: "POST" }),
     rejectExperiment: (id) => request(`/hie/experiments/${id}/reject`, { method: "POST" }),
     approveCandidate: (id, payload) => request(`/hie/experiments/${id}/approve`, { method: "POST", body: JSON.stringify(payload) }),
     promoteCandidate: (id, payload) => request(`/hie/experiments/${id}/promote`, { method: "POST", body: JSON.stringify(payload) }),
