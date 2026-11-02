@@ -521,8 +521,8 @@ def edit_task_plan_endpoint(task_id: int, payload: TaskPlanUpdate) -> Task:
         validate_coordinator_plan(proposed, require_tool_declarations=True)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    # Revalidate tool availability and authorization at confirmation/execution boundaries;
-    # coordinator subtasks themselves only use the existing profile/tool permission path.
+    # Registry membership is checked during plan validation; the Core still enforces
+    # the declared scope and the existing permission policy for every actual ToolCall.
     try:
         updated = update_task(task_id, plan=proposed, expected_plan_version=payload.expected_plan_version)
     except ValueError as exc:
