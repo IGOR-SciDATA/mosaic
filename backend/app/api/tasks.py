@@ -570,44 +570,32 @@ def confirm_task_plan_endpoint(task_id: int, payload: TaskPlanConfirm, backgroun
 
 @router.post("/{task_id}/run", response_model=Task, status_code=202)
 def run_task_endpoint(task_id: int, background_tasks: BackgroundTasks) -> Task:
-    """Explicitly start an agent-mode Task; normal chat remains unchanged."""
+    """Resume a confirmed Coordinator plan through the existing Task Engine."""
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     if task.mode != "agent":
         raise HTTPException(status_code=409, detail="Task must use agent mode")
-    conversation = get_conversation(task.conversation_id) if task.conversation_id is not None else None
-    if conversation is None:
+    if task.conversation_id is None or get_conversation(task.conversation_id) is None:
         raise HTTPException(status_code=400, detail="Agent Task requires a valid conversation")
     if task.status != "pending":
         raise HTTPException(status_code=409, detail=f"Task cannot start from status: {task.status}")
     plan = dict(task.plan or {})
-    if plan.get("plan_confirmed") is not True or not isinstance(plan.get("subtasks"), list):
+    if plan.get("plan_confirmed") is not True:
         raise HTTPException(status_code=409, detail="A validated Task plan must be confirmed before execution")
-    raw_goal = plan.get("goal")
-    if isinstance(raw_goal, str) and raw_goal.strip().startswith("/") and "agent_library_snapshot" not in plan:
-        scope_project_id = conversation.project_id if conversation.project_id is not None else task.project_id
-        try:
-            goal, agent_snapshot = parse_agent_invocation(scope_project_id, raw_goal)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        plan["goal"] = goal
-        plan["agent_library_snapshot"] = agent_snapshot
-        update_task(task_id, plan=plan)
-        messages = list_messages(conversation.id)
-        last_user = next((message for message in reversed(messages) if message.role == "user"), None)
-        if last_user is None or last_user.content != goal:
-            create_message(conversation.id, "user", goal)
+    try:
+        validate_coordinator_plan(plan, require_tool_declarations=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Plan is invalid: {exc}") from exc
     _inherit_conversation_hie_mode(task)
     try:
-        claimed = update_task(task_id, status="executing")
+        planning = update_task(task_id, status="planning")
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    if claimed is None:
+    if planning is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    background_tasks.add_task(_run_provider_agent, task_id)
-    return claimed
-
+    background_tasks.add_task(run_coordinated_task, task_id)
+    return planning
 
 @router.post("/{task_id}/tool-calls/{tool_call_id}/decision", response_model=Task, status_code=202)
 def decide_tool_call_endpoint(
