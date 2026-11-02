@@ -255,15 +255,17 @@ function MessageList({ messages, streaming, taskTraces, onToggleTrace }) {
 
 function TaskTrace({ trace, onToggle }) {
   const expanded = !!trace.expanded;
-  const labels = { executing: "Pensando e executando", pending: "Na fila", planning: "Planejando tarefa", validating: "Validando resultado", awaiting_approval: "Aguardando sua aprovação", completed: "Tarefa concluída", failed: "Tarefa falhou", cancelled: "Tarefa cancelada" };
+  const labels = { executing: "Executando", pending: "Na fila", planning: "Planejando tarefa", validating: "Validando resultado", awaiting_approval: "Revisão necessária", completed: "Tarefa concluída", failed: "Tarefa falhou", cancelled: "Tarefa cancelada" };
   const terminal = ["completed", "failed", "cancelled"].includes(trace.status);
   return <section className={`chat-task-trace ${trace.status || "executing"}`}>
     <button type="button" className="chat-task-trace-toggle" onClick={onToggle} aria-expanded={expanded}>
       <span className={`chat-task-trace-indicator ${terminal ? "terminal" : "working"}`}>{terminal ? (trace.status === "completed" ? "✓" : "!") : "◌"}</span>
-      <span className="chat-task-trace-heading"><strong>{labels[trace.status] || trace.status || "Pensando e executando"}</strong><small>{trace.events?.length ? `${trace.events.length} atualizações · tarefa #${trace.taskId}` : "Preparando as primeiras etapas…"}</small></span>
+      <span className="chat-task-trace-heading"><strong>{labels[trace.status] || trace.status || "Preparando tarefa"}</strong><small>{trace.events?.length ? `${trace.events.length} atualizações · tarefa #${trace.taskId}` : "Aguardando as etapas do Core…"}</small></span>
       <span className="chat-task-trace-chevron">{expanded ? "−" : "+"}</span>
     </button>
     {expanded && <div className="chat-task-trace-body">
+      {trace.status === "awaiting_approval" && trace.plan?.subtasks?.length > 0 && !trace.plan?.plan_confirmed &&
+        <TaskPlanReview task={{ id: trace.taskId, status: trace.status, plan: trace.plan }} onUpdated={updated => window.dispatchEvent(new CustomEvent("mosaic-task-updated", { detail: updated }))} />}
       {trace.events?.length ? <ol>{trace.events.map((event, index) => {
         const details = event.metadata && (event.metadata.step || event.metadata.substep || event.metadata.detail);
         return <li className={event.status === "failed" ? "trace-event-failed" : ""} key={event.id || index}>
@@ -277,6 +279,84 @@ function TaskTrace({ trace, onToggle }) {
       {trace.artifacts?.length > 0 && <div className="chat-task-artifacts"><strong>Arquivos produzidos</strong>{trace.artifacts.map(item => <div key={item.id} className="chat-task-artifact"><span>▧</span><span><b>{item.path}</b><small>{item.type || "artifact"}{item.current_verification ? " · " + item.current_verification : ""}</small></span></div>)}</div>}
       {trace.error && <p className="trace-error">{trace.error}</p>}
     </div>}
+  </section>;
+}
+
+const TASK_TOOL_OPTIONS = ["filesystem", "terminal", "calculator", "search", "web_fetch", "weather", "artifact"];
+const TASK_PROFILE_OPTIONS = ["architecture", "backend", "documentation", "frontend", "qa", "research"];
+
+function TaskPlanReview({ task, onUpdated }) {
+  const [plan, setPlan] = useState(task?.plan || null);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    setPlan(task?.plan || null);
+    setDirty(false);
+    setError("");
+  }, [task?.id, task?.plan?.plan_version]);
+  if (!plan?.subtasks || task?.status !== "awaiting_approval" || plan.plan_confirmed) return null;
+
+  function updateSubtask(index, patch) {
+    setPlan(current => ({ ...current, subtasks: current.subtasks.map((item, i) => i === index ? { ...item, ...patch } : item) }));
+    setDirty(true); setNotice(""); setError("");
+  }
+  function moveSubtask(index, delta) {
+    const target = index + delta;
+    if (target < 0 || target >= plan.subtasks.length) return;
+    const subtasks = [...plan.subtasks];
+    [subtasks[index], subtasks[target]] = [subtasks[target], subtasks[index]];
+    setPlan(current => ({ ...current, subtasks }));
+    setDirty(true); setNotice(""); setError("");
+  }
+  function addSubtask() {
+    if (plan.subtasks.length >= 10) return;
+    let n = plan.subtasks.length + 1;
+    let id = `step-${n}`;
+    while (plan.subtasks.some(item => item.id === id)) { n += 1; id = `step-${n}`; }
+    setPlan(current => ({ ...current, subtasks: [...current.subtasks, { id, goal: "", profile: "research", depends_on: [], inputs: [], allowed_tools: [], acceptance_criteria: [{ type: "non_empty" }] }] }));
+    setDirty(true); setNotice(""); setError("");
+  }
+  function removeSubtask(index) {
+    if (plan.subtasks.length <= 1) return;
+    const removedId = plan.subtasks[index].id;
+    setPlan(current => ({ ...current, subtasks: current.subtasks.filter((_, i) => i !== index).map(item => ({ ...item, depends_on: (item.depends_on || []).filter(dep => dep !== removedId) })) }));
+    setDirty(true); setNotice(""); setError("");
+  }
+  async function savePlan() {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const updated = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks });
+      setPlan(updated.plan); setDirty(false); setNotice("Plano salvo e validado pelo Core."); onUpdated?.(updated);
+      return updated;
+    } catch (err) { setError(err.message || "Não foi possível salvar o plano."); throw err; }
+    finally { setBusy(false); }
+  }
+  async function confirmPlan() {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      let latest = { plan };
+      if (dirty) {
+        latest = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks });
+        setPlan(latest.plan); setDirty(false); onUpdated?.(latest);
+      }
+      const confirmed = await api.tasks.confirmPlan(task.id);
+      setNotice("Plano confirmado. O Core iniciou a execução."); onUpdated?.(confirmed);
+    } catch (err) { setError(err.message || "Não foi possível confirmar o plano."); }
+    finally { setBusy(false); }
+  }
+  return <section className="task-plan-review" aria-label="Revisão do plano da tarefa">
+    <div className="task-plan-review-heading"><div><span className="eyebrow">ANTES DE EXECUTAR</span><h4>Revise o plano do Mosaic</h4><p>Reformule etapas, ajuste dependências e declare as ferramentas necessárias. Nada será executado até você confirmar.</p></div><span className="task-plan-version">v{plan.plan_version || 1}</span></div>
+    <label className="task-plan-goal-label">Objetivo original da tarefa</label><p className="task-plan-goal">{plan.goal}</p>
+    <div className="task-plan-subtasks">{plan.subtasks.map((subtask, index) => <article className="task-plan-subtask" key={subtask.id || index}>
+      <div className="task-plan-subtask-top"><span className="task-plan-number">{index + 1}</span><strong>Etapa {index + 1}</strong><div className="task-plan-reorder"><button type="button" title="Mover para cima" aria-label="Mover etapa para cima" disabled={busy || index === 0} onClick={() => moveSubtask(index, -1)}>↑</button><button type="button" title="Mover para baixo" aria-label="Mover etapa para baixo" disabled={busy || index === plan.subtasks.length - 1} onClick={() => moveSubtask(index, 1)}>↓</button><button type="button" title="Remover etapa" aria-label="Remover etapa" disabled={busy || plan.subtasks.length <= 1} onClick={() => removeSubtask(index)}>×</button></div></div>
+      <label>Objetivo desta etapa<textarea value={subtask.goal || ""} maxLength={2000} rows={2} onChange={e => updateSubtask(index, { goal: e.target.value })} disabled={busy}/></label>
+      <div className="task-plan-fields"><label>Especialidade<select value={subtask.profile} onChange={e => updateSubtask(index, { profile: e.target.value })} disabled={busy}>{TASK_PROFILE_OPTIONS.map(profile => <option key={profile} value={profile}>{profile}</option>)}</select></label><label>Depende das etapas (IDs separados por vírgula)<input value={(subtask.depends_on || []).join(", ")} onChange={e => updateSubtask(index, { depends_on: e.target.value.split(",").map(v => v.trim()).filter(Boolean) })} placeholder="ex.: step-1" disabled={busy}/></label></div>
+      <fieldset className="task-plan-tools"><legend>Ferramentas permitidas para esta etapa</legend><p>Isso limita o escopo; não concede permissões nem substitui aprovações do Core.</p><div>{TASK_TOOL_OPTIONS.map(tool => <label key={tool}><input type="checkbox" checked={(subtask.allowed_tools || []).includes(tool)} onChange={e => updateSubtask(index, { allowed_tools: e.target.checked ? [...new Set([...(subtask.allowed_tools || []), tool])] : (subtask.allowed_tools || []).filter(item => item !== tool) })} disabled={busy}/>{tool}</label>)}</div></fieldset>
+    </article>)}</div>
+    <div className="task-plan-actions"><button type="button" className="secondary-action" onClick={addSubtask} disabled={busy || plan.subtasks.length >= 10}>+ Adicionar etapa</button><span>{plan.subtasks.length}/10 etapas</span><div><button type="button" className="secondary-action" onClick={savePlan} disabled={busy || !dirty}>{busy ? "Salvando…" : "Salvar alterações"}</button><button type="button" className="primary-action" onClick={confirmPlan} disabled={busy}>{busy ? "Processando…" : "Confirmar e executar"}</button></div></div>
+    {notice && <p className="task-plan-notice" role="status">{notice}</p>}{error && <p className="task-inline-error" role="alert">{error}</p>}
   </section>;
 }
 
@@ -570,7 +650,8 @@ function TaskWorkspace({ conversationId, projectId, onOpenHieExperiment }) {
           <div className="hie-mode-card"><div><strong>HIE Experimental</strong><small>{hieStatus?.message || "Consultando disponibilidade no Core…"}</small></div><button type="button" className={hieStatus?.enabled ? "hie-toggle active" : "hie-toggle"} disabled={hieBusy || !hieStatus?.available} aria-pressed={!!hieStatus?.enabled} onClick={toggleTaskHie}>{hieBusy ? "Salvando…" : hieStatus?.enabled ? "Desativar" : "Ativar modo"}</button>{hieStatus?.enabled && hieStatus?.experiment_execution_available && <button type="button" className="secondary-action" onClick={() => onOpenHieExperiment?.(selectedId)}>Experimento</button>}</div>
           <div className="task-progress-meta"><span>Estado atual</span><strong>{TASK_STATUS_LABELS[selected.status] || selected.status}</strong></div>
           {active && selected.status !== "awaiting_approval" && <div className="task-progress-track"><span/></div>}
-          {selected.status === "awaiting_approval" && <div className="approval-stack"><div className="task-notice"><Icon name="check" size={17}/>O Mosaic precisa da sua autorização antes de executar esta operação.</div>{toolCalls.filter(call => call.status === "pending").map(call => <article className="approval-card" key={call.id}><span className="eyebrow">AÇÃO #{call.id} · AGUARDANDO</span><h4>Permitir {call.tool_name}?</h4><p>O agente solicitou esta ferramenta. Revise os argumentos antes de autorizar a execução.</p><details><summary>Ver operação e argumentos</summary><pre>{JSON.stringify(call.arguments, null, 2)}</pre></details><div className="approval-actions"><button type="button" className="danger-action" disabled={busy} onClick={() => decideCall(call.id, "reject")}>Recusar</button><button type="button" className="primary-action" disabled={busy} onClick={() => decideCall(call.id, "approve")}>{busy ? "Registrando…" : "Aprovar e continuar"}</button></div></article>)}</div>}
+          {selected.status === "awaiting_approval" && !selected.plan?.plan_confirmed && selected.plan?.subtasks?.length > 0 && <TaskPlanReview task={selected} onUpdated={() => refreshTasks(selected.id)}/>}
+          {selected.status === "awaiting_approval" && selected.plan?.plan_confirmed && <div className="approval-stack"><div className="task-notice"><Icon name="check" size={17}/>O Mosaic precisa da sua autorização antes de executar esta operação.</div>{toolCalls.filter(call => call.status === "pending").map(call => <article className="approval-card" key={call.id}><span className="eyebrow">AÇÃO #{call.id} · AGUARDANDO</span><h4>Permitir {call.tool_name}?</h4><p>O agente solicitou esta ferramenta. Revise os argumentos antes de autorizar a execução.</p><details><summary>Ver operação e argumentos</summary><pre>{JSON.stringify(call.arguments, null, 2)}</pre></details><div className="approval-actions"><button type="button" className="danger-action" disabled={busy} onClick={() => decideCall(call.id, "reject")}>Recusar</button><button type="button" className="primary-action" disabled={busy} onClick={() => decideCall(call.id, "approve")}>{busy ? "Registrando…" : "Aprovar e continuar"}</button></div></article>)}</div>}
           {latestModelResponse && <section className="model-response-panel"><div className="model-response-heading"><span className="eyebrow">RESPOSTA DO MODELO</span><small>{latestModelResponse.metadata?.model || "Modelo ativo"} · {new Date(latestModelResponse.timestamp).toLocaleTimeString("pt-BR", {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</small></div><p>{latestModelResponse.metadata.output_preview}</p><small>Prévia da decisão final validada pelo Core. O raciocínio interno do modelo não é exibido.</small></section>}
           <div className="task-timeline-heading"><strong>Linha do tempo</strong><span>{events.length} eventos · {connectionState === "connected" ? "ao vivo" : connectionState === "reconnecting" ? "reconectando" : "conectando"}</span></div>
           {!events.length ? <div className="task-muted">Aguardando eventos do Core…</div> : <ol className="task-timeline">{events.map(event => <li key={event.id}><span className={"timeline-marker level-" + event.level}/><div><div className="timeline-event-head"><strong>{event.message}</strong><time>{new Date(event.timestamp).toLocaleTimeString("pt-BR", {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</time></div><small>{event.component} · {event.event_name}{event.status ? " · " + event.status : ""}{event.duration_ms != null ? " · " + event.duration_ms + " ms" : ""}</small>{event.component === "model" && event.metadata && <details className="model-event-details"><summary>Detalhes operacionais</summary><div className="model-event-metadata">{event.metadata.model && <span>Modelo: {event.metadata.model}</span>}{event.metadata.attempt && <span>Tentativa: {event.metadata.attempt}</span>}{event.metadata.decision_type && <span>Decisão: {event.metadata.decision_type}</span>}{event.metadata.tool && <span>Ferramenta: {event.metadata.tool}</span>}{event.metadata.response_chars != null && <span>Tamanho da resposta: {event.metadata.response_chars} caracteres</span>}{event.metadata.error && <span>Validação: {event.metadata.error}</span>}{event.metadata.error_type && <span>Tipo de falha: {event.metadata.error_type}</span>}{event.metadata.output_preview && <div className="model-event-preview"><strong>Prévia da resposta final</strong><p>{event.metadata.output_preview}</p></div>}</div></details>}</div></li>)}</ol>}
@@ -1308,10 +1389,11 @@ export default function App(){
                 ...(items[localAssistant.localId] || {}),
                 taskId: task.id,
                 status: currentTask.status || items[localAssistant.localId]?.status || "executing",
+                plan: currentTask.plan || items[localAssistant.localId]?.plan,
                 artifacts,
               },
             }));
-            if (["completed", "failed", "cancelled", "awaiting_approval"].includes(currentTask.status)) {
+            if (["completed", "failed", "cancelled"].includes(currentTask.status)) {
               window.clearInterval(poll);
               source.close();
               if (currentTask.status === "completed") {
