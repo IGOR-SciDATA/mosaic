@@ -11,7 +11,78 @@ def get_connection() -> sqlite3.Connection:
     return connection
 
 
+def _migrate_hie_experiment_cancelled_status() -> None:
+    """Safely extend the existing HIE experiment status CHECK without adding a table."""
+    with get_connection() as connection:
+        table = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'hie_experiments'"
+        ).fetchone()
+        if table is None or "'cancelled'" in (table["sql"] or ""):
+            return
+        # This runs before init_db opens its write transaction. Preserve existing rows and
+        # the stable table name referenced by hie_candidate_approvals/hie_promotions.
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute("BEGIN IMMEDIATE")
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(hie_experiments)").fetchall()
+        }
+        select_defaults = {
+            "candidate_origin": "'user_supplied'",
+            "provider": "''",
+            "model_name": "''",
+            "budget_json": "'{}'",
+        }
+        ordered = [
+            "id", "task_id", "source_task_id", "conversation_id", "project_id",
+            "profile_slug", "candidate_origin", "provider", "model_name", "budget_json",
+            "status", "baseline_snapshot", "candidate", "fixtures", "candidate_diff",
+            "results", "created_at", "updated_at",
+        ]
+        expressions = [
+            column if column in columns else select_defaults[column]
+            for column in ordered
+        ]
+        connection.execute("""
+            CREATE TABLE hie_experiments_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                source_task_id INTEGER NULL,
+                conversation_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
+                profile_slug TEXT NOT NULL,
+                candidate_origin TEXT NOT NULL DEFAULT 'user_supplied',
+                provider TEXT NOT NULL DEFAULT '',
+                model_name TEXT NOT NULL DEFAULT '',
+                budget_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (
+                    status IN ('draft', 'queued', 'running', 'completed', 'failed', 'rejected', 'cancelled')
+                ),
+                baseline_snapshot TEXT NOT NULL,
+                candidate TEXT NOT NULL,
+                fixtures TEXT NOT NULL,
+                candidate_diff TEXT NOT NULL,
+                results TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (source_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )
+        """)
+        connection.execute(
+            "INSERT INTO hie_experiments_new (" + ", ".join(ordered) + ") SELECT "
+            + ", ".join(expressions) + " FROM hie_experiments"
+        )
+        connection.execute("DROP TABLE hie_experiments")
+        connection.execute("ALTER TABLE hie_experiments_new RENAME TO hie_experiments")
+        connection.commit()
+        connection.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db() -> None:
+    _migrate_hie_experiment_cancelled_status()
     with get_connection() as connection:
         connection.execute("CREATE TABLE IF NOT EXISTS _mosaic_meta (key TEXT PRIMARY KEY, value TEXT)")
         connection.execute("""
@@ -164,7 +235,7 @@ def init_db() -> None:
                 model_name TEXT NOT NULL DEFAULT '',
                 budget_json TEXT NOT NULL DEFAULT '{}',
                 status TEXT NOT NULL DEFAULT 'draft' CHECK (
-                    status IN ('draft', 'queued', 'running', 'completed', 'failed', 'rejected')
+                    status IN ('draft', 'queued', 'running', 'completed', 'failed', 'rejected', 'cancelled')
                 ),
                 baseline_snapshot TEXT NOT NULL,
                 candidate TEXT NOT NULL,
