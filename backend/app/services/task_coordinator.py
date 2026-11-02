@@ -258,6 +258,8 @@ def run_coordinated_task(
                 "inputs": list(spec["inputs"]),
                 "dependency_results": {},
             }
+            if isinstance(plan.get("agent_library_snapshot"), dict):
+                child_plan["agent_library_snapshot"] = plan["agent_library_snapshot"]
             child = create_task(
                 type=parent.type,
                 mode="agent",
