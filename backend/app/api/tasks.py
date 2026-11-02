@@ -326,7 +326,7 @@ def coordinate_task_endpoint(task_id: int, background_tasks: BackgroundTasks) ->
     if task.status != "awaiting_approval" or plan.get("plan_confirmed") is not True:
         raise HTTPException(status_code=409, detail="A plan must be reviewed and explicitly confirmed before coordination")
     try:
-        validate_coordinator_plan(plan)
+        validate_coordinator_plan(plan, require_tool_declarations=True)
         planning = update_task(task_id, status="planning")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -499,11 +499,17 @@ def edit_task_plan_endpoint(task_id: int, payload: TaskPlanUpdate) -> Task:
     current = task.plan if isinstance(task.plan, dict) else {}
     if payload.plan.get("goal") != current.get("goal"):
         raise HTTPException(status_code=422, detail="Plan edits must preserve the original Task objective")
-    proposed = dict(payload.plan)
+    if set(payload.plan) - {"goal", "subtasks"}:
+        raise HTTPException(status_code=422, detail="Only the objective and subtasks may be edited")
+    preserved = {
+        key: value for key, value in current.items()
+        if key not in {"goal", "subtasks", "plan_version", "plan_confirmed", "coordinator"}
+    }
+    proposed = {**preserved, **payload.plan}
     proposed["plan_version"] = int(current.get("plan_version", 0)) + 1
     proposed["plan_confirmed"] = False
     try:
-        validate_coordinator_plan(proposed)
+        validate_coordinator_plan(proposed, require_tool_declarations=True)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     # Revalidate tool availability and authorization at confirmation/execution boundaries;
@@ -527,7 +533,7 @@ def confirm_task_plan_endpoint(task_id: int, background_tasks: BackgroundTasks) 
         raise HTTPException(status_code=409, detail="Task is not awaiting plan confirmation")
     plan = dict(task.plan or {})
     try:
-        validate_coordinator_plan(plan)
+        validate_coordinator_plan(plan, require_tool_declarations=True)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Plan is invalid: {exc}") from exc
     plan["plan_confirmed"] = True
