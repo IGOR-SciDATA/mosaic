@@ -1,7 +1,13 @@
 """Sequential coordination using the existing Task Engine and persisted Task.plan JSON."""
 
 import hashlib
+import json
 from typing import Any, Callable
+
+from app.models.conversation_repository import get_conversation
+from app.models.repository import get_model
+from app.providers.factory import resolve_model_provider
+from app.services.agent_profiles import PROFILE_NAMES
 
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import create_task, get_task, list_tasks, update_task
@@ -167,6 +173,48 @@ def _fail_parent(parent: Any, *, reason: str, child_id: int | None = None) -> An
         level="error",
     )
     return parent
+
+
+def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]:
+    """Generate a proposal in the existing Coordinator subtask contract; never execute tools."""
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        raise ValueError("Conversation not found")
+    model = get_model(conversation.model_id)
+    if model is None or not model.enabled:
+        raise ValueError("Selected model is unavailable")
+    provider = resolve_model_provider(model)
+    profiles = sorted(PROFILE_NAMES)
+    prompt = (
+        "Create a plan for the user's Task using the Mosaic Coordinator contract. "
+        "Return only a JSON object with a 'subtasks' array. Each subtask must contain "
+        "id (unique short string), goal, profile (one of the supplied profiles), "
+        "depends_on (array of prior subtask ids), inputs (array of strings), and "
+        "acceptance_criteria (non-empty array of objects using only types non_empty, "
+        "contains, not_contains, min_chars; contains/not_contains require string value, "
+        "min_chars requires positive integer value). Use 1-10 subtasks, no unknown tools, "
+        "no invented permissions, and include verification in the goals/criteria. "
+        "The plan is a proposal, not authorization or evidence of execution.\n"
+        f"Allowed profiles: {', '.join(profiles)}\n"
+        f"User objective: {goal}"
+    )
+    raw = provider.generate(
+        messages=[
+            {"role": "system", "content": "You are Mosaic's Task Planner. Do not reveal private reasoning. Return only the requested JSON."},
+            {"role": "user", "content": prompt},
+        ],
+        model_name=model.model_name,
+        configuration={**model.configuration, "format": "json", "temperature": 0, "think": False},
+    )
+    try:
+        proposed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("Planner returned invalid JSON") from exc
+    if not isinstance(proposed, dict):
+        raise ValueError("Planner output must be a JSON object")
+    plan = {"goal": goal, "subtasks": proposed.get("subtasks")}
+    validate_coordinator_plan(plan)
+    return plan
 
 
 def run_coordinated_task(
