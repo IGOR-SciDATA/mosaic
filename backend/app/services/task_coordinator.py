@@ -7,7 +7,7 @@ from typing import Any, Callable
 from app.models.conversation_repository import get_conversation
 from app.models.repository import get_model
 from app.providers.factory import resolve_model_provider
-from app.services.agent_profiles import PROFILE_NAMES
+from app.tools import registry
 
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import create_task, get_task, list_tasks, update_task
@@ -21,7 +21,7 @@ MAX_INTEGRATED_OUTPUT_CHARS = 20_000
 ACCEPTANCE_TYPES = {"non_empty", "contains", "not_contains", "min_chars"}
 
 
-def validate_coordinator_plan(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
+def validate_coordinator_plan(plan: dict[str, Any] | None, *, require_tool_declarations: bool = False) -> list[dict[str, Any]]:
     if not isinstance(plan, dict):
         raise ValueError("Coordinator plan must be an object")
     raw = plan.get("subtasks")
@@ -57,6 +57,21 @@ def validate_coordinator_plan(plan: dict[str, Any] | None) -> list[dict[str, Any
             raise ValueError(f"Subtask {key} inputs must be a list of strings")
         if len(inputs) > 20 or any(len(item) > 2_000 for item in inputs):
             raise ValueError(f"Subtask {key} inputs exceed the supported bounds")
+        allowed_tools = raw_spec.get("allowed_tools")
+        if allowed_tools is None and require_tool_declarations:
+            raise ValueError(f"Subtask {key} must declare allowed_tools before confirmation")
+        if allowed_tools is not None:
+            if (
+                not isinstance(allowed_tools, list)
+                or any(not isinstance(name, str) or not name.strip() for name in allowed_tools)
+                or len(set(allowed_tools)) != len(allowed_tools)
+                or len(allowed_tools) > 20
+            ):
+                raise ValueError(f"Subtask {key} has an invalid allowed_tools list")
+            registered_tools = {tool.name for tool in registry.list()}
+            unknown_tools = set(allowed_tools) - registered_tools
+            if unknown_tools:
+                raise ValueError(f"Subtask {key} declares unknown tools: {', '.join(sorted(unknown_tools))}")
         criteria = raw_spec.get("acceptance_criteria")
         if not isinstance(criteria, list) or not criteria:
             raise ValueError(f"Subtask {key} requires acceptance_criteria")
@@ -190,6 +205,7 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
         "Return only a JSON object with a 'subtasks' array. Each subtask must contain "
         "id (unique short string), goal, profile (one of the supplied profiles), "
         "depends_on (array of prior subtask ids), inputs (array of strings), and "
+        "allowed_tools (array of registered tool names; use [] when no tools are needed), "
         "acceptance_criteria (non-empty array of objects using only types non_empty, "
         "contains, not_contains, min_chars; contains/not_contains require string value, "
         "min_chars requires positive integer value). Use 1-10 subtasks, no unknown tools, "
@@ -213,7 +229,7 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
     if not isinstance(proposed, dict):
         raise ValueError("Planner output must be a JSON object")
     plan = {"goal": goal, "subtasks": proposed.get("subtasks")}
-    validate_coordinator_plan(plan)
+    validate_coordinator_plan(plan, require_tool_declarations=True)
     return plan
 
 
@@ -231,7 +247,7 @@ def run_coordinated_task(
         raise ValueError(f"Coordinator Task cannot run from state {parent.status}")
 
     plan = dict(parent.plan or {})
-    ordered_specs = validate_coordinator_plan(plan)
+    ordered_specs = validate_coordinator_plan(plan, require_tool_declarations=plan.get("plan_confirmed") is True)
     if parent.status == "pending":
         parent = update_task(parent.id, status="planning")
 
