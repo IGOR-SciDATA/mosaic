@@ -673,12 +673,17 @@ def cancel_experiment(experiment_id: int) -> dict[str, Any]:
             raise HieExperimentError(f"Experiment cannot be cancelled from status {row['status']}")
         experiment = _row_to_experiment(row)
         results = experiment.get("results") or {}
+        artifact_row = connection.execute(
+            "SELECT COUNT(*) AS count FROM artifacts WHERE task_id = ? AND type LIKE 'hie_%'",
+            (experiment["task_id"],),
+        ).fetchone()
+        has_partial_evidence = bool(results.get("evidence")) or bool(artifact_row and artifact_row["count"])
         results.update({
             "cancelled_by_user": True,
             "cancelled_at": _now(),
             "automatic_retry": False,
             "automatic_promotion": False,
-            "preserved_partial_evidence": bool(results.get("evidence")),
+            "preserved_partial_evidence": has_partial_evidence,
         })
         cursor = connection.execute(
             "UPDATE hie_experiments SET status = 'cancelled', results = ?, updated_at = ? WHERE id = ? AND status = ?",
