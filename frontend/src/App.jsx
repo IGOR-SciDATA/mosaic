@@ -336,11 +336,13 @@ function TaskPlanReview({ task, onUpdated }) {
   async function confirmPlan() {
     setBusy(true); setError(""); setNotice("");
     try {
+      let versionToConfirm = plan.plan_version;
       if (dirty) {
         const latest = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks }, plan.plan_version);
+        versionToConfirm = latest.plan.plan_version;
         setPlan(latest.plan); setDirty(false); onUpdated?.(latest);
       }
-      const confirmed = await api.tasks.confirmPlan(task.id);
+      const confirmed = await api.tasks.confirmPlan(task.id, versionToConfirm);
       setNotice("Plano confirmado. O Core iniciou a execução."); onUpdated?.(confirmed);
     } catch (err) { setError(err.message || "Não foi possível confirmar o plano."); }
     finally { setBusy(false); }
