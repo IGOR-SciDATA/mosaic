@@ -1056,6 +1056,9 @@ function HieExperimentModal({scope,onClose}) {
   const [approved,setApproved]=useState(false);
   const [promotion,setPromotion]=useState(null);
   const [activeProfile,setActiveProfile]=useState(null);
+  const [experiences,setExperiences]=useState([]);
+  const [experienceCue,setExperienceCue]=useState("");
+  const [experienceLesson,setExperienceLesson]=useState("");
 
   const scopeKey=scope?.taskId ? "task_id="+scope.taskId : "conversation_id="+scope?.conversationId;
   useEffect(()=>{
@@ -1065,6 +1068,15 @@ function HieExperimentModal({scope,onClose}) {
       .catch(err=>{if(active)setError("Não foi possível carregar os experimentos: "+err.message);});
     return ()=>{active=false;};
   },[scopeKey]);
+
+  useEffect(()=>{
+    let active=true;
+    if(!scope?.projectId){setExperiences([]);return ()=>{active=false;};}
+    api.hie.listExperiences({projectId:scope.projectId}).then(items=>{
+      if(active)setExperiences(Array.isArray(items)?items:[]);
+    }).catch(err=>{if(active)setError("Não foi possível carregar experiências HIE: "+err.message);});
+    return ()=>{active=false;};
+  },[scope?.projectId]);
 
   useEffect(()=>{
     if(!experiment || !["queued","running"].includes(experiment.status))return undefined;
@@ -1143,9 +1155,51 @@ function HieExperimentModal({scope,onClose}) {
       const result=await api.hie.promoteCandidate(experiment.id,{candidate_sha256:candidateHash,active_version:baseline.version,active_sha256:baseline.sha256});
       setPromotion(result);
       setActiveProfile(result.profile);
+      setExperienceCue(experiment.fixtures?.[0]?.prompt || prompt);
+      setExperienceLesson("");
       setApproved(false);
       setNotice(`Candidato promovido como versão v${result.profile.version}. O conteúdo anterior foi preservado para rollback.`);
     }catch(err){setError(err.message);setApproved(false);}
+    finally{setBusy(false);}
+  }
+
+  async function saveExperience(){
+    if(!experiment||!promotion||!scope?.projectId||busy)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const created=await api.hie.createExperience({
+        project_id:scope.projectId,
+        experiment_id:experiment.id,
+        cue:experienceCue.trim(),
+        lesson:experienceLesson.trim(),
+      });
+      setExperiences(items=>[created,...items.filter(item=>item.id!==created.id)]);
+      setExperienceLesson("");
+      setNotice("Experiência registrada com proveniência e hashes. Ela só será recuperada quando o HIE estiver ativado neste escopo.");
+    }catch(err){setError(err.message);}
+    finally{setBusy(false);}
+  }
+
+  async function deactivateExperienceItem(item){
+    if(!scope?.projectId||busy)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      await api.hie.deactivateExperience(item.id,scope.projectId);
+      setExperiences(items=>items.filter(existing=>existing.id!==item.id));
+      setNotice("Experiência desativada. As evidências originais foram preservadas.");
+    }catch(err){setError(err.message);}
+    finally{setBusy(false);}
+  }
+
+  async function deleteExperienceItem(item){
+    if(!scope?.projectId||busy)return;
+    if(!window.confirm("Excluir esta experiência da biblioteca? Os experimentos e artefatos originais serão preservados."))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      await api.hie.deleteExperience(item.id,scope.projectId);
+      setExperiences(items=>items.filter(existing=>existing.id!==item.id));
+      setNotice("Registro de experiência excluído. Os artefatos de origem continuam preservados.");
+    }catch(err){setError(err.message);}
     finally{setBusy(false);}
   }
 
@@ -1199,6 +1253,23 @@ function HieExperimentModal({scope,onClose}) {
          </div>}
          {promotion&&<div className="hie-experiment-actions"><span className="hie-hash-line">Promovido como v{promotion.profile?.version} · promoção #{promotion.promotion_id}</span><button type="button" className="secondary-action" onClick={rollbackPromotedCandidate} disabled={busy}>Rollback com confirmação</button></div>}
          <p className="modal-hint">{promotion?"A promoção foi explícita e a versão anterior está preservada. O rollback só funciona se o perfil ativo ainda corresponder exatamente à versão promovida.":"Nenhuma versão ativa é alterada até a confirmação explícita de promoção. Uma aprovação fica inválida se o hash do candidato ou a versão/hash do perfil ativo mudar."}</p>
+      </section>}
+      {promotion&&experiment?.results?.assessment==="candidate_better"&&scope?.projectId&&<section className="hie-experience-create">
+        <strong>Registrar uma experiência reutilizável</strong>
+        <p className="modal-hint">A dica deve vir do texto do candidato promovido; o contexto deve corresponder ao prompt de teste. A criação não faz novas chamadas ao modelo.</p>
+        <form className="modal-form" onSubmit={event=>{event.preventDefault();saveExperience();}}>
+          <label>Contexto / cue <textarea value={experienceCue} onChange={event=>setExperienceCue(event.target.value)} required maxLength={1200} rows={2} placeholder="Use o prompt exato de uma fixture registrada."/></label>
+          <label>Lição verificada <textarea value={experienceLesson} onChange={event=>setExperienceLesson(event.target.value)} required maxLength={2400} rows={2} placeholder="Cole uma frase exata das instruções candidatas promovidas."/></label>
+          <button type="submit" className="primary-action" disabled={busy||!experienceCue.trim()||!experienceLesson.trim()}>Salvar experiência baseada em evidências</button>
+        </form>
+      </section>}
+      {scope?.projectId&&<section className="hie-experience-library">
+        <div className="hie-experience-library-heading"><strong>Biblioteca de experiências do projeto</strong><span>{experiences.length} ativas</span></div>
+        {experiences.length===0?<p className="modal-hint">Nenhuma experiência ativa. Só experiências ligadas a candidatos promovidos, evidências verificadas e melhorias mensuradas podem entrar aqui.</p>:experiences.map(item=><article className="hie-experience-card" key={item.id}>
+          <div><strong>{item.cue}</strong><small>Perfil {item.profile_slug} · confiança heurística {item.confidence} · experimento #{item.source?.experiment_id}</small></div>
+          <p>{item.lesson}</p><small>Limitação: {item.limitations}</small>
+          <div className="hie-experience-card-actions"><button type="button" className="secondary-action" disabled={busy} onClick={()=>deactivateExperienceItem(item)}>Desativar</button><button type="button" className="secondary-action" disabled={busy} onClick={()=>deleteExperienceItem(item)}>Excluir registro</button></div>
+        </article>)}
       </section>}
     </div>
   </Modal>;
@@ -1476,7 +1547,7 @@ export default function App(){
   }
 
   return <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${contextVisible ? "" : " context-hidden"}`}><Sidebar projects={projects} conversations={conversations} projectTab={projectTab} onNavigateTab={tab=>{setProjectTab(tab);setHomeActive(false);setMobile(false);}} activeProjectId={projectId} activeConversationId={homeActive ? null : conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>{setHomeActive(false);setModal("conversation");}} onDeleteProject={item=>setModal({type:"delete-project",item})} onDeleteConversation={item=>setModal({type:"delete-conversation",item})} onModelSettings={()=>setModal({type:"models"})} onHelp={()=>setModal({type:"help"})} onHome={()=>{setHomeActive(true);setConversationId(null);setMessages([]);setProjectTab("Conversa");setMobile(false);localStorage.removeItem("mosaic.activeConversationId");}} mobileOpen={mobile} onClose={()=>setMobile(false)} collapsed={sidebarCollapsed} onToggleCollapsed={()=>setSidebarCollapsed(value=>!value)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
-    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} onContextToggle={()=>setContextVisible(value=>!value)} contextVisible={contextVisible} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab} theme={theme} onToggleTheme={()=>setTheme(current=>current==="dark"?"light":"dark")}/><div className="workspace-grid"><main className="workspace">{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null} onOpenHieExperiment={taskId => setModal({type:"hie-experiment",scope:{taskId}})}/> : projectTab === "Biblioteca" ? <AgentLibraryWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : homeActive ? <HomeWelcome/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending} taskTraces={taskTraces} onToggleTrace={toggleTrace}/>} </div><Composer disabled={!conversation||sending} model={model} models={models} conversation={conversation} projectId={project?.id ?? null} onModelChange={changeConversationModel} onModelSettings={()=>setModal({type:"models"})} onSubmit={sendMessage} onFiles={()=>setProjectTab("Arquivos")} onAgent={()=>setProjectTab("Agente")} text={draft} setText={setDraft} hieEnabled={!!hieStatus?.enabled} hieBusy={hieBusy || !hieStatus?.available} hieExperimentAvailable={!!hieStatus?.experiment_execution_available} onToggleHie={toggleConversationHie} onOpenHieExperiment={()=>setModal({type:"hie-experiment",scope:{conversationId}})}/></>}</main>{contextVisible&&<button type="button" className="context-overlay" onClick={()=>setContextVisible(false)} aria-label="Fechar painel Etapas e contexto"/>}{contextVisible&&<ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/>}</div></div>
+    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} onContextToggle={()=>setContextVisible(value=>!value)} contextVisible={contextVisible} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab} theme={theme} onToggleTheme={()=>setTheme(current=>current==="dark"?"light":"dark")}/><div className="workspace-grid"><main className="workspace">{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null} onOpenHieExperiment={taskId => setModal({type:"hie-experiment",scope:{taskId,projectId:project?.id ?? null}})}/> : projectTab === "Biblioteca" ? <AgentLibraryWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : homeActive ? <HomeWelcome/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending} taskTraces={taskTraces} onToggleTrace={toggleTrace}/>} </div><Composer disabled={!conversation||sending} model={model} models={models} conversation={conversation} projectId={project?.id ?? null} onModelChange={changeConversationModel} onModelSettings={()=>setModal({type:"models"})} onSubmit={sendMessage} onFiles={()=>setProjectTab("Arquivos")} onAgent={()=>setProjectTab("Agente")} text={draft} setText={setDraft} hieEnabled={!!hieStatus?.enabled} hieBusy={hieBusy || !hieStatus?.available} hieExperimentAvailable={!!hieStatus?.experiment_execution_available} onToggleHie={toggleConversationHie} onOpenHieExperiment={()=>setModal({type:"hie-experiment",scope:{conversationId,projectId:project?.id ?? null}})}/></>}</main>{contextVisible&&<button type="button" className="context-overlay" onClick={()=>setContextVisible(false)} aria-label="Fechar painel Etapas e contexto"/>}{contextVisible&&<ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/>}</div></div>
     {modal?.type==="delete-conversation"&&<Modal title="Excluir conversa" onClose={()=>!saving&&setModal(null)}><div className="modal-form delete-confirm-content"><span className="delete-confirm-icon"><Icon name="trash-2" size={22}/></span><h3>Excluir “{modal.item?.title || "Nova conversa"}”?</h3><p>Esta ação remove permanentemente a conversa, suas mensagens e as Tasks vinculadas no banco de dados. Não é possível desfazer.</p><div className="delete-confirm-actions"><button type="button" className="secondary-button" onClick={()=>setModal(null)} disabled={saving}>Cancelar</button><button type="button" className="danger-button" onClick={()=>deleteConversationConfirmed(modal.item)} disabled={saving}>{saving?"Excluindo…":"Excluir conversa"}</button></div></div></Modal>}
     {modal?.type==="delete-project"&&<Modal title="Excluir projeto" onClose={()=>!saving&&setModal(null)}><div className="modal-form delete-confirm-content"><span className="delete-confirm-icon"><Icon name="trash-2" size={22}/></span><h3>Excluir o projeto “{modal.item?.name}”?</h3><p>Esta ação remove o projeto do banco. As conversas e memórias serão preservadas e desvinculadas dele. Tasks ativas precisam ser canceladas ou concluídas antes. Não é possível desfazer.</p><div className="delete-confirm-actions"><button type="button" className="secondary-button" onClick={()=>setModal(null)} disabled={saving}>Cancelar</button><button type="button" className="danger-button" onClick={()=>deleteProjectConfirmed(modal.item)} disabled={saving}>{saving?"Excluindo…":"Excluir projeto"}</button></div></div></Modal>}
     {modal?.type==="help"&&<Modal title="Ajuda" onClose={()=>setModal(null)}><div className="modal-form"><p className="modal-hint">O Mosaic é uma interface conectada ao Mosaic Core. O estado persistente vem do backend; esta interface apresenta e controla esse estado.</p><div className="help-block"><strong>Começando</strong><span>Crie um projeto, depois crie uma conversa e selecione um modelo registrado no Core.</span></div><div className="help-block"><strong>Modelos</strong><span>Use Configurações para cadastrar e ajustar modelos. O status consulta o Ollama local ou verifica se OPENAI_API_KEY está configurada no backend para a OpenAI.</span></div><div className="help-block"><strong>Contexto</strong><span>O painel lateral mostra projeto, modelo, memória e histórico reais da conversa ativa.</span></div></div></Modal>}
