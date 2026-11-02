@@ -11,7 +11,13 @@ from app.tools import registry
 
 from app.models.task_event_repository import create_task_event
 from app.models.task_repository import create_task, get_task, list_tasks, update_task
-from app.services.agent import run_agent
+from app.services.agent import (
+    _artifact_output_path,
+    _goal_requests_workspace_exploration,
+    _goal_requires_file_artifact,
+    _requested_workspace_scope,
+    run_agent,
+)
 from app.services.agent_decision import create_provider_decider
 from app.services.agent_profiles import PROFILE_NAMES, create_agent_profile_snapshot
 
@@ -211,6 +217,19 @@ def _normalize_missing_acceptance_criteria(proposed: dict[str, Any]) -> dict[str
     return normalized
 
 
+def _workspace_intent_for_goal(goal: str) -> dict[str, Any] | None:
+    """Capture workspace scope and output path from the original request, not model prose."""
+    if not _goal_requests_workspace_exploration(goal):
+        return None
+    creates_artifact = _goal_requires_file_artifact(goal)
+    return {
+        "source_goal": goal,
+        "scope": _requested_workspace_scope(goal) or ".",
+        "output_path": _artifact_output_path(goal) if creates_artifact else None,
+        "requires_artifact": creates_artifact,
+    }
+
+
 def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]:
     """Generate a proposal in the existing Coordinator subtask contract; never execute tools."""
     conversation = get_conversation(conversation_id)
@@ -241,6 +260,9 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
         "for commands; calculator for arithmetic; weather for weather data. Declare every tool "
         "needed by Core-owned workspace preparation or by the subtask, but no unrelated tools. "
         "No invented permissions, and include verification in the goals/criteria. "
+        "Write every natural-language subtask goal in the same language as the user's objective. "
+        "Do not translate or rewrite literal file names, directory names, paths, or extensions. "
+        "Preserve the user's exact requested output path. The Core will enforce workspace scope separately. "
         "The plan is a proposal, not authorization or evidence of execution.\n"
         f"Allowed profiles: {', '.join(profiles)}\n"
         f"Registered tools: {', '.join(available_tools)}\n"
@@ -261,7 +283,33 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
     if not isinstance(proposed, dict):
         raise ValueError("Planner output must be a JSON object")
     proposed = _normalize_missing_acceptance_criteria(proposed)
-    plan = {"goal": goal, "subtasks": proposed.get("subtasks")}
+    workspace_intent = _workspace_intent_for_goal(goal)
+    subtasks = proposed.get("subtasks")
+
+    # Workspace summarization already has a deterministic Core workflow. For this
+    # well-defined pattern, don't let model paraphrasing or language switching erase
+    # the original folder/output path: keep one explicit subtask in the user's words.
+    registered_tools_set = set(available_tools)
+    if (
+        isinstance(workspace_intent, dict)
+        and workspace_intent.get("requires_artifact") is True
+        and isinstance(workspace_intent.get("output_path"), str)
+        and {"filesystem", "artifact"} <= registered_tools_set
+        and "research" in PROFILE_NAMES
+    ):
+        subtasks = [{
+            "id": "workspace_summary",
+            "goal": goal,
+            "profile": "research",
+            "depends_on": [],
+            "inputs": [],
+            "allowed_tools": ["filesystem", "artifact"],
+            "acceptance_criteria": [{"type": "non_empty"}],
+        }]
+
+    plan = {"goal": goal, "subtasks": subtasks}
+    if workspace_intent is not None:
+        plan["workspace_intent"] = workspace_intent
     validate_coordinator_plan(plan, require_tool_declarations=True)
     return plan
 
@@ -312,6 +360,8 @@ def run_coordinated_task(
             }
             if isinstance(plan.get("agent_library_snapshot"), dict):
                 child_plan["agent_library_snapshot"] = plan["agent_library_snapshot"]
+            if isinstance(plan.get("workspace_intent"), dict):
+                child_plan["workspace_intent"] = dict(plan["workspace_intent"])
             child = create_task(
                 type=parent.type,
                 mode="agent",
@@ -371,6 +421,8 @@ def run_coordinated_task(
         child_plan["depends_on_task_ids"] = [children[dependency].id for dependency in spec["depends_on"]]
         child_plan["inputs"] = list(spec["inputs"])
         child_plan["acceptance_criteria"] = spec["acceptance_criteria"]
+        if isinstance(plan.get("workspace_intent"), dict):
+            child_plan["workspace_intent"] = dict(plan["workspace_intent"])
         child = update_task(child.id, plan=child_plan)
 
         if child.status == "awaiting_approval":

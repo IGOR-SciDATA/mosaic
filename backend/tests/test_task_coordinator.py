@@ -211,3 +211,42 @@ def test_planner_fills_omitted_acceptance_criteria_with_non_empty_fallback(monke
 
     assert plan["subtasks"][0]["acceptance_criteria"] == [{"type": "non_empty"}]
     assert task_coordinator.validate_coordinator_plan(plan, require_tool_declarations=True)
+
+
+def test_planner_preserves_original_workspace_scope_and_language_independent_output_path(monkeypatch, tmp_path):
+    import json
+    from app.services import task_coordinator
+
+    model = create_model("Planner workspace", "ollama", "planner:workspace")
+    conversation = create_conversation("Planner workspace", model.id)
+    raw_plan = {
+        "subtasks": [{
+            "id": "T001",
+            "goal": "Create the test_task_planner.md file",
+            "profile": "research",
+            "depends_on": [],
+            "inputs": [],
+            "allowed_tools": ["filesystem", "artifact"],
+            "acceptance_criteria": [{"type": "non_empty"}],
+        }]
+    }
+
+    class FakeProvider:
+        def generate(self, **_kwargs):
+            return json.dumps(raw_plan)
+
+    monkeypatch.setattr(task_coordinator, "resolve_model_provider", lambda _model: FakeProvider())
+    original_goal = (
+        "Após esse prompt, leia todos os arquivos na pasta docs "
+        "e gere um resumo em um arquivo chamado teste_task_planner.md"
+    )
+    plan = task_coordinator.generate_coordinator_plan(conversation.id, original_goal)
+
+    assert plan["goal"] == original_goal
+    assert len(plan["subtasks"]) == 1
+    assert plan["subtasks"][0]["goal"] == original_goal
+    assert plan["subtasks"][0]["allowed_tools"] == ["filesystem", "artifact"]
+    assert plan["workspace_intent"]["scope"] == "docs"
+    assert plan["workspace_intent"]["output_path"] == "teste_task_planner.md"
+    assert plan["workspace_intent"]["source_goal"] == original_goal
+    assert task_coordinator.validate_coordinator_plan(plan, require_tool_declarations=True)

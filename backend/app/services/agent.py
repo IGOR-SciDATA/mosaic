@@ -1148,6 +1148,8 @@ def _prepare_workspace_exploration(
     conversation_id: int,
     goal: str,
     context: list[dict[str, Any]],
+    *,
+    requested_scope_override: str | None = None,
 ) -> dict[str, Any] | None:
     """Run workspace discovery in Core code before model inference, through existing ToolCall/ToolResult."""
     if not _goal_requests_workspace_exploration(goal):
@@ -1167,6 +1169,13 @@ def _prepare_workspace_exploration(
         pass
 
     requested_scope = _requested_workspace_scope(goal)
+    if isinstance(requested_scope_override, str) and requested_scope_override:
+        candidate_scope = Path(requested_scope_override)
+        if (
+            not candidate_scope.is_absolute()
+            and all(part not in {"", ".", ".."} for part in candidate_scope.parts)
+        ):
+            requested_scope = candidate_scope.as_posix()
     scope = requested_scope or "."
     arguments = {"operation": "explore", "path": scope}
     call = None
@@ -1446,6 +1455,12 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
         raise ValueError(f"Task is not executable: {task.status}")
 
     goal = str((task.plan or {}).get("goal", "")).strip()
+    workspace_intent = (task.plan or {}).get("workspace_intent")
+    scope_override = (
+        workspace_intent.get("scope")
+        if isinstance(workspace_intent, dict) and isinstance(workspace_intent.get("scope"), str)
+        else None
+    )
     plan = _ensure_task_plan(task_id)
     if task.status == "pending":
         update_task(task_id, status="executing")
@@ -1454,7 +1469,8 @@ def run_agent(task_id: int, decide: Callable[[list[dict[str, Any]]], dict[str, A
     # Read them through the normal ToolCall/ToolResult path and paginate in Core code.
     source_context: list[dict[str, Any]] = []
     exploration = _prepare_workspace_exploration(
-        task_id, task.conversation_id, goal, source_context
+        task_id, task.conversation_id, goal, source_context,
+        requested_scope_override=scope_override,
     )
     missing_sources = [] if exploration is not None else _prepare_task_sources(
         task_id,
