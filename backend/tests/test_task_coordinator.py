@@ -6,7 +6,7 @@ from app.models.conversation_repository import create_conversation
 from app.models.project_repository import create_project
 from app.models.repository import create_model
 from app.models.task_event_repository import list_task_events
-from app.models.task_repository import create_task, get_task, list_tasks
+from app.models.task_repository import create_task, get_task, list_tasks, update_task
 from app.services.agent_profiles import validate_agent_profile_snapshot
 from app.services.task_coordinator import run_coordinated_task
 
@@ -168,3 +168,13 @@ def test_coordinate_endpoint_schedules_existing_task_engine(tmp_path):
     assert len(background.tasks) == 1
     assert background.tasks[0].func is run_coordinated_task
     assert get_task(parent.id).status == "planning"
+
+
+def test_unconfirmed_plan_is_rejected(tmp_path):
+    parent = _parent_task(tmp_path, {"goal": "Coordinate architecture, backend and QA", "subtasks": _specs()})
+    plan = dict(parent.plan)
+    plan["plan_confirmed"] = False
+    update_task(parent.id, plan=plan)
+    with pytest.raises(ValueError):
+        run_coordinated_task(parent.id)
+    assert list_tasks(conversation_id=parent.conversation_id) == [get_task(parent.id)]
