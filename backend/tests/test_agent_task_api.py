@@ -14,6 +14,7 @@ from app.db.database import init_db
 from app.models.conversation_repository import create_conversation
 from app.models.message_repository import list_messages
 from app.models.repository import create_model
+from app.models.task_event_repository import list_task_events
 from app.models.task_repository import create_task, get_task
 from app.services.task_coordinator import validate_coordinator_plan
 
@@ -180,3 +181,39 @@ def test_run_endpoint_rejects_non_agent_task():
     with pytest.raises(HTTPException) as exc:
         run_task_endpoint(task.id, BackgroundTasks())
     assert exc.value.status_code == 409
+
+
+def test_planner_failure_persists_sanitized_diagnostic_and_event(monkeypatch):
+    conversation = _conversation()
+
+    def fail_planning(_conversation_id, _goal):
+        raise ValueError("Planner returned invalid JSON; Authorization: Bearer super-secret-token")
+
+    monkeypatch.setattr("app.api.tasks.generate_coordinator_plan", fail_planning)
+    with pytest.raises(HTTPException) as exc:
+        start_agent_task_endpoint(
+            TaskStart(conversation_id=conversation.id, goal="Leia os arquivos de docs"),
+            BackgroundTasks(),
+        )
+
+    assert exc.value.status_code == 502
+    assert "stage: plan_generation" in exc.value.detail
+    failed_tasks = [
+        task for task in __import__("app.models.task_repository", fromlist=["list_tasks"]).list_tasks(conversation_id=conversation.id)
+        if task.status == "failed"
+    ]
+    assert len(failed_tasks) == 1
+    failed = failed_tasks[0]
+    assert failed.result["error"] == "Task planning failed"
+    assert failed.result["error_type"] == "ValueError"
+    assert failed.result["stage"] == "plan_generation"
+    assert "Planner returned invalid JSON" in failed.result["diagnostic"]
+    assert "super-secret-token" not in failed.result["diagnostic"]
+    assert "[REDACTED]" in failed.result["diagnostic"]
+
+    events = list_task_events(failed.id)
+    planning_failure = [event for event in events if event.event_name == "task.planning_failed"]
+    assert len(planning_failure) == 1
+    assert planning_failure[0].metadata["stage"] == "plan_generation"
+    assert planning_failure[0].metadata["error_type"] == "ValueError"
+    assert "super-secret-token" not in planning_failure[0].metadata["diagnostic"]
