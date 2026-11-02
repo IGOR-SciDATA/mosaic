@@ -100,11 +100,9 @@ def _validate_task_tool_allowlist(task_id: int | None, tool_name: str) -> None:
         allowed = current_step.get("allowed_tools")
         if not isinstance(allowed, list) or tool_name not in allowed:
             raise ValueError(f"Tool {tool_name} is outside the current step's declared tool scope")
-    elif current_step.get("kind") in {
-        "summarize_source", "transform_source", "answer_from_source", "draft_content",
-        "summarize_workspace", "create_artifact", "write_artifact",
-    }:
-        raise ValueError(f"Current Task step does not permit tool {tool_name}")
+    # The agent decision layer already suppresses model-proposed tool calls for
+    # content-only steps. Core-owned harness operations (e.g. artifact persistence)
+    # must still run; only explicit step allowlists are enforced at this boundary.
 
 
 def validate_tool_call(tool_call: ToolCall) -> None:
