@@ -3371,6 +3371,16 @@ body { overflow: hidden; }
 .hie-history button { text-align: left; border: 0; border-radius: 6px; padding: 7px 9px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 12px; }
 .hie-history button.active, .hie-history button:hover { background: var(--surface); color: var(--text); }
 .hie-experiment-result { display: grid; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+.hie-experience-create, .hie-experience-library { display: grid; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+.hie-experience-create > strong, .hie-experience-library-heading strong { font-size: 13px; }
+.hie-experience-library-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.hie-experience-library-heading span { color: var(--text-secondary); font-size: 11px; }
+.hie-experience-card { display: grid; gap: 7px; border: 1px solid var(--border); border-radius: 9px; padding: 10px; }
+.hie-experience-card > div:first-child { display: grid; gap: 4px; }
+.hie-experience-card strong { font-size: 12px; overflow-wrap: anywhere; }
+.hie-experience-card small { color: var(--text-secondary); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.hie-experience-card p { margin: 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.hie-experience-card-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .hie-experiment-result-head, .hie-hash-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .hie-experiment-result-head strong { font-size: 14px; }
 .hie-experiment-status { border-radius: 999px; padding: 4px 8px; background: var(--surface); font-size: 11px; text-transform: uppercase; }
