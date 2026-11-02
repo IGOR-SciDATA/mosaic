@@ -19,7 +19,7 @@ from app.services.hie_lifecycle import (
 )
 from app.services.hie_experiments import (
     HieExperimentError, create_experiment, get_experiment, list_experiments,
-    queue_experiment, reject_experiment, run_experiment,
+    cancel_experiment, queue_experiment, reject_experiment, run_experiment,
 )
 
 router = APIRouter(prefix="/hie", tags=["hie"])
@@ -267,6 +267,16 @@ def run_hie_experiment(experiment_id: int, background_tasks: BackgroundTasks) ->
         raise HTTPException(status_code=status, detail=message) from exc
     background_tasks.add_task(run_experiment, experiment_id)
     return experiment
+
+
+@router.post("/experiments/{experiment_id}/cancel")
+def cancel_hie_experiment(experiment_id: int) -> dict:
+    try:
+        return cancel_experiment(experiment_id)
+    except HieExperimentError as exc:
+        message = str(exc)
+        status = 404 if message == "Experiment not found" else 409
+        raise HTTPException(status_code=status, detail=message) from exc
 
 
 @router.post("/experiments/{experiment_id}/reject")
