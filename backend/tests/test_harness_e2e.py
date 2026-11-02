@@ -36,6 +36,8 @@ def e2e_environment(monkeypatch, tmp_path):
 
     def deterministic_worker(task_id):
         run_agent(task_id, deterministic_decider(task_id))
+        from app.api.tasks import _resume_coordinator_for_child
+        _resume_coordinator_for_child(task_id)
 
     monkeypatch.setattr("app.services.task_coordinator.create_provider_decider", deterministic_decider)
     monkeypatch.setattr("app.api.tasks._run_provider_agent", deterministic_worker)
