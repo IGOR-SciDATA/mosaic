@@ -432,18 +432,18 @@ def _run_provider_agent(task_id: int) -> None:
 def _safe_task_planning_error(exc: Exception) -> str:
     """Keep actionable planner diagnostics without persisting common credential formats."""
     message = str(exc).strip() or "No diagnostic message supplied"
-    message = re.sub(r"(?i)\\bBearer\\s+\\S+", "Bearer [REDACTED]", message)
+    message = re.sub(r"(?i)\bBearer\s+\S+", "Bearer [REDACTED]", message)
     message = re.sub(
-        r"(?i)\\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)\\b(\\s*[:=]\\s*)[^\\s,;]+",
-        r"\\1\\2[REDACTED]",
+        r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)\b(\s*[:=]\s*)[^\s,;]+",
+        r"\1\2[REDACTED]",
         message,
     )
     message = re.sub(
-        r"(?i)([?&](?:token|key|secret|password|authorization)=)[^&\\s]+",
-        r"\\1[REDACTED]",
+        r"(?i)([?&](?:token|key|secret|password|authorization)=)[^&\s]+",
+        r"\1[REDACTED]",
         message,
     )
-    message = re.sub(r"https?://[^/\\s:@]+:[^@\\s/]+@", "https://[REDACTED]@", message)
+    message = re.sub(r"https?://[^/\s:@]+:[^@\s/]+@", "https://[REDACTED]@", message)
     return message[:300]
 
 
@@ -502,15 +502,15 @@ def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTa
         current = get_task(task.id) if "task" in locals() and task is not None else None
         if current is not None and current.status in {"pending", "planning"}:
             try:
-                failed = update_task(current.id, status="failed", result={
+                update_task(current.id, status="failed", result={
                     "error": "Task planning failed",
                     "error_type": type(exc).__name__,
                     "stage": stage,
                     "diagnostic": diagnostic,
                 })
-                event_task = failed or current
             except ValueError:
-                event_task = get_task(current.id) or current
+                # Preserve the original failure if another state transition won the race.
+                pass
             try:
                 create_task_event(
                     task_id=current.id,
