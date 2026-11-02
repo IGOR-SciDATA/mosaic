@@ -180,3 +180,34 @@ def test_unconfirmed_plan_is_rejected(tmp_path):
     with pytest.raises(ValueError):
         run_coordinated_task(parent.id)
     assert list_tasks(conversation_id=parent.conversation_id) == [get_task(parent.id)]
+
+
+def test_planner_fills_omitted_acceptance_criteria_with_non_empty_fallback(monkeypatch, tmp_path):
+    from app.services import task_coordinator
+
+    model = create_model("Planner", "ollama", "planner:test")
+    conversation = create_conversation("Planner criteria", model.id)
+    raw_plan = {
+        "subtasks": [{
+            "id": "T001",
+            "goal": "Read docs and write a summary file",
+            "profile": "research",
+            "depends_on": [],
+            "inputs": [],
+            "allowed_tools": ["filesystem", "artifact"],
+        }]
+    }
+
+    class FakeProvider:
+        def generate(self, **_kwargs):
+            import json
+            return json.dumps(raw_plan)
+
+    monkeypatch.setattr(task_coordinator, "resolve_model_provider", lambda _model: FakeProvider())
+    plan = task_coordinator.generate_coordinator_plan(
+        conversation.id,
+        "Read every file in docs and write teste_task_planner.md",
+    )
+
+    assert plan["subtasks"][0]["acceptance_criteria"] == [{"type": "non_empty"}]
+    assert task_coordinator.validate_coordinator_plan(plan, require_tool_declarations=True)

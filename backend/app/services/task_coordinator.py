@@ -191,6 +191,26 @@ def _fail_parent(parent: Any, *, reason: str, child_id: int | None = None) -> An
     return parent
 
 
+def _normalize_missing_acceptance_criteria(proposed: dict[str, Any]) -> dict[str, Any]:
+    """Fill omitted criteria with the weakest explicit, deterministic output check."""
+    raw_subtasks = proposed.get("subtasks")
+    if not isinstance(raw_subtasks, list):
+        return proposed
+    normalized = dict(proposed)
+    subtasks = []
+    for raw_spec in raw_subtasks:
+        if not isinstance(raw_spec, dict):
+            subtasks.append(raw_spec)
+            continue
+        spec = dict(raw_spec)
+        criteria = spec.get("acceptance_criteria")
+        if "acceptance_criteria" not in spec or criteria is None or criteria == []:
+            spec["acceptance_criteria"] = [{"type": "non_empty"}]
+        subtasks.append(spec)
+    normalized["subtasks"] = subtasks
+    return normalized
+
+
 def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]:
     """Generate a proposal in the existing Coordinator subtask contract; never execute tools."""
     conversation = get_conversation(conversation_id)
@@ -214,7 +234,8 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
         "allowed_tools (array of registered tool names; use [] when no tools are needed), "
         "acceptance_criteria (non-empty array of objects using only types non_empty, "
         "contains, not_contains, min_chars; contains/not_contains require string value, "
-        "min_chars requires positive integer value). Use 1-10 subtasks, no unknown tools, "
+        "min_chars requires positive integer value). Never omit this field; if no stronger "
+        "check is obvious, use [{\"type\":\"non_empty\"}]. Use 1-10 subtasks, no unknown tools, "
         "Map tool needs conservatively: filesystem for project file reads/writes/exploration; "
         "artifact for durable file generation; search and web_fetch for web research; terminal "
         "for commands; calculator for arithmetic; weather for weather data. Declare every tool "
@@ -239,6 +260,7 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
         raise ValueError("Planner returned invalid JSON") from exc
     if not isinstance(proposed, dict):
         raise ValueError("Planner output must be a JSON object")
+    proposed = _normalize_missing_acceptance_criteria(proposed)
     plan = {"goal": goal, "subtasks": proposed.get("subtasks")}
     validate_coordinator_plan(plan, require_tool_declarations=True)
     return plan
