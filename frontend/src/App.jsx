@@ -327,7 +327,7 @@ function TaskPlanReview({ task, onUpdated }) {
   async function savePlan() {
     setBusy(true); setError(""); setNotice("");
     try {
-      const updated = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks });
+      const updated = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks }, plan.plan_version);
       setPlan(updated.plan); setDirty(false); setNotice("Plano salvo e validado pelo Core."); onUpdated?.(updated);
       return updated;
     } catch (err) { setError(err.message || "Não foi possível salvar o plano."); return null; }
@@ -337,7 +337,7 @@ function TaskPlanReview({ task, onUpdated }) {
     setBusy(true); setError(""); setNotice("");
     try {
       if (dirty) {
-        const latest = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks });
+        const latest = await api.tasks.updatePlan(task.id, { goal: plan.goal, subtasks: plan.subtasks }, plan.plan_version);
         setPlan(latest.plan); setDirty(false); onUpdated?.(latest);
       }
       const confirmed = await api.tasks.confirmPlan(task.id);
