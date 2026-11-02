@@ -200,6 +200,11 @@ def create_experience(
     if isinstance(delta, bool) or not isinstance(delta, (int, float)) or delta <= 0:
         raise HieExperienceError("Experience has no positive deterministic pass-rate improvement")
     experience_id = uuid.uuid4().hex
+    fixture_count = len(experiment.get("fixtures", []))
+    confidence = round(
+        0.5 + min(1.0, float(delta)) * min(1.0, fixture_count / 4.0) * 0.35,
+        2,
+    )
     record = {
         "schema_version": 1,
         "id": experience_id,
@@ -209,7 +214,8 @@ def create_experience(
         "cue": cue.strip(),
         "lesson": lesson.strip(),
         "limitations": limitations.strip(),
-        "confidence": round(min(0.95, 0.55 + float(delta) * 0.4), 2),
+        "confidence": confidence,
+        "confidence_basis": "heuristic from deterministic pass-rate delta and fixture count; not a statistical probability",
         "lifecycle": "active",
         "source": {
             "experiment_id": experiment_id,
