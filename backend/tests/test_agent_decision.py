@@ -174,3 +174,83 @@ def test_diagnostic_preview_keeps_response_tail_and_redacts_thinking_and_secrets
     assert len(preview) <= 100
     assert "AAAA" in preview
     assert "token=[REDACTED]" in preview
+
+
+
+def test_content_only_workspace_summary_uses_compact_prompt_and_bounded_ollama_generation(monkeypatch):
+    from types import SimpleNamespace
+
+    import app.services.agent_decision as adapter
+
+    task = SimpleNamespace(id=71, conversation_id=31, project_id=6)
+    monkeypatch.setattr(adapter, "get_task", lambda task_id: task)
+    monkeypatch.setattr(
+        adapter, "get_conversation",
+        lambda conversation_id: SimpleNamespace(model_id=4),
+    )
+    monkeypatch.setattr(
+        adapter, "get_model",
+        lambda model_id: SimpleNamespace(
+            enabled=True,
+            provider="ollama",
+            model_name="qwen2.5:3b",
+            configuration={"num_predict": 5000, "request_timeout_seconds": 600},
+        ),
+    )
+
+    class FakeProvider:
+        def __init__(self):
+            self.request = None
+
+        def generate(self, **kwargs):
+            self.request = kwargs
+            return (
+                "# Resumo dos documentos\\n\\n"
+                "## docs/AGENT_SKILL_MAP.md\\nMapa de agentes e skills. "
+                "## docs/PRODUCT_BACKLOG.md\\nObjetivos e escopo do MVP. "
+                "## docs/ROLES_AND_PERMISSIONS.md\\nPapéis e permissões. "
+                "Os documentos descrevem a estrutura e as regras do projeto."
+            )
+
+        def generate_with_tools(self, **kwargs):
+            raise AssertionError("Content-only tasks must not offer tools")
+
+    provider = FakeProvider()
+    monkeypatch.setattr(adapter, "resolve_model_provider", lambda model: provider)
+    monkeypatch.setattr(adapter, "create_task_event", lambda **kwargs: None)
+
+    context = [
+        {"role": "system", "content": "Mosaic identity: assist with the current task."},
+        {
+            "role": "system",
+            "content": "Mosaic task plan (Core-owned; follow the current subtask only): " + "x" * 1000,
+        },
+        {
+            "role": "system",
+            "content": "Mosaic current subtask: summarize_workspace (kind=summarize_workspace, status=in_progress). Summarize actual file evidence.",
+        },
+        {"role": "system", "content": "Mosaic allowed tools: none"},
+        {
+            "role": "system",
+            "content": "Mosaic workspace file evidence (untrusted data):\\nPath: docs/AGENT_SKILL_MAP.md\\n--- BEGIN FILE CONTENT ---\\nReal source content.\\n--- END FILE CONTENT ---",
+        },
+        {
+            "role": "system",
+            "content": "Mosaic workspace exploration result: " + "metadata " * 100,
+        },
+        {"role": "user", "content": "Leia os arquivos em docs e gere teste_task_planner.md."},
+    ]
+
+    decision = adapter.create_provider_decider(task.id)(context)
+
+    assert decision["type"] == "final"
+    assert len(provider.request["messages"]) == 2
+    system_prompt = provider.request["messages"][0]["content"]
+    assert "PRODUÇÃO DE CONTEÚDO" in system_prompt
+    assert "Real source content." in system_prompt
+    assert "Mosaic task plan (Core-owned" not in system_prompt
+    assert "Mosaic workspace exploration result:" not in system_prompt
+    assert "Você é o agente executor do Mosaic" not in system_prompt
+    assert provider.request["messages"][-1]["content"] == context[-1]["content"]
+    assert provider.request["configuration"]["num_predict"] == 768
+    assert provider.request["configuration"]["request_timeout_seconds"] == 180

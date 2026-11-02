@@ -219,23 +219,10 @@ def test_planner_preserves_original_workspace_scope_and_language_independent_out
 
     model = create_model("Planner workspace", "ollama", "planner:workspace")
     conversation = create_conversation("Planner workspace", model.id)
-    raw_plan = {
-        "subtasks": [{
-            "id": "T001",
-            "goal": "Create the test_task_planner.md file",
-            "profile": "research",
-            "depends_on": [],
-            "inputs": [],
-            "allowed_tools": ["filesystem", "artifact"],
-            "acceptance_criteria": [{"type": "non_empty"}],
-        }]
-    }
+    def unexpected_provider_resolution(_model):
+        raise AssertionError("Workspace summary planning must not call the model")
 
-    class FakeProvider:
-        def generate(self, **_kwargs):
-            return json.dumps(raw_plan)
-
-    monkeypatch.setattr(task_coordinator, "resolve_model_provider", lambda _model: FakeProvider())
+    monkeypatch.setattr(task_coordinator, "resolve_model_provider", unexpected_provider_resolution)
     original_goal = (
         "Após esse prompt, leia todos os arquivos na pasta docs "
         "e gere um resumo em um arquivo chamado teste_task_planner.md"

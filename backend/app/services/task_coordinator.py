@@ -238,9 +238,38 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
     model = get_model(conversation.model_id)
     if model is None or not model.enabled:
         raise ValueError("Selected model is unavailable")
-    provider = resolve_model_provider(model)
     profiles = sorted(PROFILE_NAMES)
     available_tools = sorted(tool.name for tool in registry.list())
+    workspace_intent = _workspace_intent_for_goal(goal)
+    registered_tools_set = set(available_tools)
+
+    # This workflow has a deterministic Core-owned execution path. Build the
+    # reviewable plan directly instead of spending a model call to plan a task
+    # whose structure the Core already knows.
+    if (
+        isinstance(workspace_intent, dict)
+        and workspace_intent.get("requires_artifact") is True
+        and isinstance(workspace_intent.get("output_path"), str)
+        and {"filesystem", "artifact"} <= registered_tools_set
+        and "research" in PROFILE_NAMES
+    ):
+        plan = {
+            "goal": goal,
+            "subtasks": [{
+                "id": "workspace_summary",
+                "goal": goal,
+                "profile": "research",
+                "depends_on": [],
+                "inputs": [],
+                "allowed_tools": ["filesystem", "artifact"],
+                "acceptance_criteria": [{"type": "non_empty"}],
+            }],
+            "workspace_intent": workspace_intent,
+        }
+        validate_coordinator_plan(plan, require_tool_declarations=True)
+        return plan
+
+    provider = resolve_model_provider(model)
     prompt = (
         "Create a concise, executable plan for the user's Task using the Mosaic Coordinator contract. "
         "Optimize for reliable execution by a small local model: prefer the fewest sufficient subtasks, "
@@ -283,33 +312,7 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
     if not isinstance(proposed, dict):
         raise ValueError("Planner output must be a JSON object")
     proposed = _normalize_missing_acceptance_criteria(proposed)
-    workspace_intent = _workspace_intent_for_goal(goal)
-    subtasks = proposed.get("subtasks")
-
-    # Workspace summarization already has a deterministic Core workflow. For this
-    # well-defined pattern, don't let model paraphrasing or language switching erase
-    # the original folder/output path: keep one explicit subtask in the user's words.
-    registered_tools_set = set(available_tools)
-    if (
-        isinstance(workspace_intent, dict)
-        and workspace_intent.get("requires_artifact") is True
-        and isinstance(workspace_intent.get("output_path"), str)
-        and {"filesystem", "artifact"} <= registered_tools_set
-        and "research" in PROFILE_NAMES
-    ):
-        subtasks = [{
-            "id": "workspace_summary",
-            "goal": goal,
-            "profile": "research",
-            "depends_on": [],
-            "inputs": [],
-            "allowed_tools": ["filesystem", "artifact"],
-            "acceptance_criteria": [{"type": "non_empty"}],
-        }]
-
-    plan = {"goal": goal, "subtasks": subtasks}
-    if workspace_intent is not None:
-        plan["workspace_intent"] = workspace_intent
+    plan = {"goal": goal, "subtasks": proposed.get("subtasks")}
     validate_coordinator_plan(plan, require_tool_declarations=True)
     return plan
 
