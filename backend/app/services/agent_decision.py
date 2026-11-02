@@ -37,7 +37,7 @@ def _content_only_messages(context: list[dict[str, Any]]) -> list[dict[str, Any]
                 system_parts.append(content)
         else:
             remaining_messages.append(dict(message))
-    compact = [{"role": "system", "content": "\\n\\n".join(system_parts)}]
+    compact = [{"role": "system", "content": "\n\n".join(system_parts)}]
     return compact + remaining_messages
 
 
