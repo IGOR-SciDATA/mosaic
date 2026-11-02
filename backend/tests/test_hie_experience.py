@@ -46,6 +46,13 @@ def _promoted_experiment(client):
     })
     assert created.status_code == 201, created.text
     experiment = created.json()
+    from app.services.hie_evidence import persist_record_evidence
+    baseline_artifact = persist_record_evidence(
+        experiment["task_id"], {"record_sha256": "a" * 64, "variant": "baseline"}, max_bytes=10_000,
+    )
+    candidate_artifact = persist_record_evidence(
+        experiment["task_id"], {"record_sha256": "b" * 64, "variant": "candidate"}, max_bytes=10_000,
+    )
     results = {
         "assessment": "candidate_better",
         "baseline_pass_rate": 0.0,
@@ -54,8 +61,8 @@ def _promoted_experiment(client):
         "evidence": [{
             "fixture_id": "python-import",
             "artifact_evidence": {
-                "baseline": {"artifact_id": 501, "sha256": "a" * 64},
-                "candidate": {"artifact_id": 502, "sha256": "b" * 64},
+                "baseline": {"artifact_id": baseline_artifact["artifact_id"], "sha256": baseline_artifact["sha256"]},
+                "candidate": {"artifact_id": candidate_artifact["artifact_id"], "sha256": candidate_artifact["sha256"]},
             },
         }],
     }
