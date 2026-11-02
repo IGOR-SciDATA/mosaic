@@ -150,6 +150,15 @@ export const api = {
     approveCandidate: (id, payload) => request(`/hie/experiments/${id}/approve`, { method: "POST", body: JSON.stringify(payload) }),
     promoteCandidate: (id, payload) => request(`/hie/experiments/${id}/promote`, { method: "POST", body: JSON.stringify(payload) }),
     rollbackPromotion: (id, payload) => request(`/hie/promotions/${id}/rollback`, { method: "POST", body: JSON.stringify(payload) }),
+    listExperiences: ({ projectId, query, profileSlug, limit = 20 }) => {
+      const params = new URLSearchParams({ project_id: String(projectId), limit: String(limit) });
+      if (query) params.set("query", query);
+      if (profileSlug) params.set("profile_slug", profileSlug);
+      return request(`/hie/experiences?${params.toString()}`);
+    },
+    createExperience: (payload) => request("/hie/experiences", { method: "POST", body: JSON.stringify(payload) }),
+    deactivateExperience: (id, projectId) => request(`/hie/experiences/${id}/deactivate?project_id=${projectId}`, { method: "POST" }),
+    deleteExperience: (id, projectId) => request(`/hie/experiences/${id}?project_id=${projectId}`, { method: "DELETE" }),
   },
   toolCalls: {
     list: (conversationId, taskId) => request(`/tool-calls?conversation_id=${conversationId}${taskId ? `&task_id=${taskId}` : ""}`),
