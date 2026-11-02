@@ -58,6 +58,37 @@ def test_calculator_execution_persists_result() -> None:
     assert get_tool_result(result.id) == result
 
 
+def test_task_allowlist_blocks_undeclared_tool_before_approval() -> None:
+    conversation = _conversation()
+    task = create_task(
+        type="generic", mode="agent", conversation_id=conversation.id,
+        plan={"goal": "Use declared tool only", "allowed_tools": ["filesystem"]},
+    )
+    call = create_tool_call(
+        conversation.id, "calculator", {"expression": "2 + 3"}, task_id=task.id
+    )
+    with pytest.raises(ValueError, match="outside this Task's declared tool scope"):
+        approve_tool_call(call)
+    assert get_tool_call(call.id).status == "failed"
+
+
+def test_task_allowlist_is_rechecked_at_execution_boundary() -> None:
+    conversation = _conversation()
+    task = create_task(
+        type="generic", mode="agent", conversation_id=conversation.id,
+        plan={"goal": "Use declared tool only", "allowed_tools": ["calculator"]},
+    )
+    call = create_tool_call(
+        conversation.id, "calculator", {"expression": "2 + 3"}, task_id=task.id
+    )
+    approved = approve_tool_call(call)
+    update_task(task.id, plan={"goal": "Scope changed", "allowed_tools": ["filesystem"]})
+    result = execute_tool_call(approved)
+    assert result.status == "failed"
+    assert "outside this Task's declared tool scope" in result.error
+    assert get_tool_call(call.id).status == "failed"
+
+
 def test_tool_result_events_record_duration_and_bounded_evidence(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
