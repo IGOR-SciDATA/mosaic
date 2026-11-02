@@ -2,6 +2,7 @@ import pytest
 from fastapi import BackgroundTasks, HTTPException
 
 from app.api.tasks import (
+    TaskPlanConfirm,
     TaskPlanUpdate,
     TaskStart,
     confirm_task_plan_endpoint,
@@ -76,7 +77,7 @@ def test_plan_edit_is_revalidated_and_increments_version(monkeypatch):
     )
     edited = _valid_plan()
     edited["subtasks"][0]["goal"] = "Analisar e verificar o projeto"
-    updated = edit_task_plan_endpoint(task.id, TaskPlanUpdate(plan=edited))
+    updated = edit_task_plan_endpoint(task.id, TaskPlanUpdate(plan=edited, expected_plan_version=task.plan["plan_version"]))
     assert updated.plan["plan_version"] == 2
     assert updated.plan["plan_confirmed"] is False
     assert updated.plan["subtasks"][0]["allowed_tools"] == ["filesystem"]
@@ -91,7 +92,7 @@ def test_invalid_edited_plan_is_rejected_before_execution(monkeypatch):
     invalid = _valid_plan()
     invalid["subtasks"][0]["depends_on"] = ["missing"]
     with pytest.raises(HTTPException) as exc:
-        edit_task_plan_endpoint(task.id, TaskPlanUpdate(plan=invalid))
+        edit_task_plan_endpoint(task.id, TaskPlanUpdate(plan=invalid, expected_plan_version=task.plan["plan_version"]))
     assert exc.value.status_code == 422
     assert get_task(task.id).status == "awaiting_approval"
 
@@ -117,7 +118,7 @@ def test_confirmation_schedules_only_the_validated_plan(monkeypatch):
         TaskStart(conversation_id=conversation.id, goal="Analise o projeto"), BackgroundTasks()
     )
     background = BackgroundTasks()
-    confirmed = confirm_task_plan_endpoint(task.id, background)
+    confirmed = confirm_task_plan_endpoint(task.id, TaskPlanConfirm(plan_version=task.plan["plan_version"]), background)
     assert confirmed.status == "executing"
     assert confirmed.plan["plan_confirmed"] is True
     assert len(background.tasks) == 1
