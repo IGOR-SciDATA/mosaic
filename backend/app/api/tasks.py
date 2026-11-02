@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.artifact_repository import list_artifacts
 from app.models.conversation_repository import get_conversation
@@ -487,6 +487,12 @@ def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTa
 class TaskPlanUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     plan: dict[str, Any]
+    expected_plan_version: int = Field(ge=1)
+
+
+class TaskPlanConfirm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plan_version: int = Field(ge=1)
 
 
 @router.patch("/{task_id}/plan", response_model=Task)
@@ -497,6 +503,9 @@ def edit_task_plan_endpoint(task_id: int, payload: TaskPlanUpdate) -> Task:
     if task.status != "awaiting_approval":
         raise HTTPException(status_code=409, detail="Only a proposed plan can be edited")
     current = task.plan if isinstance(task.plan, dict) else {}
+    current_version = int(current.get("plan_version", 0))
+    if payload.expected_plan_version != current_version:
+        raise HTTPException(status_code=409, detail="The plan changed; refresh before editing")
     if payload.plan.get("goal") != current.get("goal"):
         raise HTTPException(status_code=422, detail="Plan edits must preserve the original Task objective")
     if set(payload.plan) - {"goal", "subtasks"}:
@@ -514,7 +523,10 @@ def edit_task_plan_endpoint(task_id: int, payload: TaskPlanUpdate) -> Task:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     # Revalidate tool availability and authorization at confirmation/execution boundaries;
     # coordinator subtasks themselves only use the existing profile/tool permission path.
-    updated = update_task(task_id, plan=proposed)
+    try:
+        updated = update_task(task_id, plan=proposed, expected_plan_version=payload.expected_plan_version)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="The plan changed concurrently; refresh and retry") from exc
     create_task_event(
         task_id=task_id, conversation_id=task.conversation_id, project_id=task.project_id,
         component="planner", event_name="task.plan_edited",
@@ -525,20 +537,25 @@ def edit_task_plan_endpoint(task_id: int, payload: TaskPlanUpdate) -> Task:
 
 
 @router.post("/{task_id}/confirm", response_model=Task, status_code=202)
-def confirm_task_plan_endpoint(task_id: int, background_tasks: BackgroundTasks) -> Task:
+def confirm_task_plan_endpoint(task_id: int, payload: TaskPlanConfirm, background_tasks: BackgroundTasks) -> Task:
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     if task.status != "awaiting_approval":
         raise HTTPException(status_code=409, detail="Task is not awaiting plan confirmation")
     plan = dict(task.plan or {})
+    version = int(plan.get("plan_version", 0))
+    if payload.plan_version != version:
+        raise HTTPException(status_code=409, detail="The plan changed; review the latest version before confirming")
     try:
         validate_coordinator_plan(plan, require_tool_declarations=True)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Plan is invalid: {exc}") from exc
     plan["plan_confirmed"] = True
-    version = int(plan.get("plan_version", 0))
-    updated = update_task(task_id, plan=plan, status="executing")
+    try:
+        updated = update_task(task_id, plan=plan, status="executing", expected_plan_version=payload.plan_version)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="The plan changed concurrently; review it before confirming") from exc
     if updated is None:
         raise HTTPException(status_code=404, detail="Task not found")
     create_task_event(
