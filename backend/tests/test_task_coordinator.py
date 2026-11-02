@@ -49,6 +49,13 @@ def _parent_task(tmp_path, plan):
     project = create_project("Coordinator", str(workspace))
     model = create_model("Selected", "ollama", "selected:test")
     conversation = create_conversation("Coordinator", model.id, project_id=project.id)
+    plan = dict(plan)
+    plan["plan_version"] = 1
+    plan["plan_confirmed"] = True
+    plan["subtasks"] = [
+        {**spec, "allowed_tools": spec.get("allowed_tools", [])}
+        for spec in plan.get("subtasks", [])
+    ]
     return create_task(
         type="generic",
         mode="agent",
