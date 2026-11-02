@@ -166,10 +166,10 @@ def test_coordinate_endpoint_schedules_existing_task_engine(tmp_path):
 
     background = BackgroundTasks()
     result = coordinate_task_endpoint(parent.id, background)
-    assert result.status == "planning"
+    assert result.status == "executing"
     assert len(background.tasks) == 1
     assert background.tasks[0].func is run_coordinated_task
-    assert get_task(parent.id).status == "planning"
+    assert get_task(parent.id).status == "executing"
 
 
 def test_unconfirmed_plan_is_rejected(tmp_path):
