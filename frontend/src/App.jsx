@@ -1112,6 +1112,19 @@ function HieExperimentModal({scope,onClose}) {
     finally{setBusy(false);}
   }
 
+  async function cancelRunningExperiment(){
+    if(!experiment||busy||!["queued","running"].includes(experiment.status))return;
+    if(!window.confirm("Cancelar este experimento? Uma chamada ao modelo que já esteja em andamento pode terminar, mas nenhuma próxima chamada deverá começar."))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const cancelled=await api.hie.cancelExperiment(experiment.id);
+      setExperiment(cancelled);
+      setHistory(items=>items.map(item=>item.id===cancelled.id?cancelled:item));
+      setNotice("Experimento cancelado. Evidências parciais foram preservadas; não haverá repetição ou promoção automática.");
+    }catch(err){setError(err.message);}
+    finally{setBusy(false);}
+  }
+
   async function rejectCandidate(){
     if(!experiment||busy)return;
     setBusy(true);setError("");
@@ -1232,6 +1245,7 @@ function HieExperimentModal({scope,onClose}) {
       {notice&&<div className="agent-config-success" role="status">{notice}</div>}
       {experiment&&<section className="hie-experiment-result">
         <div className="hie-experiment-result-head"><strong>Experimento #{experiment.id}</strong><span className={"hie-experiment-status status-"+experiment.status}>{experiment.status}</span></div>
+        {["queued","running"].includes(experiment.status)&&<button type="button" className="secondary-action" onClick={cancelRunningExperiment} disabled={busy}>Cancelar experimento</button>}
         <div className="hie-experiment-summary"><span>Modelo</span><strong>{experiment.provider} · {experiment.model_name}</strong><span>Orçamento aplicado</span><strong>{experiment.budget?.estimated_provider_calls ?? "—"} chamadas estimadas (máx. {experiment.budget?.max_provider_calls ?? "—"}) · entrada {experiment.budget?.max_input_chars_per_call ?? "—"} caracteres por chamada · saída {experiment.budget?.max_output_tokens_per_call ?? "—"} tokens e até {experiment.budget?.max_output_chars_per_call ?? "—"} caracteres aceitos · timeout de requisição {experiment.budget?.provider_request_timeout_seconds ?? "—"} s</strong><span>Fixture isolada</span><strong>{experiment.budget?.fixture_count ?? experiment.fixtures?.length ?? 0} prompts · sem ferramentas nem ações externas</strong></div>
         <div className="hie-hash-line"><span>Origem do candidato</span><strong>{experiment.candidate_origin==="user_supplied"?"Fornecido pelo usuário":experiment.candidate_origin}</strong></div>
         <div className="hie-hash-line"><span>Baseline v{experiment.baseline_snapshot?.version}</span><code>{experiment.baseline_snapshot?.sha256?.slice(0,16)}…</code></div>
