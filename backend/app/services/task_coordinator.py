@@ -250,6 +250,8 @@ def run_coordinated_task(
         raise ValueError(f"Coordinator Task cannot run from state {parent.status}")
 
     plan = dict(parent.plan or {})
+    if plan.get("plan_confirmed") is False:
+        raise ValueError("Coordinator Task cannot execute before explicit plan confirmation")
     ordered_specs = validate_coordinator_plan(plan, require_tool_declarations=plan.get("plan_confirmed") is True)
     if parent.status == "pending":
         parent = update_task(parent.id, status="planning")
