@@ -160,6 +160,8 @@ def test_coordinate_endpoint_schedules_existing_task_engine(tmp_path):
         tmp_path,
         {"goal": "Coordinate", "subtasks": _specs()},
     )
+    update_task(parent.id, status="planning")
+    parent = update_task(parent.id, status="awaiting_approval")
     from fastapi import BackgroundTasks
 
     background = BackgroundTasks()
