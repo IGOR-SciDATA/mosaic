@@ -203,7 +203,11 @@ def generate_coordinator_plan(conversation_id: int, goal: str) -> dict[str, Any]
     profiles = sorted(PROFILE_NAMES)
     available_tools = sorted(tool.name for tool in registry.list())
     prompt = (
-        "Create a plan for the user's Task using the Mosaic Coordinator contract. "
+        "Create a concise, executable plan for the user's Task using the Mosaic Coordinator contract. "
+        "Optimize for reliable execution by a small local model: prefer the fewest sufficient subtasks, "
+        "use one subtask for a simple task, avoid speculative steps and redundant summaries, and make "
+        "each goal concrete with a checkable deliverable. Order dependencies explicitly; do not make "
+        "independent steps depend on one another. Keep inputs short and pass only necessary prior outputs. "
         "Return only a JSON object with a 'subtasks' array. Each subtask must contain "
         "id (unique short string), goal, profile (one of the supplied profiles), "
         "depends_on (array of prior subtask ids), inputs (array of strings), and "
