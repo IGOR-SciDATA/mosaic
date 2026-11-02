@@ -44,7 +44,7 @@ def test_ollama_generate_sends_model_messages_and_configuration(monkeypatch) -> 
     assert payload["messages"] == [{"role": "user", "content": "Olá"}]
     assert payload["stream"] is False
     assert payload["think"] is False
-    assert payload["options"] == {"temperature": 0.2}
+    assert payload["options"] == {"temperature": 0.2, "num_predict": -1}
 
 
 def test_ollama_stream_yields_content_chunks(monkeypatch) -> None:
