@@ -116,6 +116,62 @@ def test_completed_experiment_cannot_be_cancelled(client):
         cancel_experiment(experiment["id"])
 
 
+def test_cancelled_status_migration_preserves_existing_experiment_rows(client):
+    from app.db.database import get_connection, init_db
+
+    _, experiment = _create_ready_experiment(client)
+    # Simulate a database created before the cancelled status was added.
+    with get_connection() as connection:
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("""
+            CREATE TABLE hie_experiments_legacy (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                source_task_id INTEGER NULL,
+                conversation_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
+                profile_slug TEXT NOT NULL,
+                candidate_origin TEXT NOT NULL DEFAULT 'user_supplied',
+                provider TEXT NOT NULL DEFAULT '',
+                model_name TEXT NOT NULL DEFAULT '',
+                budget_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (
+                    status IN ('draft', 'queued', 'running', 'completed', 'failed', 'rejected')
+                ),
+                baseline_snapshot TEXT NOT NULL,
+                candidate TEXT NOT NULL,
+                fixtures TEXT NOT NULL,
+                candidate_diff TEXT NOT NULL,
+                results TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        connection.execute("""
+            INSERT INTO hie_experiments_legacy (
+                id, task_id, source_task_id, conversation_id, project_id, profile_slug,
+                candidate_origin, provider, model_name, budget_json, status,
+                baseline_snapshot, candidate, fixtures, candidate_diff, results, created_at, updated_at
+            )
+            SELECT id, task_id, source_task_id, conversation_id, project_id, profile_slug,
+                   candidate_origin, provider, model_name, budget_json, status,
+                   baseline_snapshot, candidate, fixtures, candidate_diff, results, created_at, updated_at
+            FROM hie_experiments
+        """)
+        connection.execute("DROP TABLE hie_experiments")
+        connection.execute("ALTER TABLE hie_experiments_legacy RENAME TO hie_experiments")
+        connection.commit()
+        connection.execute("PRAGMA foreign_keys = ON")
+
+    init_db()
+    from app.services.hie_experiments import get_experiment
+    with get_connection() as connection:
+        connection.execute("UPDATE hie_experiments SET status = 'cancelled' WHERE id = ?", (experiment["id"],))
+        connection.commit()
+    assert get_experiment(experiment["id"])["status"] == "cancelled"
+
+
 def test_queue_event_failure_rolls_back_queued_state(client, monkeypatch):
     from app.services import hie_experiments
 
