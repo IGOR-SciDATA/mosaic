@@ -106,6 +106,8 @@ def test_only_promoted_evidence_bound_experiences_enter_project_retrieval(client
     assert record["lifecycle"] == "active"
     assert record["source"]["experiment_id"] == experiment["id"]
     assert record["source"]["evidence_refs"]
+    assert record["confidence"] < 0.7, "A single fixture must not create false high confidence."
+    assert "not a statistical probability" in record["confidence_basis"]
     assert len(record["record_sha256"]) == 64
 
     retrieved = client.get("/hie/experiences", params={
