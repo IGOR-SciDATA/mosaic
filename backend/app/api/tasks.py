@@ -461,7 +461,7 @@ def start_agent_task_endpoint(payload: TaskStart, background_tasks: BackgroundTa
         plan = {**proposed, **{key: value for key, value in initial_plan.items() if key == "agent_library_snapshot"}}
         plan["plan_version"] = 1
         plan["plan_confirmed"] = False
-        validate_coordinator_plan(plan)
+        validate_coordinator_plan(plan, require_tool_declarations=True)
         task = update_task(task.id, plan=plan, status="awaiting_approval")
         if task is None:
             raise ValueError("Could not persist generated Task plan")
