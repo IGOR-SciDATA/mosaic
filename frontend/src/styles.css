@@ -3642,3 +3642,34 @@ body { overflow: hidden; }
 .task-mode-menu small { color:var(--text-secondary,#a7a9af); font-size:10px; line-height:1.35; }
 .task-mode-check { font-size:14px; }
 @media(max-width:620px) { .composer-tools { gap:5px; } .task-mode-menu { width:min(280px,calc(100vw - 42px)); } }
+
+
+/* Task Planner review: a proposal remains inert until the user confirms it. */
+.task-plan-review{margin:14px 0 18px;padding:18px;border:1px solid var(--border,#d8dce5);border-radius:16px;background:var(--panel,rgba(128,128,128,.045));}
+.task-plan-review-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}
+.task-plan-review-heading h4{margin:5px 0 6px;font-size:17px}
+.task-plan-review-heading p,.task-plan-tools p{margin:0;color:var(--muted,#737987);font-size:12px;line-height:1.5}
+.task-plan-version{flex:none;padding:5px 8px;border-radius:8px;background:var(--surface,#fff);font-size:12px;font-weight:700}
+.task-plan-goal-label{display:block;font-size:12px;font-weight:700;color:var(--muted,#737987);margin-bottom:5px}
+.task-plan-goal{margin:0 0 16px;padding:10px 12px;border-radius:9px;background:var(--surface,#fff);font-size:13px;line-height:1.5}
+.task-plan-subtasks{display:grid;gap:12px}
+.task-plan-subtask{padding:13px;border:1px solid var(--border,#d8dce5);border-radius:12px;background:var(--surface,rgba(128,128,128,.025))}
+.task-plan-subtask-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.task-plan-number{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--accent,#a52b2b);color:#fff;font-size:12px;font-weight:700}
+.task-plan-reorder{display:flex;gap:5px;margin-left:auto}
+.task-plan-reorder button{width:28px;height:28px;border:1px solid var(--border,#d8dce5);border-radius:7px;background:transparent;color:inherit;cursor:pointer}
+.task-plan-reorder button:disabled{opacity:.35;cursor:not-allowed}
+.task-plan-subtask>label,.task-plan-fields label{display:flex;flex-direction:column;gap:6px;margin:9px 0;font-size:12px;font-weight:650}
+.task-plan-subtask textarea,.task-plan-subtask input:not([type=checkbox]),.task-plan-subtask select{width:100%;box-sizing:border-box;border:1px solid var(--border,#d8dce5);border-radius:8px;padding:9px 10px;background:var(--input-bg,transparent);color:inherit;font:inherit;font-weight:400;resize:vertical}
+.task-plan-fields{display:grid;grid-template-columns:minmax(120px,.65fr) minmax(180px,1.35fr);gap:10px}
+.task-plan-tools{margin:10px 0 0;padding:10px;border:1px solid var(--border,#d8dce5);border-radius:9px}
+.task-plan-tools legend{padding:0 5px;font-size:12px;font-weight:700}
+.task-plan-tools>div{display:flex;flex-wrap:wrap;gap:8px 13px;margin-top:10px}
+.task-plan-tools label{display:flex;align-items:center;gap:5px;font-size:12px}
+.task-plan-tools input{accent-color:var(--accent,#a52b2b)}
+.task-plan-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:15px}
+.task-plan-actions>span{font-size:12px;color:var(--muted,#737987)}
+.task-plan-actions>div{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.task-plan-notice{margin:10px 0 0;font-size:12px;color:var(--success,#23865a)}
+.task-plan-review .task-inline-error{margin-top:10px}
+@media(max-width:600px){.task-plan-review{padding:12px}.task-plan-fields{grid-template-columns:1fr}.task-plan-actions>div{width:100%;margin-left:0}.task-plan-actions>div button{flex:1}}
