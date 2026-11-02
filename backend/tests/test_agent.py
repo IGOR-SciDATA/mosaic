@@ -928,10 +928,12 @@ def test_scoped_workspace_exploration_only_reads_requested_directory(tmp_path: P
 
     def decide(context):
         observed.append("\n".join(str(item.get("content", "")) for item in context))
+        # The local model summarizes both discovered files but omits their exact paths.
+        # The Core should add the missing path manifest and proceed to artifact creation.
         return {"type": "final", "content": (
             "# Resumo de docs\n\n"
-            "## docs/ARCHITECTURE.md\n" + ("O arquivo define responsabilidades do Core e seus limites. " * 5) + "\n\n"
-            "## docs/ROADMAP.md\n" + ("O arquivo registra os próximos marcos e a sequência de implementação. " * 5)
+            + ("O arquivo define responsabilidades do Core e seus limites. " * 5) + "\n\n"
+            + ("O arquivo registra os próximos marcos e a sequência de implementação. " * 5)
         )}
 
     result = run_agent(task.id, decide)
@@ -973,3 +975,51 @@ def test_workspace_summary_quality_gate_rejects_generic_or_incomplete_output():
         + "\n## docs/ROADMAP.md\n" + ("O roadmap descreve marcos, prioridades e a sequência de implementação. " * 5)
     )
     assert _validate_workspace_summary_content(complete, evidence) is None
+
+
+def test_workspace_summary_core_adds_missing_exact_source_paths():
+    from app.services.agent import (
+        _ensure_workspace_summary_source_manifest,
+        _validate_workspace_summary_content,
+    )
+
+    evidence = {
+        "status": "success",
+        "files_not_passed_to_model": [],
+        "files_partially_passed_to_model": [],
+        "files_passed_to_model": [
+            "docs/AGENT_SKILL_MAP.md",
+            "docs/PRODUCT_BACKLOG.md",
+            "docs/ROLES_AND_PERMISSIONS.md",
+        ],
+    }
+    draft = (
+        "# Resumo da documentação\n\n"
+        + ("O mapa de agentes define responsabilidades e encaminhamento de capacidades. " * 5)
+        + "\n"
+        + ("O backlog registra funcionalidades e prioridades de produto. " * 5)
+        + "\n"
+        + ("As permissões descrevem limites de acesso e papéis disponíveis. " * 5)
+    )
+
+    normalized = _ensure_workspace_summary_source_manifest(draft, evidence)
+
+    assert all(path in normalized for path in evidence["files_passed_to_model"])
+    assert "## Arquivos-fonte lidos pelo Core" in normalized
+    assert _validate_workspace_summary_content(normalized, evidence) is None
+
+
+def test_workspace_summary_manifest_does_not_duplicate_paths_already_present():
+    from app.services.agent import _ensure_workspace_summary_source_manifest
+
+    evidence = {
+        "files_passed_to_model": ["docs/ARCHITECTURE.md", "docs/ROADMAP.md"],
+    }
+    draft = (
+        "# Resumo\n\n## docs/ARCHITECTURE.md\n" + ("O Core organiza responsabilidades. " * 8)
+        + "\n## docs/ROADMAP.md\n" + ("O roadmap descreve marcos e prioridades. " * 8)
+    )
+
+    normalized = _ensure_workspace_summary_source_manifest(draft, evidence)
+
+    assert normalized == draft
