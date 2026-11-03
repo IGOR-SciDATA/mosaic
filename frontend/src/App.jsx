@@ -239,7 +239,10 @@ function MessageList({ messages, streaming, taskTraces, onToggleTrace, onDecideT
   return <div className="chat-content">
     {messages.map(message => message.role === "user"
       ? <div className="message user-message" key={message.id || message.localId}>
-          <div className="message-bubble"><p>{message.content}</p><time>{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time></div>
+          <div className="user-message-content">
+            <div className="message-bubble"><p>{message.content}</p><time>{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time></div>
+            {taskTraces?.[message.localId || message.id] && <TaskTrace trace={taskTraces[message.localId || message.id]} onToggle={()=>onToggleTrace(message.localId || message.id)} onDecideToolCall={onDecideToolCall} toolDecisionBusyId={toolDecisionBusyId}/>}
+          </div>
           <div className="message-avatar user">JD</div>
         </div>
       : <div className="message assistant-message" key={message.id || message.localId}>
@@ -1409,17 +1412,26 @@ export default function App(){
             break;
           }
         }
-        let assistantMessage = userIndex >= 0
-          ? history.slice(userIndex + 1).find(message => message.role === "assistant")
-          : null;
-        if (!assistantMessage) {
+        const nextUserIndex = userIndex >= 0
+          ? history.findIndex((message, index) => index > userIndex && message.role === "user")
+          : -1;
+        const messagesAfterUser = userIndex >= 0
+          ? history.slice(userIndex + 1, nextUserIndex >= 0 ? nextUserIndex : history.length)
+          : [];
+        let traceMessage = messagesAfterUser.find(message => message.role === "assistant") || null;
+        if (!traceMessage && userIndex >= 0) {
+          // Task.start persists the user request but its provisional assistant trace is client-only.
+          // Anchor the restored trace to that durable request when no assistant message was stored.
+          traceMessage = history[userIndex];
+        }
+        if (!traceMessage) {
           const taskTime = new Date(task.created_at || task.updated_at || taskSummary.created_at || 0).getTime();
-          assistantMessage = history.find(message => message.role === "assistant"
+          traceMessage = history.find(message => message.role === "assistant"
             && Number.isFinite(new Date(message.created_at || 0).getTime())
             && Math.abs(new Date(message.created_at || 0).getTime() - taskTime) < 5 * 60 * 1000);
         }
-        if (!assistantMessage) return;
-        const messageKey = assistantMessage.localId || assistantMessage.id;
+        if (!traceMessage) return;
+        const messageKey = traceMessage.localId || traceMessage.id;
         let expanded = false;
         try { expanded = localStorage.getItem(`mosaic.taskTraceExpanded.${targetConversationId}.${task.id}`) === "true"; } catch {}
         restored[messageKey] = {
