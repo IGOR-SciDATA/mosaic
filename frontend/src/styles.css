@@ -3683,3 +3683,12 @@ body { overflow: hidden; }
 .task-plan-notice{margin:10px 0 0;font-size:12px;color:var(--success,#23865a)}
 .task-plan-review .task-inline-error{margin-top:10px}
 @media(max-width:600px){.task-plan-review{padding:12px}.task-plan-fields{grid-template-columns:1fr}.task-plan-actions>div{width:100%;margin-left:0}.task-plan-actions>div button{flex:1}}
+/* Task approval actions are available from both the chat trace and the Tasks workspace. */
+.chat-approval-stack { margin: 12px 0 14px; }
+.chat-approval-stack .approval-card { width: 100%; box-sizing: border-box; }
+.chat-approval-stack .approval-actions { flex-wrap: wrap; }
+.chat-approval-stack .approval-actions button { min-height: 34px; }
+.chat-approval-stack .approval-card pre { max-width: 100%; }
+.user-message-content { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: flex-end; gap: 2px; }
+.user-message-content .message-bubble { max-width: min(100%, 760px); }
+.user-message-content .chat-task-trace { width: min(100%, 760px); margin-left: auto; }

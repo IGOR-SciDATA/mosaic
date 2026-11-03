@@ -231,7 +231,7 @@ function HomeWelcome() {
   </section>;
 }
 
-function MessageList({ messages, streaming, taskTraces, onToggleTrace }) {
+function MessageList({ messages, streaming, taskTraces, onToggleTrace, onDecideToolCall, toolDecisionBusyId }) {
   if (!messages.length && !streaming) {
     return <div className="conversation-empty"><MosaicMark compact/><h2>Conversa pronta</h2><p>Envie uma mensagem para começar a conversar com o modelo selecionado.</p></div>;
   }
@@ -239,21 +239,24 @@ function MessageList({ messages, streaming, taskTraces, onToggleTrace }) {
   return <div className="chat-content">
     {messages.map(message => message.role === "user"
       ? <div className="message user-message" key={message.id || message.localId}>
-          <div className="message-bubble"><p>{message.content}</p><time>{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time></div>
+          <div className="user-message-content">
+            <div className="message-bubble"><p>{message.content}</p><time>{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time></div>
+            {taskTraces?.[message.localId || message.id] && <TaskTrace trace={taskTraces[message.localId || message.id]} onToggle={()=>onToggleTrace(message.localId || message.id)} onDecideToolCall={onDecideToolCall} toolDecisionBusyId={toolDecisionBusyId}/>}
+          </div>
           <div className="message-avatar user">JD</div>
         </div>
       : <div className="message assistant-message" key={message.id || message.localId}>
           <div className="message-avatar mosaic"><MosaicMark compact/></div>
           <div className={message.content ? "assistant-copy" : "assistant-copy assistant-empty"}>
             {message.content ? <FormattedResponse content={message.content}/> : <p>{streaming ? "Gerando resposta…" : "O Mosaic recebeu a mensagem, mas o modelo não retornou conteúdo."}</p>}
-            {message.content && <time className="message-time">{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time>}{taskTraces?.[message.localId || message.id] && <TaskTrace trace={taskTraces[message.localId || message.id]} onToggle={()=>onToggleTrace(message.localId || message.id)}/>}
+            {message.content && <time className="message-time">{new Date(message.created_at || Date.now()).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</time>}{taskTraces?.[message.localId || message.id] && <TaskTrace trace={taskTraces[message.localId || message.id]} onToggle={()=>onToggleTrace(message.localId || message.id)} onDecideToolCall={onDecideToolCall} toolDecisionBusyId={toolDecisionBusyId}/>}
           </div>
         </div>
     )}
   </div>;
 }
 
-function TaskTrace({ trace, onToggle }) {
+function TaskTrace({ trace, onToggle, onDecideToolCall, toolDecisionBusyId }) {
   const expanded = !!trace.expanded;
   const labels = { executing: "Executando", pending: "Na fila", planning: "Planejando tarefa", validating: "Validando resultado", awaiting_approval: "Revisão necessária", completed: "Tarefa concluída", failed: "Tarefa falhou", cancelled: "Tarefa cancelada" };
   const terminal = ["completed", "failed", "cancelled"].includes(trace.status);
@@ -265,7 +268,23 @@ function TaskTrace({ trace, onToggle }) {
     </button>
     {expanded && <div className="chat-task-trace-body">
       {trace.status === "awaiting_approval" && trace.plan?.subtasks?.length > 0 && !trace.plan?.plan_confirmed &&
-        <TaskPlanReview task={{ id: trace.taskId, status: trace.status, plan: trace.plan }}  />}
+        <TaskPlanReview task={{ id: trace.taskId, status: trace.status, plan: trace.plan }} />}
+      {trace.status === "awaiting_approval" && (trace.toolCalls || []).some(call => ["pending", "awaiting_approval"].includes(call.status)) &&
+        <div className="approval-stack chat-approval-stack">
+          <div className="task-notice"><Icon name="check" size={17}/>O Mosaic precisa da sua autorização para continuar.</div>
+          {trace.toolCalls.filter(call => ["pending", "awaiting_approval"].includes(call.status)).map(call =>
+            <article className="approval-card" key={call.id}>
+              <span className="eyebrow">AÇÃO #{call.id} · AGUARDANDO</span>
+              <h4>Permitir {call.tool_name}?</h4>
+              <p>Revise a operação solicitada antes de autorizar a execução.</p>
+              <details><summary>Ver operação e argumentos</summary><pre>{JSON.stringify(call.arguments, null, 2)}</pre></details>
+              <div className="approval-actions">
+                <button type="button" className="danger-action" disabled={toolDecisionBusyId != null} onClick={() => onDecideToolCall?.(trace.taskId, call.id, "reject")}>Recusar</button>
+                <button type="button" className="primary-action" disabled={toolDecisionBusyId != null} onClick={() => onDecideToolCall?.(trace.taskId, call.id, "approve")}>{toolDecisionBusyId === call.id ? "Registrando…" : "Aprovar e continuar"}</button>
+              </div>
+            </article>
+          )}
+        </div>}
       {trace.events?.length ? <ol>{trace.events.map((event, index) => {
         const details = event.metadata && (event.metadata.step || event.metadata.substep || event.metadata.detail);
         return <li className={event.status === "failed" ? "trace-event-failed" : ""} key={event.id || index}>
@@ -652,7 +671,7 @@ function TaskWorkspace({ conversationId, projectId, onOpenHieExperiment }) {
           <div className="task-progress-meta"><span>Estado atual</span><strong>{TASK_STATUS_LABELS[selected.status] || selected.status}</strong></div>
           {active && selected.status !== "awaiting_approval" && <div className="task-progress-track"><span/></div>}
           {selected.status === "awaiting_approval" && !selected.plan?.plan_confirmed && selected.plan?.subtasks?.length > 0 && <TaskPlanReview task={selected} onUpdated={() => refreshTasks(selected.id)}/>}
-          {selected.status === "awaiting_approval" && selected.plan?.plan_confirmed && <div className="approval-stack"><div className="task-notice"><Icon name="check" size={17}/>O Mosaic precisa da sua autorização antes de executar esta operação.</div>{toolCalls.filter(call => call.status === "pending").map(call => <article className="approval-card" key={call.id}><span className="eyebrow">AÇÃO #{call.id} · AGUARDANDO</span><h4>Permitir {call.tool_name}?</h4><p>O agente solicitou esta ferramenta. Revise os argumentos antes de autorizar a execução.</p><details><summary>Ver operação e argumentos</summary><pre>{JSON.stringify(call.arguments, null, 2)}</pre></details><div className="approval-actions"><button type="button" className="danger-action" disabled={busy} onClick={() => decideCall(call.id, "reject")}>Recusar</button><button type="button" className="primary-action" disabled={busy} onClick={() => decideCall(call.id, "approve")}>{busy ? "Registrando…" : "Aprovar e continuar"}</button></div></article>)}</div>}
+          {selected.status === "awaiting_approval" && toolCalls.some(call => ["pending", "awaiting_approval"].includes(call.status)) && <div className="approval-stack"><div className="task-notice"><Icon name="check" size={17}/>O Mosaic precisa da sua autorização antes de executar esta operação.</div>{toolCalls.filter(call => ["pending", "awaiting_approval"].includes(call.status)).map(call => <article className="approval-card" key={call.id}><span className="eyebrow">AÇÃO #{call.id} · AGUARDANDO</span><h4>Permitir {call.tool_name}?</h4><p>O agente solicitou esta ferramenta. Revise os argumentos antes de autorizar a execução.</p><details><summary>Ver operação e argumentos</summary><pre>{JSON.stringify(call.arguments, null, 2)}</pre></details><div className="approval-actions"><button type="button" className="danger-action" disabled={busy} onClick={() => decideCall(call.id, "reject")}>Recusar</button><button type="button" className="primary-action" disabled={busy} onClick={() => decideCall(call.id, "approve")}>{busy ? "Registrando…" : "Aprovar e continuar"}</button></div></article>)}</div>}
           {latestModelResponse && <section className="model-response-panel"><div className="model-response-heading"><span className="eyebrow">RESPOSTA DO MODELO</span><small>{latestModelResponse.metadata?.model || "Modelo ativo"} · {new Date(latestModelResponse.timestamp).toLocaleTimeString("pt-BR", {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</small></div><p>{latestModelResponse.metadata.output_preview}</p><small>Prévia da decisão final validada pelo Core. O raciocínio interno do modelo não é exibido.</small></section>}
           <div className="task-timeline-heading"><strong>Linha do tempo</strong><span>{events.length} eventos · {connectionState === "connected" ? "ao vivo" : connectionState === "reconnecting" ? "reconectando" : "conectando"}</span></div>
           {!events.length ? <div className="task-muted">Aguardando eventos do Core…</div> : <ol className="task-timeline">{events.map(event => <li key={event.id}><span className={"timeline-marker level-" + event.level}/><div><div className="timeline-event-head"><strong>{event.message}</strong><time>{new Date(event.timestamp).toLocaleTimeString("pt-BR", {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</time></div><small>{event.component} · {event.event_name}{event.status ? " · " + event.status : ""}{event.duration_ms != null ? " · " + event.duration_ms + " ms" : ""}</small>{event.component === "model" && event.metadata && <details className="model-event-details"><summary>Detalhes operacionais</summary><div className="model-event-metadata">{event.metadata.model && <span>Modelo: {event.metadata.model}</span>}{event.metadata.attempt && <span>Tentativa: {event.metadata.attempt}</span>}{event.metadata.decision_type && <span>Decisão: {event.metadata.decision_type}</span>}{event.metadata.tool && <span>Ferramenta: {event.metadata.tool}</span>}{event.metadata.response_chars != null && <span>Tamanho da resposta: {event.metadata.response_chars} caracteres</span>}{event.metadata.error && <span>Validação: {event.metadata.error}</span>}{event.metadata.error_type && <span>Tipo de falha: {event.metadata.error_type}</span>}{event.metadata.output_preview && <div className="model-event-preview"><strong>Prévia da resposta final</strong><p>{event.metadata.output_preview}</p></div>}</div></details>}</div></li>)}</ol>}
@@ -1313,6 +1332,7 @@ export default function App(){
   const [remoteConfig,setRemoteConfig]=useState({url:"",configured:false});
   const [remoteStatus,setRemoteStatus]=useState(null);
   const [taskTraces,setTaskTraces]=useState({});
+  const [toolDecisionBusyId,setToolDecisionBusyId]=useState(null);
   const [hieStatus,setHieStatus]=useState(null);
   const [hieBusy,setHieBusy]=useState(false);
   const [theme,setTheme]=useState(()=>{try{return localStorage.getItem("mosaic.theme")==="light"?"light":"dark";}catch{return "dark";}});
@@ -1367,14 +1387,81 @@ export default function App(){
     catch(err){setError("Não foi possível alterar o HIE desta conversa: "+err.message);}
     finally{setHieBusy(false);}
   }
+  async function restoreTaskTraces(targetConversationId, history) {
+    if (!targetConversationId || !Array.isArray(history) || !history.length) {
+      setTaskTraces({});
+      return;
+    }
+    try {
+      const allTasks = await api.tasks.list();
+      const relatedTasks = allTasks.filter(task => task.conversation_id === targetConversationId);
+      const restored = {};
+      await Promise.all(relatedTasks.map(async taskSummary => {
+        const [task, events, toolCalls, artifactResponse] = await Promise.all([
+          api.tasks.get(taskSummary.id),
+          api.tasks.events(taskSummary.id, 0).catch(() => []),
+          api.toolCalls.list(targetConversationId, taskSummary.id).catch(() => []),
+          api.tasks.artifacts(taskSummary.id).catch(() => ({ items: [] })),
+        ]);
+        const goal = String(task.plan?.goal || taskSummary.plan?.goal || "").trim();
+        if (!goal) return;
+        let userIndex = -1;
+        for (let index = history.length - 1; index >= 0; index -= 1) {
+          if (history[index].role === "user" && String(history[index].content || "").trim() === goal) {
+            userIndex = index;
+            break;
+          }
+        }
+        const nextUserIndex = userIndex >= 0
+          ? history.findIndex((message, index) => index > userIndex && message.role === "user")
+          : -1;
+        const messagesAfterUser = userIndex >= 0
+          ? history.slice(userIndex + 1, nextUserIndex >= 0 ? nextUserIndex : history.length)
+          : [];
+        let traceMessage = messagesAfterUser.find(message => message.role === "assistant") || null;
+        if (!traceMessage && userIndex >= 0) {
+          // Task.start persists the user request but its provisional assistant trace is client-only.
+          // Anchor the restored trace to that durable request when no assistant message was stored.
+          traceMessage = history[userIndex];
+        }
+        if (!traceMessage) {
+          const taskTime = new Date(task.created_at || task.updated_at || taskSummary.created_at || 0).getTime();
+          traceMessage = history.find(message => message.role === "assistant"
+            && Number.isFinite(new Date(message.created_at || 0).getTime())
+            && Math.abs(new Date(message.created_at || 0).getTime() - taskTime) < 5 * 60 * 1000);
+        }
+        if (!traceMessage) return;
+        const messageKey = traceMessage.localId || traceMessage.id;
+        let expanded = false;
+        try { expanded = localStorage.getItem(`mosaic.taskTraceExpanded.${targetConversationId}.${task.id}`) === "true"; } catch {}
+        restored[messageKey] = {
+          taskId: task.id,
+          status: task.status || taskSummary.status || "executing",
+          plan: task.plan || taskSummary.plan,
+          events: Array.isArray(events) ? events.slice(-100) : [],
+          toolCalls: Array.isArray(toolCalls) ? toolCalls : [],
+          artifacts: artifactResponse?.items || [],
+          error: task.result?.error || "",
+          expanded: task.status === "awaiting_approval" ? true : expanded,
+        };
+      }));
+      setTaskTraces(restored);
+    } catch (err) {
+      setError("Não foi possível restaurar os detalhes das tarefas: " + err.message);
+    }
+  }
+
   useEffect(()=>{
     let cancelled=false;
     async function loadMessages(){
-      if(!conversationId){setMessages([]);return;}
+      if(!conversationId){setMessages([]);setTaskTraces({});return;}
       setMessagesLoading(true);
       try{
         const data=await api.conversations.messages(conversationId);
-        if(!cancelled)setMessages(data);
+        if(!cancelled) {
+          setMessages(data);
+          await restoreTaskTraces(conversationId, data);
+        }
       }catch(err){
         if(!cancelled)setError("Não foi possível recuperar o histórico: "+err.message);
       }finally{
@@ -1460,18 +1547,28 @@ export default function App(){
       if(taskIntent){
         const task=await api.tasks.start({conversation_id:conversation.id,goal:content,type:/\b(relatório|relatorio|documento|texto|pdf)\b/i.test(content)?"document":/\b(análise|analise|pesquise|compare)\b/i.test(content)?"analysis":/\b(código|codigo|frontend|backend|aplicativo|app|bug|implemente|desenvolva)\b/i.test(content)?"code_project":"generic"});
         setMessages(items=>items.map(item=>item.localId===localAssistant.localId?{...item,content:"Preparei um plano para sua revisão. Ajuste as etapas e confirme antes da execução."}:item));
-        setTaskTraces(items=>({...items,[localAssistant.localId]:{taskId:task.id,status:task.status||"executing",events:[],artifacts:[],expanded:false}}));
+        let initiallyExpanded = false;
+        try { initiallyExpanded = localStorage.getItem(`mosaic.taskTraceExpanded.${conversation.id}.${task.id}`) === "true"; } catch {}
+        const traceExpanded = task.status === "awaiting_approval" ? true : initiallyExpanded;
+        if (task.status === "awaiting_approval") {
+          try { localStorage.setItem(`mosaic.taskTraceExpanded.${conversation.id}.${task.id}`, "true"); } catch {}
+        }
+        setTaskTraces(items=>({...items,[localAssistant.localId]:{taskId:task.id,status:task.status||"executing",plan:task.plan||null,events:[],toolCalls:[],artifacts:[],expanded:traceExpanded}}));
         let lastEventId=0;
-        const source=api.tasks.streamEvents(task.id,0,event=>{lastEventId=Math.max(lastEventId,Number(event.id)||0);setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),taskId:task.id,status:["completed","failed","cancelled","awaiting_approval"].includes(event.status)?event.status:(items[localAssistant.localId]?.status||task.status||"executing"),events:[...(items[localAssistant.localId]?.events||[]).filter(item=>item.id!==event.id),event].slice(-100),expanded:items[localAssistant.localId]?.expanded??false}}));},state=>{if(state==="reconnecting")api.tasks.events(task.id,lastEventId).then(events=>{if(events?.length)setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),events:[...(items[localAssistant.localId]?.events||[]),...events.filter(ev=>Number(ev.id)>lastEventId)].slice(-100)}}));}).catch(()=>{});});
+        const source=api.tasks.streamEvents(task.id,0,event=>{lastEventId=Math.max(lastEventId,Number(event.id)||0);setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),taskId:task.id,status:["completed","failed","cancelled","awaiting_approval"].includes(event.status)?event.status:(items[localAssistant.localId]?.status||task.status||"executing"),events:[...(items[localAssistant.localId]?.events||[]).filter(item=>item.id!==event.id),event].slice(-100),expanded:event.status==="awaiting_approval"?true:(items[localAssistant.localId]?.expanded??false)}}));},state=>{if(state==="reconnecting")api.tasks.events(task.id,lastEventId).then(events=>{if(events?.length)setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),events:[...(items[localAssistant.localId]?.events||[]),...events.filter(ev=>Number(ev.id)>lastEventId)].slice(-100)}}));}).catch(()=>{});});
         let pollCount = 0;
         const poll = window.setInterval(async () => {
           pollCount += 1;
           try {
-            const [currentTask, artifactResponse] = await Promise.all([
+            const [currentTask, artifactResponse, currentToolCalls] = await Promise.all([
               api.tasks.get(task.id),
               api.tasks.artifacts(task.id).catch(() => ({ items: [] })),
+              api.toolCalls.list(conversation.id, task.id).catch(() => []),
             ]);
             const artifacts = artifactResponse?.items || [];
+            if (currentTask.status === "awaiting_approval") {
+              try { localStorage.setItem(`mosaic.taskTraceExpanded.${conversation.id}.${task.id}`, "true"); } catch {}
+            }
             setTaskTraces(items => ({
               ...items,
               [localAssistant.localId]: {
@@ -1479,7 +1576,9 @@ export default function App(){
                 taskId: task.id,
                 status: currentTask.status || items[localAssistant.localId]?.status || "executing",
                 plan: currentTask.plan || items[localAssistant.localId]?.plan,
+                toolCalls: currentToolCalls,
                 artifacts,
+                expanded: currentTask.status === "awaiting_approval" ? true : (items[localAssistant.localId]?.expanded ?? false),
               },
             }));
             if (["completed", "failed", "cancelled"].includes(currentTask.status)) {
@@ -1506,7 +1605,48 @@ export default function App(){
     finally{setSending(false);}
   }
   
-  function toggleTrace(id){setTaskTraces(items=>({...items,[id]:{...items[id],expanded:!items[id]?.expanded}}));}
+  function toggleTrace(id){
+    setTaskTraces(items=>{
+      const trace=items[id];
+      if(!trace)return items;
+      const expanded=!trace.expanded;
+      if(trace.taskId&&conversationId){
+        try{localStorage.setItem(`mosaic.taskTraceExpanded.${conversationId}.${trace.taskId}`,String(expanded));}catch{}
+      }
+      return {...items,[id]:{...trace,expanded}};
+    });
+  }
+
+  async function decideChatToolCall(taskId, toolCallId, decision){
+    if(toolDecisionBusyId!=null)return;
+    setToolDecisionBusyId(toolCallId);
+    setError("");
+    try{
+      await api.tasks.decideToolCall(taskId,toolCallId,decision);
+      const [task,events,toolCalls,artifactResponse]=await Promise.all([
+        api.tasks.get(taskId),
+        api.tasks.events(taskId,0),
+        api.toolCalls.list(conversationId,taskId),
+        api.tasks.artifacts(taskId).catch(()=>({items:[]})),
+      ]);
+      setTaskTraces(items=>{
+        const next={...items};
+        for(const [key,trace] of Object.entries(next)){
+          if(trace.taskId!==taskId)continue;
+          const expanded=task.status==="awaiting_approval"?true:(trace.expanded??false);
+          next[key]={...trace,status:task.status,plan:task.plan,events,toolCalls,artifacts:artifactResponse?.items||[],error:task.result?.error||"",expanded};
+          if(conversationId){
+            try{localStorage.setItem(`mosaic.taskTraceExpanded.${conversationId}.${taskId}`,String(expanded));}catch{}
+          }
+        }
+        return next;
+      });
+    }catch(err){
+      setError("Não foi possível registrar sua decisão: "+err.message);
+    }finally{
+      setToolDecisionBusyId(null);
+    }
+  }
 
   async function changeConversationModel(modelId){if(!conversation)return;setError("");try{const updated=await api.conversations.update(conversation.id,{model_id:modelId});setConversations(items=>items.map(item=>item.id===updated.id?updated:item));}catch(err){setError("Não foi possível trocar o modelo: "+err.message);}}
   async function saveModel(e){
@@ -1564,7 +1704,7 @@ export default function App(){
   }
 
   return <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${contextVisible ? "" : " context-hidden"}`}><Sidebar projects={projects} conversations={conversations} projectTab={projectTab} onNavigateTab={tab=>{setProjectTab(tab);setHomeActive(false);setMobile(false);}} activeProjectId={projectId} activeConversationId={homeActive ? null : conversationId} onProject={selectProject} onConversation={selectConversation} onNewProject={()=>setModal("project")} onNewConversation={()=>{setHomeActive(false);setModal("conversation");}} onDeleteProject={item=>setModal({type:"delete-project",item})} onDeleteConversation={item=>setModal({type:"delete-conversation",item})} onModelSettings={()=>setModal({type:"models"})} onHelp={()=>setModal({type:"help"})} onHome={()=>{setHomeActive(true);setConversationId(null);setMessages([]);setProjectTab("Conversa");setMobile(false);localStorage.removeItem("mosaic.activeConversationId");}} mobileOpen={mobile} onClose={()=>setMobile(false)} collapsed={sidebarCollapsed} onToggleCollapsed={()=>setSidebarCollapsed(value=>!value)}/>{mobile&&<button className="mobile-overlay" onClick={()=>setMobile(false)} aria-label="Fechar menu"/>}
-    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} onContextToggle={()=>setContextVisible(value=>!value)} contextVisible={contextVisible} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab} theme={theme} onToggleTheme={()=>setTheme(current=>current==="dark"?"light":"dark")}/><div className="workspace-grid"><main className="workspace">{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null} onOpenHieExperiment={taskId => setModal({type:"hie-experiment",scope:{taskId,projectId:project?.id ?? null}})}/> : projectTab === "Biblioteca" ? <AgentLibraryWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : homeActive ? <HomeWelcome/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending} taskTraces={taskTraces} onToggleTrace={toggleTrace}/>} </div><Composer disabled={!conversation||sending} model={model} models={models} conversation={conversation} projectId={project?.id ?? null} onModelChange={changeConversationModel} onModelSettings={()=>setModal({type:"models"})} onSubmit={sendMessage} onFiles={()=>setProjectTab("Arquivos")} onAgent={()=>setProjectTab("Agente")} text={draft} setText={setDraft} hieEnabled={!!hieStatus?.enabled} hieBusy={hieBusy || !hieStatus?.available} hieExperimentAvailable={!!hieStatus?.experiment_execution_available} onToggleHie={toggleConversationHie} onOpenHieExperiment={()=>setModal({type:"hie-experiment",scope:{conversationId,projectId:project?.id ?? null}})}/></>}</main>{contextVisible&&<button type="button" className="context-overlay" onClick={()=>setContextVisible(false)} aria-label="Fechar painel Etapas e contexto"/>}{contextVisible&&<ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/>}</div></div>
+    <div className="app-main"><TopBar onMenu={()=>setMobile(true)} onContextToggle={()=>setContextVisible(value=>!value)} contextVisible={contextVisible} project={project} conversation={conversation} models={models} onModelChange={changeConversationModel} modelStatus={modelStatus} onModelSettings={()=>setModal({type:"models"})} onContext={setContextTab} theme={theme} onToggleTheme={()=>setTheme(current=>current==="dark"?"light":"dark")}/><div className="workspace-grid"><main className="workspace">{error&&<div className="api-error">{error}<button onClick={load}>Tentar novamente</button></div>}{projectTab === "Tarefas" ? <TaskWorkspace conversationId={conversation?.id ?? null} projectId={project?.id ?? null} onOpenHieExperiment={taskId => setModal({type:"hie-experiment",scope:{taskId,projectId:project?.id ?? null}})}/> : projectTab === "Biblioteca" ? <AgentLibraryWorkspace projectId={project?.id ?? null}/> : projectTab === "Arquivos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="files"/> : projectTab === "Artefatos" ? <ProjectFilesWorkspace projectId={project?.id ?? null} mode="artifacts"/> : projectTab === "Memória" ? <ProjectMemoryWorkspace projectId={project?.id ?? null}/> : projectTab === "Notas" ? <ProjectNotesWorkspace project={project} onSaved={updated => setProjects(items => items.map(item => item.id === updated.id ? updated : item))}/> : homeActive ? <HomeWelcome/> : <><div className="chat-scroll">{loading?<div className="loading-state">Conectando ao Mosaic Core…</div>:!conversation?<div className="conversation-empty"><MosaicMark compact/><h2>Workspace pronto</h2><p>{project ? "Projeto ativo: "+project.name+"." : "Crie ou selecione um projeto para começar."}</p>{!conversation&&<button className="empty-action" onClick={()=>setModal("conversation")} disabled={!project||!models.some(m=>m.enabled)}><Icon name="plus" size={16}/>Nova conversa</button>}</div>:messagesLoading?<div className="loading-state">Recuperando histórico…</div>:<MessageList messages={messages} streaming={sending} taskTraces={taskTraces} onToggleTrace={toggleTrace} onDecideToolCall={decideChatToolCall} toolDecisionBusyId={toolDecisionBusyId}/>} </div><Composer disabled={!conversation||sending} model={model} models={models} conversation={conversation} projectId={project?.id ?? null} onModelChange={changeConversationModel} onModelSettings={()=>setModal({type:"models"})} onSubmit={sendMessage} onFiles={()=>setProjectTab("Arquivos")} onAgent={()=>setProjectTab("Agente")} text={draft} setText={setDraft} hieEnabled={!!hieStatus?.enabled} hieBusy={hieBusy || !hieStatus?.available} hieExperimentAvailable={!!hieStatus?.experiment_execution_available} onToggleHie={toggleConversationHie} onOpenHieExperiment={()=>setModal({type:"hie-experiment",scope:{conversationId,projectId:project?.id ?? null}})}/></>}</main>{contextVisible&&<button type="button" className="context-overlay" onClick={()=>setContextVisible(false)} aria-label="Fechar painel Etapas e contexto"/>}{contextVisible&&<ContextPanel tab={contextTab} setTab={setContextTab} project={project} conversation={conversation} model={model} memoryCount={memories.length} messageCount={messages.length} memories={memories}/>}</div></div>
     {modal?.type==="delete-conversation"&&<Modal title="Excluir conversa" onClose={()=>!saving&&setModal(null)}><div className="modal-form delete-confirm-content"><span className="delete-confirm-icon"><Icon name="trash-2" size={22}/></span><h3>Excluir “{modal.item?.title || "Nova conversa"}”?</h3><p>Esta ação remove permanentemente a conversa, suas mensagens e as Tasks vinculadas no banco de dados. Não é possível desfazer.</p><div className="delete-confirm-actions"><button type="button" className="secondary-button" onClick={()=>setModal(null)} disabled={saving}>Cancelar</button><button type="button" className="danger-button" onClick={()=>deleteConversationConfirmed(modal.item)} disabled={saving}>{saving?"Excluindo…":"Excluir conversa"}</button></div></div></Modal>}
     {modal?.type==="delete-project"&&<Modal title="Excluir projeto" onClose={()=>!saving&&setModal(null)}><div className="modal-form delete-confirm-content"><span className="delete-confirm-icon"><Icon name="trash-2" size={22}/></span><h3>Excluir o projeto “{modal.item?.name}”?</h3><p>Esta ação remove o projeto do banco. As conversas e memórias serão preservadas e desvinculadas dele. Tasks ativas precisam ser canceladas ou concluídas antes. Não é possível desfazer.</p><div className="delete-confirm-actions"><button type="button" className="secondary-button" onClick={()=>setModal(null)} disabled={saving}>Cancelar</button><button type="button" className="danger-button" onClick={()=>deleteProjectConfirmed(modal.item)} disabled={saving}>{saving?"Excluindo…":"Excluir projeto"}</button></div></div></Modal>}
     {modal?.type==="help"&&<Modal title="Ajuda" onClose={()=>setModal(null)}><div className="modal-form"><p className="modal-hint">O Mosaic é uma interface conectada ao Mosaic Core. O estado persistente vem do backend; esta interface apresenta e controla esse estado.</p><div className="help-block"><strong>Começando</strong><span>Crie um projeto, depois crie uma conversa e selecione um modelo registrado no Core.</span></div><div className="help-block"><strong>Modelos</strong><span>Use Configurações para cadastrar e ajustar modelos. O status consulta o Ollama local ou verifica se OPENAI_API_KEY está configurada no backend para a OpenAI.</span></div><div className="help-block"><strong>Contexto</strong><span>O painel lateral mostra projeto, modelo, memória e histórico reais da conversa ativa.</span></div></div></Modal>}
