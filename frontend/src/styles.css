@@ -3689,3 +3689,6 @@ body { overflow: hidden; }
 .chat-approval-stack .approval-actions { flex-wrap: wrap; }
 .chat-approval-stack .approval-actions button { min-height: 34px; }
 .chat-approval-stack .approval-card pre { max-width: 100%; }
+.user-message-content { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: flex-end; gap: 2px; }
+.user-message-content .message-bubble { max-width: min(100%, 760px); }
+.user-message-content .chat-task-trace { width: min(100%, 760px); margin-left: auto; }
