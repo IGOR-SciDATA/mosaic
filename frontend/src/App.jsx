@@ -1555,13 +1555,14 @@ export default function App(){
         }
         setTaskTraces(items=>({...items,[localAssistant.localId]:{taskId:task.id,status:task.status||"executing",plan:task.plan||null,events:[],toolCalls:[],artifacts:[],expanded:traceExpanded}}));
         let lastEventId=0;
-        const source=api.tasks.streamEvents(task.id,0,event=>{lastEventId=Math.max(lastEventId,Number(event.id)||0);setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),taskId:task.id,status:["completed","failed","cancelled","awaiting_approval"].includes(event.status)?event.status:(items[localAssistant.localId]?.status||task.status||"executing"),events:[...(items[localAssistant.localId]?.events||[]).filter(item=>item.id!==event.id),event].slice(-100),expanded:event.status==="awaiting_approval"?true:(items[localAssistant.localId]?.expanded??false)}}));},state=>{if(state==="reconnecting")api.tasks.events(task.id,lastEventId).then(events=>{if(events?.length)setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),events:[...(items[localAssistant.localId]?.events||[]),...events.filter(ev=>Number(ev.id)>lastEventId)].slice(-100)}}));}).catch(()=>{});});
+        const source=api.tasks.streamEvents(task.id,0,event=>{lastEventId=Math.max(lastEventId,Number(event.id)||0);setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),taskId:task.id,status:event.status==="awaiting_approval"?"awaiting_approval":(items[localAssistant.localId]?.status||task.status||"executing"),events:[...(items[localAssistant.localId]?.events||[]).filter(item=>item.id!==event.id),event].slice(-100),expanded:event.status==="awaiting_approval"?true:(items[localAssistant.localId]?.expanded??false)}}));},state=>{if(state==="reconnecting")api.tasks.events(task.id,lastEventId).then(events=>{if(events?.length)setTaskTraces(items=>({...items,[localAssistant.localId]:{...(items[localAssistant.localId]||{}),events:[...(items[localAssistant.localId]?.events||[]),...events.filter(ev=>Number(ev.id)>lastEventId)].slice(-100)}}));}).catch(()=>{});});
         let pollCount = 0;
         const poll = window.setInterval(async () => {
           pollCount += 1;
           try {
-            const [currentTask, artifactResponse, currentToolCalls] = await Promise.all([
+            const [currentTask, currentEvents, artifactResponse, currentToolCalls] = await Promise.all([
               api.tasks.get(task.id),
+              api.tasks.events(task.id, 0).catch(() => []),
               api.tasks.artifacts(task.id).catch(() => ({ items: [] })),
               api.toolCalls.list(conversation.id, task.id).catch(() => []),
             ]);
@@ -1576,8 +1577,10 @@ export default function App(){
                 taskId: task.id,
                 status: currentTask.status || items[localAssistant.localId]?.status || "executing",
                 plan: currentTask.plan || items[localAssistant.localId]?.plan,
+                events: Array.isArray(currentEvents) ? currentEvents.slice(-100) : (items[localAssistant.localId]?.events || []),
                 toolCalls: currentToolCalls,
                 artifacts,
+                error: currentTask.result?.error || items[localAssistant.localId]?.error || "",
                 expanded: currentTask.status === "awaiting_approval" ? true : (items[localAssistant.localId]?.expanded ?? false),
               },
             }));
